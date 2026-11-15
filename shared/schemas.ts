@@ -82,6 +82,7 @@ export const TRACKED_EVENTS = [
   'booking_skipped',
   'call_click',
   'sms_click',
+  'outbound_click',
 ] as const;
 export type TrackedEvent = (typeof TRACKED_EVENTS)[number];
 

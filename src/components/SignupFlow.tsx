@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { AvailabilityResult, Slot } from '../../shared/schemas';
-import { CONSENT_TEXT } from '../../shared/content';
+import { BRAND, CONSENT_TEXT, OMNI_LINKS } from '../../shared/content';
 import { api, ApiError, fmtCalendarDate, fmtDateTime } from '../lib/api';
 import { attribution, sessionId, track } from '../lib/analytics';
 import AvailabilityBanner from './AvailabilityBanner';
@@ -317,6 +317,17 @@ function DoneStep({ name, bookedAt }: { name: string; bookedAt: string | null })
       ) : (
         <p className="mx-auto mt-2 max-w-md text-slate-300">A local fiber specialist will contact you shortly using your preferred method.</p>
       )}
+      <p className="mx-auto mt-6 max-w-md text-sm text-slate-400">
+        Questions before then? Call or text{' '}
+        <a href={`tel:${BRAND.phoneE164}`} onClick={() => track('call_click', { location: 'confirmation' })} className="text-cyan-200 underline underline-offset-4">
+          {BRAND.phoneDisplay}
+        </a>
+        . You can also check your exact address on {BRAND.provider}’s{' '}
+        <a href={OMNI_LINKS.availability} target="_blank" rel="noopener" onClick={() => track('outbound_click', { target: 'omni_checker', location: 'confirmation' })} className="text-cyan-200 underline underline-offset-4">
+          official availability checker
+        </a>
+        .
+      </p>
     </div>
   );
 }

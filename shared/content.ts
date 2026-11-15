@@ -8,9 +8,24 @@ export const BRAND = {
   provider: 'Omni Fiber',
   market: 'Monroe, Michigan',
   /** Team phone. Click-to-call/text buttons appear only once both are set. */
-  phoneDisplay: '', // e.g. '(734) 555-0100'
-  phoneE164: '', // e.g. '+17345550100'
+  phoneDisplay: '(734) 731-1946',
+  phoneE164: '+17347311946',
 };
+
+/** Official Omni Fiber resources. Coverage is authoritative only on Omni Fiber's own checker. */
+export const OMNI_LINKS = {
+  availability: 'https://www.omnifiber.com/',
+  broadbandLabels: 'https://www.omnifiber.com/broadbandlabels/',
+};
+
+/**
+ * FCC broadband consumer label disclosure. Labels are published by the ISP
+ * (Omni Fiber) per plan; we link to them rather than reproducing their figures.
+ */
+export const BROADBAND_DISCLOSURE =
+  `${BRAND.provider} is the internet service provider for all plans shown. As required by the FCC, ${BRAND.provider} publishes a ` +
+  'Broadband Facts label for each plan with its monthly price, any one-time or recurring fees, typical download and upload ' +
+  'speeds, typical latency and network-management practices. Review the label for your plan before ordering.'
 
 export const CONSENT_VERSION = '2026-11-15';
 
@@ -29,14 +44,15 @@ export const SITE = {
   name: 'Monroe Fiber Connect',
   title: 'Omni Fiber Internet in Monroe, MI — Check Availability & Book a Free Consultation',
   description:
-    'See if Omni Fiber is available at your Monroe, Michigan address. Check your ZIP in seconds and book a free, no-obligation consultation with a local fiber specialist.',
+    'Omni Fiber in Monroe, MI: 1 Gig for $50/mo or 2 Gig for $70/mo with free installation, free equipment and no contracts. Check your address and book a free consultation.',
 };
 
 /** Shown on the page AND emitted as FAQPage structured data — keep them identical. */
 export const FAQ: { q: string; a: string }[] = [
   { q: 'Is the consultation really free?', a: 'Yes. There’s no cost and no obligation — it’s a conversation to confirm availability at your address and answer your questions.' },
-  { q: 'How do I know if fiber is available at my house?', a: 'Availability is confirmed address by address. Enter your ZIP for a quick read on your area, then book a consultation for a definitive answer.' },
-  { q: 'What are the plans and prices?', a: 'Plans and current offers are set by Omni Fiber and can vary by address. Your specialist will walk you through the options available to you — we never quote prices we can’t confirm.' },
+  { q: 'How do I know if fiber is available at my house?', a: 'Coverage is confirmed address by address using Omni Fiber’s official availability checker. Enter your ZIP here for a quick read on your area and book a consultation — your specialist runs the official check for your exact address with you.' },
+  { q: 'What are the plans and prices?', a: 'In Monroe, Omni Fiber offers 1 Gig for $50/mo and 2 Gig for $70/mo, with free installation, free equipment, no extra taxes or fees, and no contracts. Availability is confirmed for your exact address, and each plan’s official Broadband Facts label is published by Omni Fiber.' },
+  { q: 'Is there a contract or installation fee?', a: 'No. There are no contracts, installation is free, and the equipment is included at no extra charge.' },
   { q: 'What if my area isn’t ready yet?', a: 'Leave your details and you’ll be on the priority list. We’ll reach out as soon as service reaches your street.' },
   { q: 'Who will contact me, and how?', a: `A local specialist from ${BRAND.agency}, using the contact method you choose. You can opt out of texts at any time by replying STOP.` },
   { q: 'What do you do with my information?', a: 'We use it only to check service at your address and to contact you about fiber service and your appointment. We don’t sell your information. See our privacy notice for details.' },

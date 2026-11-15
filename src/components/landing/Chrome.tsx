@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BRAND, PARTNER_DISCLOSURE } from '../../../shared/content';
+import { BRAND, BROADBAND_DISCLOSURE, OMNI_LINKS, PARTNER_DISCLOSURE } from '../../../shared/content';
 import { track } from '../../lib/analytics';
 import { Logo } from '../ui';
 
@@ -9,6 +9,7 @@ const YEAR = new Date().getFullYear();
 export const hasPhone = Boolean(BRAND.phoneDisplay && BRAND.phoneE164);
 
 const NAV = [
+  { href: '#plans', label: 'Plans' },
   { href: '#offer', label: 'Free consultation' },
   { href: '#compare', label: 'Why fiber' },
   { href: '#how', label: 'How it works' },
@@ -28,6 +29,18 @@ export function CallButton({ location, className = '' }: { location: string; cla
   return (
     <a href={`tel:${BRAND.phoneE164}`} onClick={() => track('call_click', { location })} className={className}>
       <PhoneIcon /> <span>{BRAND.phoneDisplay}</span>
+    </a>
+  );
+}
+
+export function TextButton({ location, className = '' }: { location: string; className?: string }) {
+  if (!hasPhone) return null;
+  return (
+    <a href={`sms:${BRAND.phoneE164}`} onClick={() => track('sms_click', { location })} className={className}>
+      <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden>
+        <path d="M3 4.5A2.5 2.5 0 0 1 5.5 2h9A2.5 2.5 0 0 1 17 4.5v7a2.5 2.5 0 0 1-2.5 2.5H8l-3.6 2.7A.9.9 0 0 1 3 16v-2.3A2.5 2.5 0 0 1 3 11.5v-7Z" />
+      </svg>
+      <span>Text us</span>
     </a>
   );
 }
@@ -68,6 +81,16 @@ export function SiteHeader() {
         </div>
         <div className="flex items-center gap-2">
           <CallButton location="header" className="btn-ghost hidden px-3 py-2 text-sm md:inline-flex" />
+          {hasPhone && (
+            <a
+              href={`tel:${BRAND.phoneE164}`}
+              onClick={() => track('call_click', { location: 'header_mobile' })}
+              className="grid h-11 w-11 place-items-center rounded-xl border border-white/15 text-cyan-200 md:hidden"
+              aria-label={`Call ${BRAND.phoneDisplay}`}
+            >
+              <PhoneIcon className="h-5 w-5" />
+            </a>
+          )}
           <a href="#check" onClick={() => track('cta_click', { location: 'header' })} className="btn-primary hidden whitespace-nowrap px-4 py-2 text-sm sm:inline-flex">
             Check availability
           </a>
@@ -101,6 +124,7 @@ export function SiteHeader() {
               Check availability
             </a>
             <CallButton location="mobile_menu" className="btn-ghost w-full" />
+            <TextButton location="mobile_menu" className="btn-ghost w-full" />
           </div>
         </div>
       )}
@@ -160,6 +184,7 @@ export function SiteFooter() {
         <div className="space-y-4">
           <Logo />
           <p className="max-w-xl">{PARTNER_DISCLOSURE}</p>
+          <p className="max-w-xl">{BROADBAND_DISCLOSURE}</p>
           <p>
             © {YEAR} {BRAND.agency}. All rights reserved.
           </p>
@@ -168,6 +193,9 @@ export function SiteFooter() {
           <a href="/#check" className="hover:text-white">Check availability</a>
           <a href="/#faq" className="hover:text-white">FAQ</a>
           <Link to="/privacy" className="hover:text-white">Privacy notice</Link>
+          <a href={OMNI_LINKS.broadbandLabels} target="_blank" rel="noopener" onClick={() => track('outbound_click', { target: 'broadband_labels', location: 'footer' })} className="hover:text-white">
+            Broadband Facts labels
+          </a>
           <Link to="/admin" className="hover:text-white" rel="nofollow">Team login</Link>
           {hasPhone && (
             <a href={`tel:${BRAND.phoneE164}`} onClick={() => track('call_click', { location: 'footer' })} className="hover:text-white">

@@ -17,5 +17,12 @@ export interface Plan {
   featured?: boolean;
 }
 
-export const PLANS: Plan[] = [];
-export const PLANS_VERIFIED_ON = ''; // e.g. '2026-11-20'
+const INCLUDED = ['Free installation', 'Free equipment', 'No extra taxes or fees', 'No contracts'];
+
+/** Monroe, MI pricing as provided by Spotlight Marketing LLC on 2026-11-15. */
+export const PLANS: Plan[] = [
+  { name: '1 Gig', speed: 'Omni Fiber internet', price: '$50/mo', highlights: INCLUDED },
+  { name: '2 Gig', speed: 'Omni Fiber internet', price: '$70/mo', highlights: INCLUDED, featured: true },
+];
+export const PLANS_VERIFIED_ON = 'November 15, 2026';
+export const PLANS_FROM = '$50/mo';

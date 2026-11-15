@@ -73,7 +73,7 @@ npm run admin:hash -- "your-long-password"
 - Every event is also pushed to `window.dataLayer`, ready for Google Tag Manager / Meta Pixel if added later.
 - Leads store `utm_source/medium/campaign/content/term`, click ID (`gclid`/`fbclid`/`msclkid`/`ttclid`), referrer, landing page and session. Attribution is first-touch for 30 days unless a new campaign link is used.
 - Admin dashboard shows a 30-day funnel and top lead sources.
-- Click-to-call / text buttons appear automatically once `BRAND.phoneDisplay` and `BRAND.phoneE164` are set in `shared/content.ts`.
+- Click-to-call and text buttons (header, hero, sticky mobile bar, menu, final CTA, footer, confirmation) are tracked as `call_click` / `sms_click`; outbound links to Omni Fiber's checker and Broadband Facts labels as `outbound_click`.
 
 ## SEO
 
@@ -108,10 +108,10 @@ Put it behind HTTPS (the host's TLS or a reverse proxy). Health check: `GET /api
 
 ## Before going live — needs your input
 
-1. **Verify service areas.** Seeded ZIPs are placeholders. Monroe 48161/48162 are `verify`; surrounding towns are `coming_soon`. Don't mark anything `available` until Omni Fiber confirms it.
+1. **Coverage.** Exact-address coverage is confirmed with Omni Fiber's official checker (linked on the site). The ZIP statuses in Admin → Service areas only control the on-site message; keep Monroe at `verify` unless Omni confirms a whole ZIP.
 2. **Confirm brand & disclosure wording** in `shared/content.ts` (the working site name "Monroe Fiber Connect", the partner disclosure, the consent text and the team phone number) with Omni Fiber and, ideally, counsel.
 3. **Hosting.** Nothing is deployed yet — see *Deployment* above.
-4. **Plans & phone.** `shared/plans.ts` is intentionally empty until real Omni Fiber plans are verified; add the team phone number to enable click-to-call.
+4. **Plans & phone.** Monroe plans (1 Gig $50/mo, 2 Gig $70/mo) live in `shared/plans.ts` with a "verified on" date — update both when Omni changes pricing. Team phone (734) 731-1946 is in `shared/content.ts`.
 
 ## Project layout
 
