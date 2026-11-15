@@ -1,5 +1,5 @@
 import { cloneElement, isValidElement, useId, useState, type FormEvent, type ReactElement, type ReactNode } from 'react';
-import { MONROE, type Market, type Plan } from '../../../shared/market';
+import { MONROE, PRICING_PRESETS, PRICING_PRESETS_DATE, type Market, type Plan } from '../../../shared/market';
 import { api, ApiError } from '../../lib/api';
 import { Spinner } from '../../components/ui';
 import { useAdminMarkets } from './useMarkets';
@@ -26,8 +26,9 @@ const blank = (): Market => ({
   areaNote: '',
   phoneDisplay: MONROE.phoneDisplay,
   phoneE164: MONROE.phoneE164,
-  plans: [],
-  plansVerifiedOn: '',
+  // New locations start from the standard Omni Fiber prices — confirm before going live.
+  plans: PRICING_PRESETS[0].plans,
+  plansVerifiedOn: PRICING_PRESETS_DATE,
   ogImage: '',
   isDefault: false,
   active: false, // new locations start hidden until they're reviewed
@@ -154,6 +155,19 @@ function Editor({ initial, isNew, onSaved, onCancel }: { initial: Market; isNew:
       </Section>
 
       <Section title="Plans" hint="Enter prices exactly as the provider advertises them for this location. Leave empty to hide the plans section.">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-slate-400">Apply preset:</span>
+          {PRICING_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className="btn-ghost px-3 py-1.5 text-xs"
+              onClick={() => setM((x) => ({ ...x, plans: p.plans.map((pl) => ({ ...pl, highlights: [...pl.highlights] })), plansVerifiedOn: PRICING_PRESETS_DATE }))}
+            >
+              {p.label} ({p.plans.map((pl) => pl.price.replace('/mo', '')).join(' / ')})
+            </button>
+          ))}
+        </div>
         {m.plans.map((p, i) => (
           <div key={i} className="grid gap-3 rounded-xl border border-white/10 p-4 sm:grid-cols-[1fr_1fr_8rem]">
             <F label="Plan name" error={err(`plans.${i}.name`)}>

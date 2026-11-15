@@ -82,6 +82,37 @@ export interface MarketSummary {
 
 export { plansFrom } from './market-utils';
 
+/**
+ * Pricing presets for the location editor (provided by Spotlight Marketing LLC,
+ * 2026-11-15). Monroe has its own launch pricing; other Omni Fiber areas use
+ * the standard prices. Inclusions beyond "no contracts" and "free installation"
+ * (which Omni states for all plans) must be confirmed per market.
+ */
+const MONROE_INCLUDED = ['Free installation', 'Free equipment', 'No extra taxes or fees', 'No contracts'];
+const STANDARD_INCLUDED = ['Free installation', 'No contracts'];
+
+export const PRICING_PRESETS: { id: string; label: string; plans: Plan[] }[] = [
+  {
+    id: 'omni-standard',
+    label: 'Omni Fiber standard pricing',
+    plans: [
+      { name: '500 Mbps', speed: 'Omni Fiber internet', price: '$65/mo', highlights: STANDARD_INCLUDED },
+      { name: '1 Gig', speed: 'Omni Fiber internet', price: '$85/mo', highlights: STANDARD_INCLUDED },
+      { name: '2 Gig', speed: 'Omni Fiber internet', price: '$105/mo', highlights: STANDARD_INCLUDED, featured: true },
+    ],
+  },
+  {
+    id: 'omni-monroe',
+    label: 'Omni Fiber Monroe pricing',
+    plans: [
+      { name: '500 Mbps', speed: 'Omni Fiber internet', price: '$50/mo', highlights: MONROE_INCLUDED },
+      { name: '1 Gig', speed: 'Omni Fiber internet', price: '$50/mo', highlights: MONROE_INCLUDED },
+      { name: '2 Gig', speed: 'Omni Fiber internet', price: '$70/mo', highlights: MONROE_INCLUDED, featured: true },
+    ],
+  },
+];
+export const PRICING_PRESETS_DATE = 'November 15, 2026';
+
 /** The Monroe launch market — used to seed a fresh database. */
 export const MONROE: Market = marketSchema.parse({
   slug: 'monroe',
@@ -93,11 +124,7 @@ export const MONROE: Market = marketSchema.parse({
   phoneDisplay: '(734) 731-1946',
   phoneE164: '+17347311946',
   areaNote: 'Monroe (48161, 48162) and surrounding Monroe County communities.',
-  plans: [
-    { name: '500 Mbps', speed: 'Omni Fiber internet', price: '$50/mo', highlights: ['Free installation', 'Free equipment', 'No extra taxes or fees', 'No contracts'] },
-    { name: '1 Gig', speed: 'Omni Fiber internet', price: '$50/mo', highlights: ['Free installation', 'Free equipment', 'No extra taxes or fees', 'No contracts'] },
-    { name: '2 Gig', speed: 'Omni Fiber internet', price: '$70/mo', highlights: ['Free installation', 'Free equipment', 'No extra taxes or fees', 'No contracts'], featured: true },
-  ],
+  plans: PRICING_PRESETS[1].plans,
   plansVerifiedOn: 'November 15, 2026',
   availabilityUrl: 'https://www.omnifiber.com/',
   broadbandLabelsUrl: 'https://www.omnifiber.com/broadbandlabels/',

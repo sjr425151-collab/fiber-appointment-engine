@@ -132,7 +132,7 @@ Put it behind HTTPS (the host's TLS or a reverse proxy). Health check: `GET /api
 1. **Coverage.** Exact-address coverage is confirmed with Omni Fiber's official checker (linked on the site). The ZIP statuses in Admin → Service areas only control the on-site message; keep Monroe at `verify` unless Omni confirms a whole ZIP.
 2. **Confirm brand & disclosure wording** in `shared/content.ts` (the working site name "Monroe Fiber Connect", the partner disclosure, the consent text and the team phone number) with Omni Fiber and, ideally, counsel.
 3. **Hosting.** Nothing is deployed yet — see *Deployment* above.
-4. **Plans & phone.** Monroe plans (500 Mbps $50/mo, 1 Gig $50/mo, 2 Gig $70/mo) and the team phone (734) 731-1946 are edited in Admin → Locations (seed values in `shared/market.ts`). Update the "verified on" date whenever pricing changes.
+4. **Plans & phone.** Monroe plans (500 Mbps $50/mo, 1 Gig $50/mo, 2 Gig $70/mo) and the team phone (734) 731-1946 are edited in Admin → Locations (seed values in `shared/market.ts`). Update the "verified on" date whenever pricing changes. New locations start on **Omni Fiber standard pricing** (500 Mbps $65/mo, 1 Gig $85/mo, 2 Gig $105/mo); the editor has one-click presets for standard and Monroe pricing (`PRICING_PRESETS` in `shared/market.ts`).
 
 ## Project layout
 

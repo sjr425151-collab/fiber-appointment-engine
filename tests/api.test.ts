@@ -361,3 +361,15 @@ describe('plan helpers', () => {
     expect(listJoin(['a', 'b', 'c'])).toBe('a, b, and c');
   });
 });
+
+describe('pricing presets', () => {
+  it('validates both presets and keeps Monroe on its launch pricing', async () => {
+    const { PRICING_PRESETS, planSchema } = await import('../shared/market');
+    const { plansFrom } = await import('../shared/market-utils');
+    const std = PRICING_PRESETS.find((p) => p.id === 'omni-standard')!;
+    expect(std.plans.map((p) => `${p.name} ${p.price}`)).toEqual(['500 Mbps $65/mo', '1 Gig $85/mo', '2 Gig $105/mo']);
+    for (const preset of PRICING_PRESETS) for (const plan of preset.plans) expect(planSchema.safeParse(plan).success).toBe(true);
+    expect(plansFrom({ plans: std.plans })).toEqual({ name: '500 Mbps', price: '$65/mo' });
+    expect(MONROE.plans.map((p) => p.price)).toEqual(['$50/mo', '$50/mo', '$70/mo']);
+  });
+});
