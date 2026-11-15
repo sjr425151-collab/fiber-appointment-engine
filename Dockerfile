@@ -9,8 +9,9 @@ COPY package.json package-lock.json ./
 RUN npm ci --include=dev
 COPY . .
 RUN NODE_ENV=development npm run build
-# SQLite lives on a persistent volume
-VOLUME ["/data"]
+# SQLite lives on a persistent disk mounted at /data by the host
+# (Render: see render.yaml; Docker: docker run -v fiber-data:/data ...)
+RUN mkdir -p /data
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=3s CMD node -e "fetch('http://localhost:'+process.env.PORT+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["npx", "tsx", "server/index.ts"]

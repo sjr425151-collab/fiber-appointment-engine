@@ -17,11 +17,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const isProduction = env.NODE_ENV === 'production';
   let sessionSecret = env.SESSION_SECRET ?? '';
   let adminPasswordHash = env.ADMIN_PASSWORD_HASH ?? '';
+  // Hosting dashboards (Render, etc.) store secrets encrypted, so a plain
+  // ADMIN_PASSWORD is accepted too; it's hashed in memory and never stored.
+  const plainPassword = env.ADMIN_PASSWORD ?? '';
+  if (!adminPasswordHash && plainPassword) {
+    if (isProduction && plainPassword.length < 12) throw new Error('ADMIN_PASSWORD must be at least 12 characters');
+    adminPasswordHash = hashPassword(plainPassword);
+  }
   const adminEmail = (env.ADMIN_EMAIL ?? 'admin@example.com').toLowerCase();
 
   if (isProduction) {
     if (sessionSecret.length < 32) throw new Error('SESSION_SECRET must be set (>= 32 chars) in production');
-    if (!adminPasswordHash) throw new Error('ADMIN_PASSWORD_HASH must be set in production');
+    if (!adminPasswordHash) throw new Error('Set ADMIN_PASSWORD (or ADMIN_PASSWORD_HASH) in production');
   } else {
     if (!sessionSecret || sessionSecret.startsWith('change-me')) sessionSecret = randomBytes(32).toString('hex');
     if (!adminPasswordHash) {

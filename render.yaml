@@ -1,0 +1,37 @@
+# One-click deploy on Render (render.com → New → Blueprint → pick this repo).
+# Render builds the Dockerfile, keeps the leads database on a persistent disk,
+# issues free HTTPS certificates and redeploys on every push to the branch.
+# Schema: https://render.com/schema/render.yaml.json
+services:
+  - type: web
+    name: fiber-connect
+    runtime: docker
+    plan: starter            # always-on (free instances sleep and can't keep a disk)
+    region: ohio             # closest region to Michigan
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    maxShutdownDelaySeconds: 30
+    disk:
+      name: fiber-data
+      mountPath: /data       # SQLite database lives here and survives deploys
+      sizeGB: 1
+    domains:
+      - livefiberconnect.com # Render also adds www.livefiberconnect.com → redirect
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_PATH
+        value: /data/fiber.db
+      - key: SITE_URL
+        value: https://livefiberconnect.com
+      - key: TRUST_PROXY
+        value: "1"
+      - key: APP_TIMEZONE
+        value: America/Detroit
+      - key: SESSION_SECRET
+        generateValue: true  # random 256-bit secret created by Render
+      - key: ADMIN_EMAIL
+        sync: false          # Render asks for this during setup
+      - key: ADMIN_PASSWORD
+        sync: false          # Render asks for this during setup (12+ characters)

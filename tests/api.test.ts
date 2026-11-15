@@ -374,3 +374,18 @@ describe('pricing presets', () => {
     for (const plan of std.plans) expect(plan.highlights).toEqual(['Free installation', 'Free equipment', 'No extra taxes or fees', 'No contracts']);
   });
 });
+
+describe('production config', () => {
+  it('accepts a plain ADMIN_PASSWORD (hashed in memory) and enforces requirements', async () => {
+    const { loadConfig } = await import('../server/config');
+    const { verifyPassword } = await import('../server/lib/auth');
+    const base = { NODE_ENV: 'production', SESSION_SECRET: 'x'.repeat(44), ADMIN_EMAIL: 'Team@Example.com' };
+    const c = loadConfig({ ...base, ADMIN_PASSWORD: 'correct-horse-battery' });
+    expect(c.adminEmail).toBe('team@example.com');
+    expect(c.adminPasswordHash).not.toContain('correct-horse');
+    expect(verifyPassword('correct-horse-battery', c.adminPasswordHash)).toBe(true);
+    expect(() => loadConfig({ ...base, ADMIN_PASSWORD: 'short' })).toThrow(/12 characters/);
+    expect(() => loadConfig(base)).toThrow(/ADMIN_PASSWORD/);
+    expect(() => loadConfig({ ...base, SESSION_SECRET: 'short', ADMIN_PASSWORD: 'correct-horse-battery' })).toThrow(/SESSION_SECRET/);
+  });
+});

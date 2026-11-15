@@ -29,14 +29,9 @@ cp .env.example .env     # optional in development
 npm run dev              # web on http://localhost:5173, API on :3001
 ```
 
-If `ADMIN_PASSWORD_HASH` isn't set, the dev server prints a temporary admin password to the console on startup. Sign in at `/admin`.
+If no admin password is set, the dev server prints a temporary one to the console on startup. Sign in at `/admin`.
 
-To set a permanent admin password:
-
-```bash
-npm run admin:hash -- "your-long-password"
-# paste the printed ADMIN_PASSWORD_HASH=... line into .env
-```
+To set a permanent admin password, put `ADMIN_PASSWORD=your-long-password` in `.env` (or, to avoid storing it in plain text, `npm run admin:hash -- "your-long-password"` and paste the printed `ADMIN_PASSWORD_HASH=...` line instead).
 
 ## Scripts
 
@@ -99,22 +94,28 @@ Everything that differs between cities is a **location** (`shared/market.ts`), m
 
 Title/description, canonical, Open Graph + Twitter cards with a custom 1200×630 image, JSON-LD (`Organization`, `WebSite`, `Service`, `FAQPage` — generated from the same FAQ shown on the page), `robots.txt`, `sitemap.xml`, `noindex` on admin. The public origin is injected at runtime from `SITE_URL`, so one build works on any domain.
 
-## Deployment
+## Deployment (Render — click-to-deploy, no server admin)
 
-The app is a single Node process with a SQLite file — it needs one small server/container with a **persistent disk**.
+The repo includes `render.yaml`, so Render sets everything up from the dashboard — similar to publishing in GoHighLevel. Expected cost: **~$7/mo** (Starter instance, always on) **+ ~$0.25/mo** (1 GB disk for the leads database). Free HTTPS included.
+
+1. Create an account at render.com and connect GitHub (allow access to this repository).
+2. **New → Blueprint** → choose this repo and branch → Render reads `render.yaml`.
+3. When prompted, enter **ADMIN_EMAIL** and **ADMIN_PASSWORD** (12+ characters) — your team login for `/admin`. The session secret is generated automatically.
+4. Click **Apply**. The first build takes a few minutes; the site is then live at `https://fiber-connect.onrender.com` (or similar).
+5. **Connect the domain:** in the service's *Settings → Custom Domains*, Render shows the DNS records for `livefiberconnect.com` (pre-listed by the blueprint). Add them at your registrar (e.g. Cloudflare → DNS). Render issues the SSL certificate automatically once DNS resolves.
+6. Every push to the branch redeploys automatically; the database on the disk is preserved.
+
+What the blueprint configures: Docker build, Ohio region, `/api/health` health checks (zero-downtime deploys), persistent disk at `/data`, and env vars (`SITE_URL`, `DATABASE_PATH`, `TRUST_PROXY`, `NODE_ENV`).
+
+Other hosts: any Docker host with a persistent volume works —
 
 ```bash
 docker build -t fiber-engine .
 docker run -d -p 3001:3001 -v fiber-data:/data \
-  -e SITE_URL=https://your-domain.com \
-  -e SESSION_SECRET=$(openssl rand -hex 32) \
-  -e ADMIN_EMAIL=you@yourdomain.com \
-  -e ADMIN_PASSWORD_HASH='scrypt:...' \
-  -e TRUST_PROXY=1 \
+  -e SITE_URL=https://livefiberconnect.com -e SESSION_SECRET=$(openssl rand -hex 32) \
+  -e ADMIN_EMAIL=you@yourdomain.com -e ADMIN_PASSWORD='a-long-password' -e TRUST_PROXY=1 \
   fiber-engine
 ```
-
-Put it behind HTTPS (the host's TLS or a reverse proxy). Health check: `GET /api/health`. Without Docker: `npm ci && npm run build && npm start` with the same environment variables.
 
 ## Security
 
