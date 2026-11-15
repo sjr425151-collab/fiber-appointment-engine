@@ -175,6 +175,34 @@ export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
       CREATE INDEX idx_areas_market ON service_areas(market_id);
     `,
   },
+  {
+    id: 4,
+    name: 'notifications_outbox',
+    sql: `
+      -- Email outbox. Rows are rendered and sent by a background worker so a slow
+      -- or failing email provider never blocks a visitor, and every send is logged.
+      CREATE TABLE notifications (
+        id              TEXT PRIMARY KEY,
+        kind            TEXT NOT NULL,
+        lead_id         TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        appointment_id  TEXT,
+        market_id       TEXT NOT NULL DEFAULT '',
+        status          TEXT NOT NULL DEFAULT 'pending'
+                        CHECK (status IN ('pending','sending','sent','logged','skipped','failed')),
+        send_after      TEXT NOT NULL,
+        attempts        INTEGER NOT NULL DEFAULT 0,
+        to_addr         TEXT NOT NULL DEFAULT '',
+        subject         TEXT NOT NULL DEFAULT '',
+        provider_id     TEXT NOT NULL DEFAULT '',
+        error           TEXT NOT NULL DEFAULT '',
+        sent_at         TEXT,
+        created_at      TEXT NOT NULL,
+        updated_at      TEXT NOT NULL
+      );
+      CREATE INDEX idx_notifications_due ON notifications(status, send_after);
+      CREATE INDEX idx_notifications_lead ON notifications(lead_id);
+    `,
+  },
 ];
 
 /**

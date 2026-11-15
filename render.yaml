@@ -34,3 +34,9 @@ services:
         sync: false          # Render asks for this during setup
       - key: ADMIN_PASSWORD
         sync: false          # Render asks for this during setup (12+ characters)
+      - key: RESEND_API_KEY
+        sync: false          # from resend.com → API Keys (leave blank to log emails instead of sending)
+      - key: EMAIL_FROM
+        value: Fiber Connect <hello@mail.livefiberconnect.com>  # domain must be verified in Resend
+      - key: TEAM_NOTIFY_EMAIL
+        sync: false          # where lead/booking alerts go if a location has no team email set

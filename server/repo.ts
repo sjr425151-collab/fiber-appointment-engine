@@ -354,6 +354,11 @@ export function insertAppointment(
   return toAppointment(db.prepare('SELECT * FROM appointments WHERE id = ?').get(id) as Row);
 }
 
+export function getAppointment(db: DB, id: string): Appointment | null {
+  const r = db.prepare('SELECT * FROM appointments WHERE id = ?').get(id) as Row | undefined;
+  return r ? toAppointment(r) : null;
+}
+
 export function setAppointmentStatus(db: DB, id: string, status: Appointment['status']): Appointment | null {
   db.prepare('UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?').run(status, now(), id);
   const r = db.prepare(`${APPT_JOIN} WHERE a.id = ?`).get(id) as Row | undefined;

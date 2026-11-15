@@ -74,6 +74,23 @@ Everything that differs between cities is a **location** (`shared/market.ts`), m
 - **Admin:** leads, funnel, CSV export and appointments can be filtered by location; appointments display in each location's timezone.
 - **New locations start hidden** — review the page via "View page" after making it live.
 
+## Email notifications
+
+An outbox table + background worker (`server/notify/`) sends email through **Resend** (REST API, no SDK):
+
+| Email | To | When |
+|---|---|---|
+| New / returning lead alert | Location's team emails (fallback `TEAM_NOTIFY_EMAIL`) | Immediately |
+| Booking alert | Team | Immediately |
+| Booking confirmation + `.ics` calendar invite | Customer | Immediately |
+| Appointment reminder | Customer | 24h before (or 3h before if booked late); skipped if cancelled/rescheduled |
+| "We got your request" | Customer | 20 min after submitting, only if they didn't book |
+
+- Emails are rendered at send time from current data; visitor input is HTML-escaped; one `Idempotency-Key` per email prevents duplicates.
+- Transient failures (network, 429, 5xx) retry with backoff (1, 5, 15, 60 min; 5 attempts); permanent errors fail immediately. Every email's status is visible on the lead page.
+- Without `RESEND_API_KEY`, emails are **logged, not sent**, and the admin shows a banner.
+- Setup: create a free Resend account (100 emails/day, 3,000/month), add and verify a sending subdomain such as `mail.livefiberconnect.com` (Resend shows the DNS records; add them in Cloudflare with proxying **off**), create an API key, and set `RESEND_API_KEY`, `EMAIL_FROM` and team emails (Admin → Locations).
+
 ## Cinematic hero & motion
 
 - **Art:** generated with Higgsfield (GPT Image 2.6, 2K) — a Monroe-style town at blue hour with fiber light threading into homes. Sources in `media/source/`.

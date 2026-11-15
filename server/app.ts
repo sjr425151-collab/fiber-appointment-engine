@@ -23,6 +23,7 @@ import { marketSchema, type Market } from '../shared/market';
 import type { AppConfig } from './config';
 import type { DB } from './db';
 import { renderHtml, type BootData } from './html';
+import { createNotifier, listNotifications, type Notifier } from './notify';
 import {
   createSessionToken,
   newToken,
@@ -90,7 +91,8 @@ export function describeAvailability(zip: string, area: repo.ServiceArea | null,
   }
 }
 
-export function createApp(config: AppConfig, db: DB) {
+export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier } = {}) {
+  const notifier = deps.notifier ?? createNotifier(db, config);
   const app = express();
   app.disable('x-powered-by');
   if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || 1);
@@ -205,6 +207,7 @@ export function createApp(config: AppConfig, db: DB) {
       utmCampaign: input.utmCampaign,
       marketId: market.slug,
     });
+    notifier.onLead(lead, duplicate);
     res.status(201).json({ leadId: lead.id, bookingToken, market: market.slug, availability: describeAvailability(input.zip, area, owner) });
   });
 
@@ -230,6 +233,7 @@ export function createApp(config: AppConfig, db: DB) {
   api.post('/appointments', limiter(20, 15), (req, res) => {
     const input = parse(bookingInputSchema, req.body);
     const appt = bookAppointment(db, input);
+    notifier.onBooked(appt);
     const booked = repo.getLead(db, input.leadId);
     repo.insertEvent(db, {
       name: 'appointment_booked',
@@ -280,7 +284,10 @@ export function createApp(config: AppConfig, db: DB) {
 
   const marketQuery = z.object({ market: z.string().trim().max(40).optional() });
 
-  admin.get('/me', (req, res) => res.json({ email: req.session!.email }));
+  admin.get('/me', (req, res) => {
+    const missingTeam = repo.listMarkets(db, { activeOnly: true }).filter((m) => !notifier.teamTo(m).length).map((m) => m.name);
+    res.json({ email: req.session!.email, emailEnabled: notifier.enabled, locationsWithoutTeamEmail: missingTeam });
+  });
 
   admin.get('/stats', (_req, res) => res.json(repo.leadStats(db)));
 
@@ -342,7 +349,12 @@ export function createApp(config: AppConfig, db: DB) {
   admin.get('/leads/:id', (req, res) => {
     const lead = repo.getLead(db, String(req.params.id));
     if (!lead) throw new HttpError(404, 'Lead not found.');
-    res.json({ lead, notes: repo.listNotes(db, lead.id), appointments: repo.listAppointments(db, { leadId: lead.id }) });
+    res.json({
+      lead,
+      notes: repo.listNotes(db, lead.id),
+      appointments: repo.listAppointments(db, { leadId: lead.id }),
+      notifications: listNotifications(db, lead.id),
+    });
   });
 
   admin.patch('/leads/:id', (req, res) => {

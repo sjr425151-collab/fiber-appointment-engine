@@ -54,6 +54,8 @@ export const marketSchema = z.object({
     .trim()
     .regex(/^(\+1\d{10})?$/, 'Use +1 followed by 10 digits')
     .default(''),
+  /** Team inboxes that get new-lead and booking alerts for this location. */
+  notifyEmails: z.array(z.string().trim().toLowerCase().email('Enter valid email addresses')).max(10).default([]),
   /** One line under the ZIP form, e.g. "Monroe (48161, 48162) and surrounding communities." */
   areaNote: z.string().trim().max(200).default(''),
   plans: z.array(planSchema).max(6).default([]),

@@ -145,6 +145,21 @@ function Editor({ initial, isNew, onSaved, onCancel }: { initial: Market; isNew:
           <F label="Team phone (call & text)" error={err('phoneE164') || err('phoneDisplay')}>
             <input className="input" value={m.phoneDisplay} onChange={(e) => setM((x) => ({ ...x, phoneDisplay: e.target.value, phoneE164: toE164(e.target.value) }))} placeholder="(734) 731-1946" />
           </F>
+          <F
+            label="Team alert emails (comma-separated)"
+            error={Object.entries(errors).find(([k]) => k.startsWith('notifyEmails'))?.[1]}
+            hint="New-lead and booking alerts for this location go here."
+            wide
+          >
+            <input
+              className="input"
+              type="text"
+              inputMode="email"
+              value={m.notifyEmails.join(', ')}
+              onChange={(e) => set('notifyEmails', e.target.value.split(',').map((x) => x.trim()).filter(Boolean))}
+              placeholder="sales@spotlightmarketing.com, owner@spotlightmarketing.com"
+            />
+          </F>
           <F label="Provider availability checker URL" error={err('availabilityUrl')}>
             <input className="input" type="url" value={m.availabilityUrl} onChange={(e) => set('availabilityUrl', e.target.value)} placeholder="https://…" />
           </F>

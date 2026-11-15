@@ -11,6 +11,14 @@ export interface AppConfig {
   /** Public origin used for canonical URLs, OG tags and the sitemap. */
   siteUrl: string;
   isProduction: boolean;
+  email: {
+    /** Resend API key. Without it, emails are logged instead of sent. */
+    resendApiKey: string;
+    /** Sender, e.g. "Fiber Connect <hello@mail.livefiberconnect.com>" — must be on a domain verified in Resend. */
+    from: string;
+    /** Fallback team inboxes when a location has none configured. */
+    teamEmails: string[];
+  };
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -51,6 +59,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     adminPasswordHash,
     timezone: env.APP_TIMEZONE ?? 'America/Detroit',
     siteUrl: (env.SITE_URL ?? 'http://localhost:' + (env.PORT ?? 3001)).replace(/\/+$/, ''),
+    email: {
+      resendApiKey: env.RESEND_API_KEY ?? '',
+      from: env.EMAIL_FROM || `Fiber Connect <notifications@${new URL(env.SITE_URL || 'http://localhost').hostname}>`,
+      teamEmails: (env.TEAM_NOTIFY_EMAIL ?? '')
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)),
+    },
     isProduction,
   };
 }

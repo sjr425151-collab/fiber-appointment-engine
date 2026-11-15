@@ -13,10 +13,14 @@ const NAV = [
 export default function AdminLayout() {
   const nav = useNavigate();
   const [email, setEmail] = useState<string | null>(null);
+  const [emailStatus, setEmailStatus] = useState<{ enabled: boolean; missing: string[] }>({ enabled: true, missing: [] });
 
   useEffect(() => {
-    api<{ email: string }>('/admin/me')
-      .then((r) => setEmail(r.email))
+    api<{ email: string; emailEnabled: boolean; locationsWithoutTeamEmail: string[] }>('/admin/me')
+      .then((r) => {
+        setEmail(r.email);
+        setEmailStatus({ enabled: r.emailEnabled, missing: r.locationsWithoutTeamEmail ?? [] });
+      })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) nav('/admin/login', { replace: true });
       });
@@ -60,6 +64,13 @@ export default function AdminLayout() {
           </div>
         </div>
       </header>
+      {(!emailStatus.enabled || emailStatus.missing.length > 0) && (
+        <div role="status" className="border-b border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-center text-sm text-amber-100 sm:px-6">
+          {!emailStatus.enabled
+            ? 'Email notifications are off — lead alerts and customer confirmations are logged but not sent. Add RESEND_API_KEY to turn them on.'
+            : `No team alert email set for: ${emailStatus.missing.join(', ')}. Add one in Locations so new leads aren’t missed.`}
+        </div>
+      )}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         <Outlet />
       </main>

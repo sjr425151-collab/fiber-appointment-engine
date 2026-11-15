@@ -4,9 +4,39 @@ import { LEAD_STATUSES, type Appointment, type Lead, type LeadNote, type LeadSta
 import { api, fmtDateTime, fmtPhone, STATUS_LABELS } from '../../lib/api';
 import { Spinner, StatusBadge } from '../../components/ui';
 
+interface EmailRow {
+  id: string;
+  kind: string;
+  status: 'pending' | 'sending' | 'sent' | 'logged' | 'skipped' | 'failed';
+  sendAfter: string;
+  attempts: number;
+  to: string;
+  subject: string;
+  error: string;
+  sentAt: string | null;
+}
+
+const EMAIL_KIND: Record<string, string> = {
+  team_new_lead: 'Team alert: new lead',
+  team_returning_lead: 'Team alert: returning lead',
+  team_booking: 'Team alert: booking',
+  customer_confirmation: 'Customer: booking confirmation',
+  customer_reminder: 'Customer: reminder',
+  customer_lead_received: 'Customer: request received',
+};
+const EMAIL_STATUS: Record<EmailRow['status'], string> = {
+  pending: 'text-sky-300',
+  sending: 'text-sky-300',
+  sent: 'text-emerald-300',
+  logged: 'text-amber-300',
+  skipped: 'text-slate-400',
+  failed: 'text-rose-300',
+};
+
 interface Detail {
   lead: Lead;
   notes: LeadNote[];
+  notifications?: EmailRow[];
   appointments: Appointment[];
 }
 
@@ -114,6 +144,32 @@ export default function LeadDetail() {
                   <li key={a.id} className="flex justify-between rounded-lg bg-white/[0.03] px-3 py-2">
                     <span>{fmtDateTime(a.startUtc)}</span>
                     <span className="capitalize text-slate-400">{a.status.replace('_', ' ')}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="glass p-5">
+            <h2 className="mb-3 font-semibold">Emails</h2>
+            {!d.notifications?.length ? (
+              <p className="text-sm text-slate-500">No emails for this lead.</p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {d.notifications.map((n) => (
+                  <li key={n.id} className="rounded-lg bg-white/[0.03] px-3 py-2">
+                    <div className="flex flex-wrap justify-between gap-2">
+                      <span>{EMAIL_KIND[n.kind] ?? n.kind}</span>
+                      <span className={`capitalize ${EMAIL_STATUS[n.status]}`}>
+                        {n.status === 'logged' ? 'not sent (email off)' : n.status === 'pending' ? `scheduled ${fmtDateTime(n.sendAfter)}` : n.status}
+                      </span>
+                    </div>
+                    {(n.to || n.sentAt) && (
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        {n.to}
+                        {n.sentAt ? ` · ${fmtDateTime(n.sentAt)}` : ''}
+                      </p>
+                    )}
+                    {n.error && <p className="mt-0.5 text-xs text-slate-400">{n.error}</p>}
                   </li>
                 ))}
               </ul>
