@@ -69,11 +69,14 @@ export function LocationSwitcher({ className = '' }: { className?: string }) {
     };
   }, [open]);
 
+  // `className` controls visibility/placement only; display/layout stays on the inner element.
   if (markets.length < 2) {
     return (
-      <span className={`inline-flex items-center gap-1 text-xs text-slate-300 ${className}`}>
-        <PinIcon className="h-3.5 w-3.5 text-fiber-400" /> {place(m)}
-      </span>
+      <div className={className}>
+        <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-slate-300">
+          <PinIcon className="h-3.5 w-3.5 text-fiber-400" /> {place(m)}
+        </span>
+      </div>
     );
   }
   return (
@@ -83,7 +86,7 @@ export function LocationSwitcher({ className = '' }: { className?: string }) {
         aria-haspopup="true"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs text-slate-200 hover:bg-white/5"
+        className="inline-flex min-h-9 items-center gap-1 whitespace-nowrap rounded-lg px-2 text-xs text-slate-200 hover:bg-white/5"
       >
         <PinIcon className="h-3.5 w-3.5 text-fiber-400" /> {place(m)}
         <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" aria-hidden>

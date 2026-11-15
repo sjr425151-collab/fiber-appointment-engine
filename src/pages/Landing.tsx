@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'rea
 import { Link, useParams } from 'react-router-dom';
 import type { AvailabilityResult } from '../../shared/schemas';
 import { broadbandDisclosure, faq, place } from '../../shared/content';
-import { plansFrom } from '../../shared/market-utils';
+import { listJoin, plansFrom } from '../../shared/market-utils';
 import { MarketProvider, marketPath, useMarket, useMarketState } from '../lib/market';
 import { api, ApiError } from '../lib/api';
 import { attribution, track } from '../lib/analytics';
@@ -326,9 +326,9 @@ function LandingPage() {
               Simple pricing. Everything included.
             </h2>
             <p className="mt-4 max-w-2xl text-lg text-slate-300">
-              {m.provider} internet{included.length ? ` — ${included.map((h) => h.toLowerCase()).join(', ')}` : ''}.
+              {m.provider} internet{included.length ? ` — ${listJoin(included.map((h) => h.toLowerCase()))}` : ''}.
             </p>
-            <div className="mt-10 grid gap-5 md:grid-cols-2 lg:max-w-4xl">
+            <div className={`mt-10 grid gap-5 md:grid-cols-2 ${m.plans.length >= 3 ? 'lg:grid-cols-3' : 'lg:max-w-4xl'}`}>
               {m.plans.map((p) => (
                 <div key={p.name} className={`glass relative flex flex-col p-6 sm:p-8 ${p.featured ? 'border-fiber-400/50 ring-1 ring-fiber-400/40' : ''}`}>
                   <h3 className="font-display text-2xl font-bold">{p.name}</h3>

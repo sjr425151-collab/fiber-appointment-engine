@@ -239,7 +239,7 @@ describe('multi-location markets', () => {
     const r = await request(app).get('/api/markets').expect(200);
     expect(r.body).toMatchObject({ defaultSlug: 'monroe', markets: [{ slug: 'monroe', name: 'Monroe', state: 'MI' }] });
     const m = await request(app).get('/api/markets/monroe').expect(200);
-    expect(m.body.market.plans.map((p: { price: string }) => p.price)).toEqual(['$50/mo', '$70/mo']);
+    expect(m.body.market.plans.map((p: { name: string; price: string }) => `${p.name} ${p.price}`)).toEqual(['500 Mbps $50/mo', '1 Gig $50/mo', '2 Gig $70/mo']);
     await request(app).get('/api/markets/nowhere').expect(404);
   });
 
@@ -332,7 +332,7 @@ describe('per-location page rendering', () => {
       boot: { market: MONROE, markets: [{ slug: 'monroe', name: 'Monroe', state: 'MI' }], defaultSlug: 'monroe' },
     });
     expect(html).toContain('<title>Omni Fiber Internet in Monroe, MI');
-    expect(html).toContain('1 Gig for $50/mo or 2 Gig for $70/mo');
+    expect(html).toContain('500 Mbps for $50/mo, 1 Gig for $50/mo, or 2 Gig for $70/mo');
     expect(html).toContain('<link rel="canonical" href="https://x.test/" />');
     expect(html).toContain('content="https://x.test/og-monroe.jpg"');
     expect(html).toContain('content="index, follow"');
@@ -348,5 +348,16 @@ describe('per-location page rendering', () => {
     expect(html).not.toContain('<script>alert(1)');
     expect(html).toContain('\\u003c/script>');
     expect(html).toContain('content="noindex, nofollow"');
+  });
+});
+
+describe('plan helpers', () => {
+  it('shows the fastest plan at the lowest price and joins lists properly', async () => {
+    const { plansFrom, listJoin } = await import('../shared/market-utils');
+    expect(plansFrom(MONROE)).toEqual({ name: '1 Gig', price: '$50/mo' });
+    expect(plansFrom({ plans: [] })).toBeNull();
+    expect(listJoin(['a'])).toBe('a');
+    expect(listJoin(['a', 'b'], 'or')).toBe('a or b');
+    expect(listJoin(['a', 'b', 'c'])).toBe('a, b, and c');
   });
 });

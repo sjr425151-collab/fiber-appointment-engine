@@ -5,7 +5,7 @@
  * bump CONSENT_VERSION whenever the wording changes.
  */
 import type { Market } from './market';
-import { plansFrom } from './market-utils';
+import { listJoin, plansFrom } from './market-utils';
 
 export const BRAND = {
   /** Public site name (multi-location brand). */
@@ -52,7 +52,7 @@ export function broadbandDisclosure(m: Pick<Market, 'provider'>) {
 export function siteMeta(m: M) {
   const from = plansFrom(m);
   const title = `${serviceName(m)} in ${place(m)} — Check Availability & Book a Free Consultation`;
-  const pricing = from ? `${m.plans.map((p) => `${p.name} for ${p.price}`).join(' or ')}. ` : '';
+  const pricing = from ? `${listJoin(m.plans.map((p) => `${p.name} for ${p.price}`), 'or')}. ` : '';
   const description = `${m.provider} in ${place(m)}: ${pricing}Check your address and book a free, no-obligation consultation with a local fiber specialist.`;
   return { title, description: description.slice(0, 300) };
 }
@@ -60,8 +60,8 @@ export function siteMeta(m: M) {
 /** Shown on the page AND emitted as FAQPage structured data — keep them identical. */
 export function faq(m: M): { q: string; a: string }[] {
   const plans = m.plans.length
-    ? `In ${m.name}, ${m.provider} offers ${m.plans.map((p) => `${p.name} for ${p.price}`).join(' and ')}` +
-      (m.plans[0].highlights.length ? `, with ${m.plans[0].highlights.map((h) => h.toLowerCase()).join(', ')}` : '') +
+    ? `In ${m.name}, ${m.provider} offers ${listJoin(m.plans.map((p) => `${p.name} for ${p.price}`))}` +
+      (m.plans[0].highlights.length ? `, with ${listJoin(m.plans[0].highlights.map((h) => h.toLowerCase()))}` : '') +
       `. Availability is confirmed for your exact address, and each plan’s official Broadband Facts label is published by ${m.provider}.`
     : `Plans and current offers are set by ${m.provider} and can vary by address. Your specialist will walk you through the options available to you.`;
   return [

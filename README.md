@@ -128,11 +128,11 @@ Put it behind HTTPS (the host's TLS or a reverse proxy). Health check: `GET /api
 
 ## Before going live — needs your input
 
-0. **Domain.** `fiberconnect.com` has been registered by someone else since 1999. Available alternatives (checked Nov 15, 2026): `fiberconnect.app`, `fiberconnecthome.com`, `joinfiberconnect.com`, `fiberconnectnow.com`, `fiberconnecthq.com`. Set `SITE_URL` to whichever you choose.
+0. **Domain.** Planned: **`livefiberconnect.com`** (available as of Nov 15, 2026). `fiberconnect.com` is privately held since 1999 and `fiberconnect.co` is parked for resale on Afternic. Set `SITE_URL=https://livefiberconnect.com` when deploying.
 1. **Coverage.** Exact-address coverage is confirmed with Omni Fiber's official checker (linked on the site). The ZIP statuses in Admin → Service areas only control the on-site message; keep Monroe at `verify` unless Omni confirms a whole ZIP.
 2. **Confirm brand & disclosure wording** in `shared/content.ts` (the working site name "Monroe Fiber Connect", the partner disclosure, the consent text and the team phone number) with Omni Fiber and, ideally, counsel.
 3. **Hosting.** Nothing is deployed yet — see *Deployment* above.
-4. **Plans & phone.** Monroe plans (1 Gig $50/mo, 2 Gig $70/mo) and the team phone (734) 731-1946 are edited in Admin → Locations (seed values in `shared/market.ts`). Update the "verified on" date whenever pricing changes.
+4. **Plans & phone.** Monroe plans (500 Mbps $50/mo, 1 Gig $50/mo, 2 Gig $70/mo) and the team phone (734) 731-1946 are edited in Admin → Locations (seed values in `shared/market.ts`). Update the "verified on" date whenever pricing changes.
 
 ## Project layout
 

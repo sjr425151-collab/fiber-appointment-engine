@@ -94,6 +94,7 @@ export const MONROE: Market = marketSchema.parse({
   phoneE164: '+17347311946',
   areaNote: 'Monroe (48161, 48162) and surrounding Monroe County communities.',
   plans: [
+    { name: '500 Mbps', speed: 'Omni Fiber internet', price: '$50/mo', highlights: ['Free installation', 'Free equipment', 'No extra taxes or fees', 'No contracts'] },
     { name: '1 Gig', speed: 'Omni Fiber internet', price: '$50/mo', highlights: ['Free installation', 'Free equipment', 'No extra taxes or fees', 'No contracts'] },
     { name: '2 Gig', speed: 'Omni Fiber internet', price: '$70/mo', highlights: ['Free installation', 'Free equipment', 'No extra taxes or fees', 'No contracts'], featured: true },
   ],
