@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { BRAND, CONSENT_TEXT, CONSENT_VERSION } from '../../shared/content';
+import { BRAND, CONSENT_VERSION, consentText } from '../../shared/content';
+import { useMarketState } from '../lib/market';
+import { Spinner } from '../components/ui';
 import { Logo } from '../components/ui';
 
 /**
@@ -8,9 +10,19 @@ import { Logo } from '../components/ui';
  * Have counsel review before launch.
  */
 export default function Privacy() {
+  // Provider wording follows the default location (embedded in the page, so normally instant).
+  const state = useMarketState();
   useEffect(() => {
-    document.title = `Privacy Notice — ${BRAND.agency}`;
+    document.title = `Privacy Notice — ${BRAND.name}`;
   }, []);
+  if (state.status !== 'ready') {
+    return (
+      <div className="grid min-h-screen place-items-center text-slate-400">
+        <Spinner className="h-8 w-8" />
+      </div>
+    );
+  }
+  const m = state.market;
 
   return (
     <div className="min-h-screen px-4 py-10 sm:px-6">
@@ -22,7 +34,7 @@ export default function Privacy() {
           <h1 className="font-display text-3xl font-bold text-white sm:text-4xl">Privacy notice</h1>
           <p className="text-sm text-slate-400">Last updated {CONSENT_VERSION}</p>
           <p>
-            This website is operated by {BRAND.agency}, an independent marketing partner of {BRAND.provider}. This notice explains what
+            This website ({BRAND.name}) is operated by {BRAND.agency}, an independent marketing partner of fiber internet providers including {m.provider}. This notice explains what
             information we collect when you use this site and how we use it.
           </p>
 
@@ -50,13 +62,13 @@ export default function Privacy() {
             <li>To understand which campaigns bring people to this site, so we can improve it.</li>
           </ul>
           <p>
-            We do not sell your personal information. We share it only as needed to confirm service and arrange installation with {BRAND.provider}, or
+            We do not sell your personal information. We share it only as needed to confirm service and arrange installation with {m.provider}, or
             when required by law.
           </p>
 
           <h2>Calls and text messages</h2>
           <p>When you submit the form you agree to the following:</p>
-          <blockquote className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm">{CONSENT_TEXT}</blockquote>
+          <blockquote className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm">{consentText(m)}</blockquote>
           <p>Reply STOP to any text to opt out of texts. You can also ask us to stop calling or emailing you at any time.</p>
 
           <h2>Cookies</h2>
@@ -71,7 +83,7 @@ export default function Privacy() {
           <h2>Your choices</h2>
           <p>
             You can ask us to access, correct or delete your information, or to stop contacting you, by replying to any message we send you
-            {BRAND.phoneDisplay ? ` or by calling ${BRAND.phoneDisplay}` : ''}.
+            {m.phoneDisplay ? ` or by calling or texting ${m.phoneDisplay}` : ''}.
           </p>
 
           <p className="pt-6">

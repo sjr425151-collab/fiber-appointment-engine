@@ -6,6 +6,7 @@ import { Logo, Spinner } from '../../components/ui';
 const NAV = [
   { to: '/admin', label: 'Leads', end: true },
   { to: '/admin/appointments', label: 'Appointments' },
+  { to: '/admin/locations', label: 'Locations' },
   { to: '/admin/areas', label: 'Service areas' },
 ];
 

@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+// Our CSP forbids eval; tell Zod not to probe for it (it would log a CSP violation).
+z.config({ jitless: true });
+
 /** Lead pipeline stages — sales & installation tracking builds on these. */
 export const LEAD_STATUSES = [
   'new',
@@ -54,6 +57,8 @@ export const leadInputSchema = z.object({
   referrer: z.string().trim().max(500).optional().default(''),
   landingPage: z.string().trim().max(300).optional().default(''),
   sessionId: z.string().trim().max(64).optional().default(''),
+  /** Market slug the visitor signed up through (defaults to the default market). */
+  market: z.string().trim().max(40).optional().default(''),
   /** Honeypot: real users never fill this hidden field. */
   website: z.string().optional().default(''),
 });
@@ -69,6 +74,7 @@ export const bookingInputSchema = z.object({
 
 export const slotsQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
+  market: z.string().trim().max(40).optional(),
 });
 
 /** Conversion events accepted from the browser. */
@@ -93,6 +99,7 @@ export const eventInputSchema = z.object({
   props: z.record(z.string().max(40), z.union([z.string().max(200), z.number(), z.boolean()])).default({}),
   utmSource: z.string().trim().max(100).default(''),
   utmCampaign: z.string().trim().max(100).default(''),
+  market: z.string().trim().max(40).default(''),
 });
 
 export const loginSchema = z.object({
@@ -113,12 +120,15 @@ export const serviceAreaSchema = z.object({
   zip,
   city: z.string().trim().min(2).max(60),
   status: z.enum(AREA_STATUSES),
+  marketId: z.string().trim().min(2).max(40),
 });
 
 // ---- API response types ----
 export interface AvailabilityResult {
   zip: string;
   city: string | null;
+  /** Market the ZIP belongs to (may differ from the page the visitor is on). */
+  market: { slug: string; name: string; state: string } | null;
   status: AreaStatus | 'unknown';
   headline: string;
   message: string;
@@ -154,6 +164,7 @@ export interface Lead {
   clickId: string;
   referrer: string;
   landingPage: string;
+  marketId: string;
   consentAt: string;
   createdAt: string;
   updatedAt: string;
@@ -167,6 +178,7 @@ export interface Appointment {
   status: 'scheduled' | 'completed' | 'no_show' | 'cancelled';
   notes: string;
   createdAt: string;
+  marketId: string;
   leadName?: string;
   leadPhone?: string;
   leadAddress?: string;

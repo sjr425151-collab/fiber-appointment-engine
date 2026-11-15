@@ -3,7 +3,8 @@ import request from 'supertest';
 import { createApp } from '../server/app';
 import { openDatabase, type DB } from '../server/db';
 import { hashPassword } from '../server/lib/auth';
-import { availableSlots, bookAppointment, candidateSlots, rulesFromSettings } from '../server/scheduling';
+import { availableSlots, bookAppointment, candidateSlots } from '../server/scheduling';
+import { MONROE, marketSchema, type Market } from '../shared/market';
 import { zonedToUtc } from '../server/lib/time';
 import * as repo from '../server/repo';
 import type { AppConfig } from '../server/config';
@@ -101,7 +102,7 @@ describe('lead capture', () => {
 
 describe('scheduling', () => {
   it('never offers slots inside the minimum lead time or on closed days', () => {
-    const rules = rulesFromSettings(repo.getSettings(db));
+    const rules = MONROE.schedule;
     const now = new Date('2026-11-16T15:00:00Z'); // Monday 10am Detroit
     expect(candidateSlots('2026-11-16', rules, TZ, now)).toHaveLength(0); // all < 12h out
     expect(candidateSlots('2026-11-22', rules, TZ, now)).toHaveLength(0); // Sunday
@@ -121,7 +122,7 @@ describe('scheduling', () => {
     await book(leads[1]).expect(201);
     await book(leads[2]).expect(409); // capacity 2
     expect(repo.getLead(db, leads[0].leadId)!.status).toBe('appointment_set');
-    const after = availableSlots(db, (await request(app).get('/api/schedule/dates')).body.dates[0], TZ);
+    const after = availableSlots(db, MONROE, (await request(app).get('/api/schedule/dates')).body.dates[0]);
     expect(after.find((s) => s.startUtc === slot.startUtc)).toBeUndefined();
   });
 
@@ -136,9 +137,9 @@ describe('scheduling', () => {
   it('reschedules instead of double-booking a lead', async () => {
     const { body: l } = await request(app).post('/api/leads').send(validLead);
     const date = (await request(app).get('/api/schedule/dates')).body.dates.at(-1);
-    const slots = availableSlots(db, date, TZ);
-    bookAppointment(db, { leadId: l.leadId, token: l.bookingToken, startUtc: slots[0].startUtc, notes: '' }, TZ);
-    bookAppointment(db, { leadId: l.leadId, token: l.bookingToken, startUtc: slots[1].startUtc, notes: '' }, TZ);
+    const slots = availableSlots(db, MONROE, date);
+    bookAppointment(db, { leadId: l.leadId, token: l.bookingToken, startUtc: slots[0].startUtc, notes: '' });
+    bookAppointment(db, { leadId: l.leadId, token: l.bookingToken, startUtc: slots[1].startUtc, notes: '' });
     const appts = repo.listAppointments(db, { leadId: l.leadId });
     expect(appts.filter((a) => a.status === 'scheduled')).toHaveLength(1);
     expect(appts.filter((a) => a.status === 'cancelled')).toHaveLength(1);
@@ -208,5 +209,144 @@ describe('conversion tracking & SEO', () => {
     const agent = await adminAgent();
     const r = await agent.get('/api/admin/conversions').expect(200);
     expect(r.body).toHaveProperty('funnel');
+  });
+});
+
+describe('multi-location markets', () => {
+  const toledo = (): Market =>
+    marketSchema.parse({
+      ...MONROE,
+      slug: 'toledo',
+      name: 'Toledo',
+      state: 'OH',
+      timezone: 'America/New_York',
+      phoneDisplay: '(419) 555-0100',
+      phoneE164: '+14195550100',
+      plans: [{ name: '500 Mbps', price: '$40/mo', highlights: ['No contracts'] }],
+      schedule: { ...MONROE.schedule, capacityPerSlot: 1 },
+      isDefault: false,
+      ogImage: '',
+    });
+
+  async function addToledo() {
+    const agent = await adminAgent();
+    await agent.post('/api/admin/markets').set('X-Requested-With', 'fetch').send(toledo()).expect(201);
+    await agent.put('/api/admin/service-areas').set('X-Requested-With', 'fetch').send({ zip: '43604', city: 'Toledo', status: 'available', marketId: 'toledo' }).expect(200);
+    return agent;
+  }
+
+  it('seeds Monroe as the default market and exposes it publicly', async () => {
+    const r = await request(app).get('/api/markets').expect(200);
+    expect(r.body).toMatchObject({ defaultSlug: 'monroe', markets: [{ slug: 'monroe', name: 'Monroe', state: 'MI' }] });
+    const m = await request(app).get('/api/markets/monroe').expect(200);
+    expect(m.body.market.plans.map((p: { price: string }) => p.price)).toEqual(['$50/mo', '$70/mo']);
+    await request(app).get('/api/markets/nowhere').expect(404);
+  });
+
+  it('creates a location from admin with validation and reserved-slug protection', async () => {
+    const agent = await adminAgent();
+    await agent.post('/api/admin/markets').set('X-Requested-With', 'fetch').send({ ...toledo(), slug: 'admin' }).expect(400);
+    await agent.post('/api/admin/markets').set('X-Requested-With', 'fetch').send({ ...toledo(), phoneE164: '555' }).expect(400);
+    await agent.post('/api/admin/markets').set('X-Requested-With', 'fetch').send(toledo()).expect(201);
+    await agent.post('/api/admin/markets').set('X-Requested-With', 'fetch').send(toledo()).expect(409);
+    expect((await request(app).get('/api/markets')).body.markets.map((m: { slug: string }) => m.slug)).toEqual(['monroe', 'toledo']);
+  });
+
+  it('keeps exactly one active default location', async () => {
+    const agent = await addToledo();
+    await agent.put('/api/admin/markets/monroe').set('X-Requested-With', 'fetch').send({ ...MONROE, isDefault: false }).expect(400);
+    await agent.put('/api/admin/markets/toledo').set('X-Requested-With', 'fetch').send({ ...toledo(), isDefault: true }).expect(200);
+    expect((await request(app).get('/api/markets')).body.defaultSlug).toBe('toledo');
+    expect(repo.getMarket(db, 'monroe')!.isDefault).toBe(false);
+    await agent.put('/api/admin/markets/toledo').set('X-Requested-With', 'fetch').send({ ...toledo(), isDefault: true, active: false }).expect(400);
+  });
+
+  it('describes availability with the provider of the market that owns the ZIP', async () => {
+    await addToledo();
+    const r = await request(app).get('/api/availability').query({ zip: '43604' }).expect(200);
+    expect(r.body).toMatchObject({ status: 'available', city: 'Toledo', market: { slug: 'toledo' } });
+  });
+
+  it('routes leads to the owning market and uses that market’s calendar and capacity', async () => {
+    await addToledo();
+    // Toledo ZIP submitted from the Monroe page → same provider → Toledo lead
+    const a = await request(app).post('/api/leads').send({ ...validLead, zip: '43604', city: 'Toledo', market: 'monroe' }).expect(201);
+    expect(a.body.market).toBe('toledo');
+    expect(repo.getLead(db, a.body.leadId)!.marketId).toBe('toledo');
+
+    const dates = (await request(app).get('/api/schedule/dates').query({ market: 'toledo' })).body;
+    expect(dates.timezone).toBe('America/New_York');
+    const toledoMarket = repo.getMarket(db, 'toledo')!;
+    let slot = null;
+    for (const d of dates.dates) {
+      const s = availableSlots(db, toledoMarket, d);
+      if (s.length) { slot = s[0]; break; }
+    }
+    await request(app).post('/api/appointments').send({ leadId: a.body.leadId, token: a.body.bookingToken, startUtc: slot!.startUtc }).expect(201);
+    // Toledo capacity is 1 → slot now full in Toledo…
+    const b = await request(app).post('/api/leads').send({ ...validLead, email: 'b@example.com', zip: '43604', city: 'Toledo' });
+    await request(app).post('/api/appointments').send({ leadId: b.body.leadId, token: b.body.bookingToken, startUtc: slot!.startUtc }).expect(409);
+    // …but Monroe's calendar at the same instant is untouched.
+    expect(repo.countBookedAt(db, 'monroe', slot!.startUtc)).toBe(0);
+    expect(repo.listAppointments(db, { fromUtc: '', market: 'toledo' })).toHaveLength(1);
+    expect(repo.conversionStats(db, 30, 'toledo').funnel.appointment_booked.events).toBe(1);
+  });
+
+  it('records the consent wording for the provider shown on the page', async () => {
+    const r = await request(app).post('/api/leads').send(validLead).expect(201);
+    const row = db.prepare('SELECT consent_text FROM leads WHERE id = ?').get(r.body.leadId) as { consent_text: string };
+    expect(row.consent_text).toContain('on behalf of Omni Fiber');
+  });
+
+  it('lists active locations in the sitemap (default market at the root)', async () => {
+    await addToledo();
+    const sitemap = (await request(app).get('/sitemap.xml')).text;
+    expect(sitemap).toContain('<loc>https://fiber.example.com/</loc>');
+    expect(sitemap).toContain('<loc>https://fiber.example.com/toledo</loc>');
+    expect(sitemap).not.toContain('/monroe</loc>');
+  });
+
+  it('filters admin leads and CSV by location', async () => {
+    await addToledo();
+    await request(app).post('/api/leads').send(validLead);
+    await request(app).post('/api/leads').send({ ...validLead, email: 't@example.com', zip: '43604', city: 'Toledo' });
+    const agent = await adminAgent();
+    expect((await agent.get('/api/admin/leads').query({ market: 'toledo' })).body.total).toBe(1);
+    expect((await agent.get('/api/admin/leads').query({ market: 'monroe' })).body.total).toBe(1);
+    const csv = (await agent.get('/api/admin/leads.csv').query({ market: 'toledo' })).text;
+    expect(csv.split('\n')).toHaveLength(2);
+    expect(csv).toContain('"toledo"');
+  });
+});
+
+describe('per-location page rendering', () => {
+  const tpl =
+    '<title>%%TITLE%%</title><meta name="description" content="%%DESCRIPTION%%" /><meta name="robots" content="%%ROBOTS%%" />' +
+    '<link rel="canonical" href="%%CANONICAL%%" /><meta property="og:image" content="%%OG_IMAGE%%" /><!--%%HEAD_DATA%%-->';
+
+  it('renders location-specific SEO tags and boot data', async () => {
+    const { renderHtml } = await import('../server/html');
+    const html = renderHtml(tpl, {
+      siteUrl: 'https://x.test',
+      canonicalPath: '/',
+      boot: { market: MONROE, markets: [{ slug: 'monroe', name: 'Monroe', state: 'MI' }], defaultSlug: 'monroe' },
+    });
+    expect(html).toContain('<title>Omni Fiber Internet in Monroe, MI');
+    expect(html).toContain('1 Gig for $50/mo or 2 Gig for $70/mo');
+    expect(html).toContain('<link rel="canonical" href="https://x.test/" />');
+    expect(html).toContain('content="https://x.test/og-monroe.jpg"');
+    expect(html).toContain('content="index, follow"');
+    expect(html).toContain('"@type":"FAQPage"');
+    expect(html).toContain('<script type="application/json" id="boot-data">');
+    expect(html).not.toContain('%%');
+  });
+
+  it('escapes hostile location text in attributes and embedded JSON', async () => {
+    const { renderHtml } = await import('../server/html');
+    const evil = { ...MONROE, name: '</script><script>alert(1)</script>"' };
+    const html = renderHtml(tpl, { siteUrl: 'https://x.test', canonicalPath: '/x', noindex: true, boot: { market: evil, markets: [], defaultSlug: 'monroe' } });
+    expect(html).not.toContain('<script>alert(1)');
+    expect(html).toContain('\\u003c/script>');
+    expect(html).toContain('content="noindex, nofollow"');
   });
 });

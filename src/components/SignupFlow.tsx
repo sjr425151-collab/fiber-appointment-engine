@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { AvailabilityResult, Slot } from '../../shared/schemas';
-import { BRAND, CONSENT_TEXT, OMNI_LINKS } from '../../shared/content';
-import { api, ApiError, fmtCalendarDate, fmtDateTime } from '../lib/api';
+import { consentText } from '../../shared/content';
+import { hasPhone, useMarket } from '../lib/market';
+import { api, ApiError, fmtCalendarDate, fmtDateTime, tzLabel } from '../lib/api';
 import { attribution, sessionId, track } from '../lib/analytics';
 import AvailabilityBanner from './AvailabilityBanner';
 import { Check, Field, Spinner } from './ui';
@@ -11,6 +12,8 @@ type Step = 'details' | 'schedule' | 'done';
 interface LeadResponse {
   leadId: string;
   bookingToken: string;
+  /** Market whose calendar the lead books into (the one serving their ZIP). */
+  market: string;
   availability: AvailabilityResult;
 }
 
@@ -19,6 +22,7 @@ export default function SignupFlow({ zip, city, availability }: { zip: string; c
   const [lead, setLead] = useState<LeadResponse | null>(null);
   const [firstName, setFirstName] = useState('');
   const [bookedAt, setBookedAt] = useState<string | null>(null);
+  const [bookedTz, setBookedTz] = useState('');
 
   const wantsBooking = availability?.status !== 'not_serviceable';
 
@@ -53,20 +57,22 @@ export default function SignupFlow({ zip, city, availability }: { zip: string; c
         {step === 'schedule' && lead && (
           <ScheduleStep
             lead={lead}
-            onBooked={(start) => {
+            onBooked={(start, zone) => {
+              setBookedTz(zone);
               setBookedAt(start);
               setStep('done');
             }}
             onSkip={() => setStep('done')}
           />
         )}
-        {step === 'done' && <DoneStep name={firstName} bookedAt={bookedAt} />}
+        {step === 'done' && <DoneStep name={firstName} bookedAt={bookedAt} tz={bookedTz} />}
       </div>
     </div>
   );
 }
 
 function DetailsStep({ zip, city, onDone }: { zip: string; city: string; onDone: (r: LeadResponse, firstName: string) => void }) {
+  const market = useMarket();
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -101,7 +107,7 @@ function DetailsStep({ zip, city, onDone }: { zip: string; city: string; onDone:
     setErrors({});
     setFormError('');
     try {
-      const r = await api<LeadResponse>('/leads', { method: 'POST', body: { ...form, consent, ...attribution(), sessionId: sessionId() } });
+      const r = await api<LeadResponse>('/leads', { method: 'POST', body: { ...form, consent, ...attribution(), sessionId: sessionId(), market: market.slug } });
       track('lead_submit', { area_status: r.availability.status }, false);
       onDone(r, form.firstName);
     } catch (err) {
@@ -166,7 +172,7 @@ function DetailsStep({ zip, city, onDone }: { zip: string; city: string; onDone:
 
       <label className="flex cursor-pointer gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-4 text-xs leading-relaxed text-slate-300">
         <input type="checkbox" name="consent" aria-invalid={!!errors.consent} className="mt-0.5 h-5 w-5 shrink-0 accent-cyan-400" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-        <span>{CONSENT_TEXT}</span>
+        <span>{consentText(market)}</span>
       </label>
       {errors.consent && <p className="field-error" role="alert">{errors.consent}</p>}
       {formError && !Object.keys(errors).length && <p className="field-error">{formError}</p>}
@@ -178,7 +184,9 @@ function DetailsStep({ zip, city, onDone }: { zip: string; city: string; onDone:
   );
 }
 
-function ScheduleStep({ lead, onBooked, onSkip }: { lead: LeadResponse; onBooked: (start: string) => void; onSkip: () => void }) {
+function ScheduleStep({ lead, onBooked, onSkip }: { lead: LeadResponse; onBooked: (start: string, tz: string) => void; onSkip: () => void }) {
+  const market = useMarket();
+  const [tz, setTz] = useState(market.timezone);
   const [dates, setDates] = useState<string[]>([]);
   const [date, setDate] = useState('');
   const [slots, setSlots] = useState<Slot[] | null>(null);
@@ -188,26 +196,27 @@ function ScheduleStep({ lead, onBooked, onSkip }: { lead: LeadResponse; onBooked
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api<{ dates: string[] }>('/schedule/dates').then((r) => {
+    api<{ dates: string[]; timezone: string }>(`/schedule/dates?market=${encodeURIComponent(lead.market)}`).then((r) => {
+      setTz(r.timezone);
       setDates(r.dates);
       setDate(r.dates[0] ?? '');
     });
-    // Runs once on mount: loading the bookable dates from the API.
-  }, []);
+    // Runs once per lead market: loading the bookable dates from the API.
+  }, [lead.market]);
 
   useEffect(() => {
     if (!date) return;
-    api<{ slots: Slot[] }>(`/schedule/slots?date=${date}`).then((r) => setSlots(r.slots)).catch(() => setSlots([]));
-  }, [date]);
+    api<{ slots: Slot[] }>(`/schedule/slots?date=${date}&market=${encodeURIComponent(lead.market)}`).then((r) => setSlots(r.slots)).catch(() => setSlots([]));
+  }, [date, lead.market]);
 
   const grouped = useMemo(() => {
     const g = { Morning: [] as Slot[], Afternoon: [] as Slot[], Evening: [] as Slot[] };
     for (const s of slots ?? []) {
-      const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Detroit', hour: 'numeric', hourCycle: 'h23' }).format(new Date(s.startUtc)));
+      const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hourCycle: 'h23' }).format(new Date(s.startUtc)));
       (h < 12 ? g.Morning : h < 17 ? g.Afternoon : g.Evening).push(s);
     }
     return Object.entries(g).filter(([, v]) => v.length);
-  }, [slots]);
+  }, [slots, tz]);
 
   async function book() {
     setBusy(true);
@@ -215,12 +224,12 @@ function ScheduleStep({ lead, onBooked, onSkip }: { lead: LeadResponse; onBooked
     try {
       await api('/appointments', { method: 'POST', body: { leadId: lead.leadId, token: lead.bookingToken, startUtc: selected, notes } });
       track('appointment_booked', {}, false);
-      onBooked(selected);
+      onBooked(selected, tz);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Network error. Please try again.');
       if (err instanceof ApiError && err.status === 409) {
         // Slot was taken by someone else — refresh the grid.
-        const r = await api<{ slots: Slot[] }>(`/schedule/slots?date=${date}`);
+        const r = await api<{ slots: Slot[] }>(`/schedule/slots?date=${date}&market=${encodeURIComponent(lead.market)}`);
         setSlots(r.slots);
         setSelected('');
       }
@@ -234,7 +243,7 @@ function ScheduleStep({ lead, onBooked, onSkip }: { lead: LeadResponse; onBooked
       <AvailabilityBanner result={lead.availability} />
       <div>
         <h2 className="font-display text-2xl font-bold">Pick a time for your consultation</h2>
-        <p className="mt-1 text-slate-300">A local specialist will confirm your address, walk through plans, and answer questions. Times shown in Eastern Time.</p>
+        <p className="mt-1 text-slate-300">A local specialist will confirm your address, walk through plans, and answer questions. Times shown in local time ({tzLabel(tz)}).</p>
       </div>
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2" role="group" aria-label="Choose a date">
         {dates.map((d) => {
@@ -296,14 +305,15 @@ function ScheduleStep({ lead, onBooked, onSkip }: { lead: LeadResponse; onBooked
           I’d rather get a call first
         </button>
         <button className="btn-primary sm:min-w-56" disabled={!selected || busy} onClick={book}>
-          {busy ? <Spinner /> : selected ? `Book ${fmtDateTime(selected)}` : 'Select a time'}
+          {busy ? <Spinner /> : selected ? `Book ${fmtDateTime(selected, tz)}` : 'Select a time'}
         </button>
       </div>
     </div>
   );
 }
 
-function DoneStep({ name, bookedAt }: { name: string; bookedAt: string | null }) {
+function DoneStep({ name, bookedAt, tz }: { name: string; bookedAt: string | null; tz: string }) {
+  const market = useMarket();
   return (
     <div className="py-6 text-center">
       <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br from-fiber-400 to-pulse-500 text-ink-950">
@@ -312,22 +322,33 @@ function DoneStep({ name, bookedAt }: { name: string; bookedAt: string | null })
       <h2 className="mt-5 font-display text-2xl font-bold" tabIndex={-1} ref={(el) => el?.focus()}>You’re all set{name ? `, ${name}` : ''}!</h2>
       {bookedAt ? (
         <p className="mx-auto mt-2 max-w-md text-slate-300">
-          Your consultation is booked for <strong className="text-white">{fmtDateTime(bookedAt)}</strong> (Eastern). We’ll reach out beforehand to confirm.
+          Your consultation is booked for <strong className="text-white">{fmtDateTime(bookedAt, tz || market.timezone)}</strong> ({tzLabel(tz || market.timezone)}). We’ll reach out beforehand to confirm.
         </p>
       ) : (
         <p className="mx-auto mt-2 max-w-md text-slate-300">A local fiber specialist will contact you shortly using your preferred method.</p>
       )}
-      <p className="mx-auto mt-6 max-w-md text-sm text-slate-400">
-        Questions before then? Call or text{' '}
-        <a href={`tel:${BRAND.phoneE164}`} onClick={() => track('call_click', { location: 'confirmation' })} className="text-cyan-200 underline underline-offset-4">
-          {BRAND.phoneDisplay}
-        </a>
-        . You can also check your exact address on {BRAND.provider}’s{' '}
-        <a href={OMNI_LINKS.availability} target="_blank" rel="noopener" onClick={() => track('outbound_click', { target: 'omni_checker', location: 'confirmation' })} className="text-cyan-200 underline underline-offset-4">
-          official availability checker
-        </a>
-        .
-      </p>
+      {(hasPhone(market) || market.availabilityUrl) && (
+        <p className="mx-auto mt-6 max-w-md text-sm text-slate-400">
+          {hasPhone(market) && (
+            <>
+              Questions before then? Call or text{' '}
+              <a href={`tel:${market.phoneE164}`} onClick={() => track('call_click', { location: 'confirmation' })} className="text-cyan-200 underline underline-offset-4">
+                {market.phoneDisplay}
+              </a>
+              .{' '}
+            </>
+          )}
+          {market.availabilityUrl && (
+            <>
+              You can also check your exact address on {market.provider}’s{' '}
+              <a href={market.availabilityUrl} target="_blank" rel="noopener" onClick={() => track('outbound_click', { target: 'provider_checker', location: 'confirmation' })} className="text-cyan-200 underline underline-offset-4">
+                official availability checker
+              </a>
+              .
+            </>
+          )}
+        </p>
+      )}
     </div>
   );
 }

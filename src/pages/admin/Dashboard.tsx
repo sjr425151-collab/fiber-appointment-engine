@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { LEAD_STATUSES, type Lead } from '../../../shared/schemas';
 import { api, fmtDateTime, fmtPhone, STATUS_LABELS } from '../../lib/api';
 import { Spinner, StatusBadge } from '../../components/ui';
+import { MarketFilter, useAdminMarkets } from './useMarkets';
 
 interface Conversions {
   days: number;
@@ -19,11 +20,11 @@ const FUNNEL: [string, string][] = [
   ['call_click', 'Call clicks'],
 ];
 
-function ConversionPanel() {
+function ConversionPanel({ market }: { market: string }) {
   const [c, setC] = useState<Conversions | null>(null);
   useEffect(() => {
-    api<Conversions>('/admin/conversions').then(setC);
-  }, []);
+    api<Conversions>(`/admin/conversions${market ? `?market=${market}` : ''}`).then(setC);
+  }, [market]);
   if (!c) return null;
   // Visit-based steps count unique sessions; server-recorded conversions count events.
   const value = (k: string) => (k === 'lead_submit' || k === 'appointment_booked' ? c.funnel[k]?.events : c.funnel[k]?.sessions) ?? 0;
@@ -78,6 +79,10 @@ export default function Dashboard() {
   const [total, setTotal] = useState(0);
   const [status, setStatus] = useState('');
   const [q, setQ] = useState('');
+  const [market, setMarket] = useState('');
+  const { data: md, bySlug } = useAdminMarkets();
+  const markets = md?.markets ?? [];
+  const multi = markets.length > 1;
 
   useEffect(() => {
     api<Stats>('/admin/stats').then(setStats);
@@ -88,13 +93,14 @@ export default function Dashboard() {
       const params = new URLSearchParams();
       if (status) params.set('status', status);
       if (q.trim()) params.set('q', q.trim());
+      if (market) params.set('market', market);
       api<{ leads: Lead[]; total: number }>(`/admin/leads?${params}`).then((r) => {
         setLeads(r.leads);
         setTotal(r.total);
       });
     }, 200);
     return () => clearTimeout(t);
-  }, [status, q]);
+  }, [status, q, market]);
 
   const totalLeads = stats ? Object.values(stats.byStatus).reduce((a, b) => a + b, 0) : 0;
   const tiles = stats
@@ -117,7 +123,13 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <ConversionPanel />
+      {multi && (
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-slate-400">Showing</span>
+          <MarketFilter markets={markets} value={market} onChange={setMarket} />
+        </div>
+      )}
+      <ConversionPanel market={market} />
 
       <div className="glass overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 border-b border-white/10 p-4">
@@ -133,7 +145,7 @@ export default function Dashboard() {
               </option>
             ))}
           </select>
-          <a href="/api/admin/leads.csv" className="btn-ghost py-2 text-sm">
+          <a href={`/api/admin/leads.csv${market ? `?market=${market}` : ''}`} className="btn-ghost py-2 text-sm">
             Export CSV
           </a>
         </div>
@@ -151,6 +163,7 @@ export default function Dashboard() {
                   <th className="px-4 py-3">Name</th>
                   <th className="px-4 py-3">Contact</th>
                   <th className="px-4 py-3">Address</th>
+                  {multi && <th className="px-4 py-3">Location</th>}
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Source</th>
                   <th className="px-4 py-3">Created</th>
@@ -175,6 +188,7 @@ export default function Dashboard() {
                         {l.city} {l.zip}
                       </div>
                     </td>
+                    {multi && <td className="px-4 py-3 text-slate-300">{bySlug[l.marketId]?.name ?? l.marketId}</td>}
                     <td className="px-4 py-3">
                       <StatusBadge status={l.status} />
                     </td>

@@ -25,12 +25,17 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
 
 export const TZ = 'America/Detroit';
 
-export function fmtDate(iso: string, opts: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric' }) {
-  return new Intl.DateTimeFormat('en-US', { timeZone: TZ, ...opts }).format(new Date(iso));
+export function fmtDate(iso: string, opts: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric' }, tz = TZ) {
+  return new Intl.DateTimeFormat('en-US', { timeZone: tz, ...opts }).format(new Date(iso));
 }
 
-export function fmtDateTime(iso: string) {
-  return fmtDate(iso, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+export function fmtDateTime(iso: string, tz = TZ) {
+  return fmtDate(iso, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }, tz);
+}
+
+/** Short zone label, e.g. "EST" / "CDT", for showing appointment times. */
+export function tzLabel(tz: string, at = new Date()) {
+  return new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' }).formatToParts(at).find((p) => p.type === 'timeZoneName')?.value ?? '';
 }
 
 /** Format a local YYYY-MM-DD calendar date without timezone drift. */

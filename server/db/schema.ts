@@ -148,6 +148,33 @@ export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
       CREATE INDEX idx_events_name_time ON events(name, created_at);
     `,
   },
+  {
+    id: 3,
+    name: 'markets',
+    sql: `
+      -- One row per launch location. \`config\` holds the full validated Market JSON;
+      -- name/state/active/is_default are duplicated as columns for querying.
+      CREATE TABLE markets (
+        slug        TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        state       TEXT NOT NULL,
+        config      TEXT NOT NULL,
+        active      INTEGER NOT NULL DEFAULT 1,
+        is_default  INTEGER NOT NULL DEFAULT 0,
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+      );
+
+      -- Existing data belongs to the Monroe launch market.
+      ALTER TABLE leads         ADD COLUMN market_id TEXT NOT NULL DEFAULT 'monroe';
+      ALTER TABLE appointments  ADD COLUMN market_id TEXT NOT NULL DEFAULT 'monroe';
+      ALTER TABLE service_areas ADD COLUMN market_id TEXT NOT NULL DEFAULT 'monroe';
+      ALTER TABLE events        ADD COLUMN market_id TEXT NOT NULL DEFAULT '';
+      CREATE INDEX idx_leads_market ON leads(market_id, created_at);
+      CREATE INDEX idx_appt_market_start ON appointments(market_id, start_utc, status);
+      CREATE INDEX idx_areas_market ON service_areas(market_id);
+    `,
+  },
 ];
 
 /**

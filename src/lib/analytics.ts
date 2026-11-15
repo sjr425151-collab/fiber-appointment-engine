@@ -1,4 +1,5 @@
 import type { TrackedEvent } from '../../shared/schemas';
+import { currentMarketSlug } from './market';
 
 /**
  * First-party conversion tracking. No cookies and no third-party scripts.
@@ -109,7 +110,8 @@ export function sessionId(): string {
 /** Fire a conversion event. `beacon: false` for events the server records itself. */
 export function track(name: TrackedEvent, props: Record<string, string | number | boolean> = {}, beacon = true) {
   const a = attribution();
-  (window.dataLayer ??= []).push({ event: name, ...props, utm_source: a.utmSource, utm_campaign: a.utmCampaign });
+  const market = currentMarketSlug();
+  (window.dataLayer ??= []).push({ event: name, ...props, market, utm_source: a.utmSource, utm_campaign: a.utmCampaign });
   if (!beacon) return;
   const body = JSON.stringify({
     name,
@@ -118,6 +120,7 @@ export function track(name: TrackedEvent, props: Record<string, string | number 
     path: window.location.pathname,
     utmSource: a.utmSource,
     utmCampaign: a.utmCampaign,
+    market,
   });
   try {
     const blob = new Blob([body], { type: 'application/json' });

@@ -4,6 +4,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { Appointment, AreaStatus, Lead, LeadNote, LeadStatus } from '../shared/schemas';
+import { marketSchema, type Market, type MarketSummary } from '../shared/market';
 import { transaction, type DB } from './db';
 
 type Row = Record<string, unknown>;
@@ -34,6 +35,7 @@ function toLead(r: Row): Lead {
     clickId: (r.click_id as string) ?? '',
     referrer: (r.referrer as string) ?? '',
     landingPage: (r.landing_page as string) ?? '',
+    marketId: (r.market_id as string) ?? '',
     consentAt: r.consent_at as string,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
@@ -49,6 +51,7 @@ function toAppointment(r: Row): Appointment {
     status: r.status as Appointment['status'],
     notes: r.notes as string,
     createdAt: r.created_at as string,
+    marketId: (r.market_id as string) ?? '',
   };
   if (r.first_name !== undefined) {
     a.leadName = `${r.first_name} ${r.last_name}`;
@@ -63,28 +66,88 @@ export interface ServiceArea {
   zip: string;
   city: string;
   status: AreaStatus;
+  marketId: string;
   updatedAt: string;
 }
 
+const toArea = (r: Row): ServiceArea => ({
+  zip: r.zip as string,
+  city: r.city as string,
+  status: r.status as AreaStatus,
+  marketId: r.market_id as string,
+  updatedAt: r.updated_at as string,
+});
+
 export function getServiceArea(db: DB, zip: string): ServiceArea | null {
   const r = db.prepare('SELECT * FROM service_areas WHERE zip = ?').get(zip) as Row | undefined;
-  return r ? { zip: r.zip as string, city: r.city as string, status: r.status as AreaStatus, updatedAt: r.updated_at as string } : null;
+  return r ? toArea(r) : null;
 }
 
-export function listServiceAreas(db: DB): ServiceArea[] {
-  return (db.prepare('SELECT * FROM service_areas ORDER BY city, zip').all() as Row[]).map((r) => ({
-    zip: r.zip as string,
-    city: r.city as string,
-    status: r.status as AreaStatus,
-    updatedAt: r.updated_at as string,
+export function listServiceAreas(db: DB, marketId?: string): ServiceArea[] {
+  const rows = marketId
+    ? db.prepare('SELECT * FROM service_areas WHERE market_id = ? ORDER BY city, zip').all(marketId)
+    : db.prepare('SELECT * FROM service_areas ORDER BY market_id, city, zip').all();
+  return (rows as Row[]).map(toArea);
+}
+
+export function upsertServiceArea(db: DB, a: { zip: string; city: string; status: AreaStatus; marketId: string }) {
+  db.prepare(
+    `INSERT INTO service_areas (zip, city, status, market_id, updated_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(zip) DO UPDATE SET city = excluded.city, status = excluded.status, market_id = excluded.market_id, updated_at = excluded.updated_at`,
+  ).run(a.zip, a.city, a.status, a.marketId, now());
+}
+
+export function deleteServiceArea(db: DB, zip: string) {
+  db.prepare('DELETE FROM service_areas WHERE zip = ?').run(zip);
+}
+
+// ----------------------------------------------------------------- markets --
+function toMarket(r: Row): Market {
+  // Re-validate on read so older rows pick up defaults for newly added fields.
+  return marketSchema.parse({ ...JSON.parse(r.config as string), slug: r.slug, active: !!r.active, isDefault: !!r.is_default });
+}
+
+export function getMarket(db: DB, slug: string): Market | null {
+  const r = db.prepare('SELECT * FROM markets WHERE slug = ?').get(slug) as Row | undefined;
+  return r ? toMarket(r) : null;
+}
+
+export function getDefaultMarket(db: DB): Market {
+  const r = (db.prepare('SELECT * FROM markets WHERE is_default = 1 LIMIT 1').get() ??
+    db.prepare('SELECT * FROM markets ORDER BY created_at LIMIT 1').get()) as Row | undefined;
+  if (!r) throw new Error('No markets configured');
+  return toMarket(r);
+}
+
+export function listMarkets(db: DB, opts: { activeOnly?: boolean } = {}): Market[] {
+  const sql = `SELECT * FROM markets ${opts.activeOnly ? 'WHERE active = 1' : ''} ORDER BY is_default DESC, name`;
+  return (db.prepare(sql).all() as Row[]).map(toMarket);
+}
+
+export function marketSummaries(db: DB): MarketSummary[] {
+  return (db.prepare('SELECT slug, name, state FROM markets WHERE active = 1 ORDER BY is_default DESC, name').all() as Row[]).map((r) => ({
+    slug: r.slug as string,
+    name: r.name as string,
+    state: r.state as string,
   }));
 }
 
-export function upsertServiceArea(db: DB, a: { zip: string; city: string; status: AreaStatus }) {
-  db.prepare(
-    `INSERT INTO service_areas (zip, city, status, updated_at) VALUES (?, ?, ?, ?)
-     ON CONFLICT(zip) DO UPDATE SET city = excluded.city, status = excluded.status, updated_at = excluded.updated_at`,
-  ).run(a.zip, a.city, a.status, now());
+/** Insert or update a market. Exactly one market is always the default. */
+export function saveMarket(db: DB, m: Market): Market {
+  return transaction(db, () => {
+    const ts = now();
+    if (m.isDefault) db.prepare('UPDATE markets SET is_default = 0 WHERE slug <> ?').run(m.slug);
+    db.prepare(
+      `INSERT INTO markets (slug, name, state, config, active, is_default, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(slug) DO UPDATE SET name = excluded.name, state = excluded.state, config = excluded.config,
+         active = excluded.active, is_default = excluded.is_default, updated_at = excluded.updated_at`,
+    ).run(m.slug, m.name, m.state, JSON.stringify(m), m.active ? 1 : 0, m.isDefault ? 1 : 0, ts, ts);
+    const { d } = db.prepare('SELECT COUNT(*) AS d FROM markets WHERE is_default = 1').get() as { d: number };
+    if (d === 0) throw new Error('At least one location must be the default.');
+    const def = db.prepare('SELECT active FROM markets WHERE is_default = 1').get() as { active: number };
+    if (!def.active) throw new Error('The default location must be active.');
+    return getMarket(db, m.slug)!;
+  });
 }
 
 // ---------------------------------------------------------------- settings --
@@ -116,6 +179,7 @@ export interface NewLead {
   referrer: string;
   landingPage: string;
   sessionId: string;
+  marketId: string;
   bookingTokenHash: string;
   consentText: string;
   consentIp: string;
@@ -137,10 +201,10 @@ export function createOrRefreshLead(db: DB, l: NewLead): { lead: Lead; duplicate
       db.prepare(
         `UPDATE leads SET first_name=?, last_name=?, street=?, unit=?, city=?, zip=?, preferred_contact=?,
            current_provider=?, area_status=?, booking_token_hash=?, consent_text=?, consent_at=?,
-           consent_ip=?, consent_user_agent=?, updated_at=? WHERE id=?`,
+           consent_ip=?, consent_user_agent=?, market_id=?, updated_at=? WHERE id=?`,
       ).run(
         l.firstName, l.lastName, l.street, l.unit, l.city, l.zip, l.preferredContact, l.currentProvider,
-        l.areaStatus, l.bookingTokenHash, l.consentText, ts, l.consentIp, l.consentUserAgent, ts, existing.id,
+        l.areaStatus, l.bookingTokenHash, l.consentText, ts, l.consentIp, l.consentUserAgent, l.marketId, ts, existing.id,
       );
       addNote(db, existing.id, 'Lead resubmitted the availability form.', 'system');
       return { lead: getLead(db, existing.id)!, duplicate: true };
@@ -151,13 +215,13 @@ export function createOrRefreshLead(db: DB, l: NewLead): { lead: Lead; duplicate
       `INSERT INTO leads (id, first_name, last_name, email, phone, street, unit, city, zip, preferred_contact,
          current_provider, status, area_status, source, utm_source, utm_medium, utm_campaign, booking_token_hash,
          consent_text, consent_at, consent_ip, consent_user_agent, created_at, updated_at,
-         utm_content, utm_term, click_id, referrer, landing_page, session_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         utm_content, utm_term, click_id, referrer, landing_page, session_id, market_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id, l.firstName, l.lastName, l.email, l.phone, l.street, l.unit, l.city, l.zip, l.preferredContact,
       l.currentProvider, l.areaStatus, l.source, l.utmSource, l.utmMedium, l.utmCampaign, l.bookingTokenHash,
       l.consentText, ts, l.consentIp, l.consentUserAgent, ts, ts,
-      l.utmContent, l.utmTerm, l.clickId, l.referrer, l.landingPage, l.sessionId,
+      l.utmContent, l.utmTerm, l.clickId, l.referrer, l.landingPage, l.sessionId, l.marketId,
     );
     return { lead: getLead(db, id)!, duplicate: false };
   });
@@ -173,8 +237,14 @@ export function getLeadTokenHash(db: DB, id: string): string | null {
   return r ? (r.booking_token_hash as string) : null;
 }
 
+export function leadStatsByMarket(db: DB): Record<string, number> {
+  const rows = db.prepare('SELECT market_id, COUNT(*) AS n FROM leads GROUP BY market_id').all() as { market_id: string; n: number }[];
+  return Object.fromEntries(rows.map((r) => [r.market_id, r.n]));
+}
+
 export interface LeadFilter {
   status?: string;
+  market?: string;
   q?: string;
   limit?: number;
   offset?: number;
@@ -186,6 +256,10 @@ export function listLeads(db: DB, f: LeadFilter = {}): { leads: Lead[]; total: n
   if (f.status) {
     where.push('status = ?');
     params.push(f.status);
+  }
+  if (f.market) {
+    where.push('market_id = ?');
+    params.push(f.market);
   }
   if (f.q) {
     where.push("(first_name || ' ' || last_name LIKE ? OR email LIKE ? OR phone LIKE ? OR street LIKE ? OR zip = ?)");
@@ -245,19 +319,19 @@ export function leadStats(db: DB) {
 const APPT_JOIN = `SELECT a.*, l.first_name, l.last_name, l.phone, l.street, l.unit, l.city, l.zip
   FROM appointments a JOIN leads l ON l.id = a.lead_id`;
 
-export function countBookedAt(db: DB, startUtc: string): number {
+export function countBookedAt(db: DB, marketId: string, startUtc: string): number {
   const { n } = db
-    .prepare("SELECT COUNT(*) AS n FROM appointments WHERE start_utc = ? AND status = 'scheduled'")
-    .get(startUtc) as { n: number };
+    .prepare("SELECT COUNT(*) AS n FROM appointments WHERE market_id = ? AND start_utc = ? AND status = 'scheduled'")
+    .get(marketId, startUtc) as { n: number };
   return n;
 }
 
-export function bookedCountsBetween(db: DB, fromUtc: string, toUtc: string): Map<string, number> {
+export function bookedCountsBetween(db: DB, marketId: string, fromUtc: string, toUtc: string): Map<string, number> {
   const rows = db
     .prepare(
-      "SELECT start_utc, COUNT(*) AS n FROM appointments WHERE status = 'scheduled' AND start_utc >= ? AND start_utc < ? GROUP BY start_utc",
+      "SELECT start_utc, COUNT(*) AS n FROM appointments WHERE market_id = ? AND status = 'scheduled' AND start_utc >= ? AND start_utc < ? GROUP BY start_utc",
     )
-    .all(fromUtc, toUtc) as { start_utc: string; n: number }[];
+    .all(marketId, fromUtc, toUtc) as { start_utc: string; n: number }[];
   return new Map(rows.map((r) => [r.start_utc, r.n]));
 }
 
@@ -268,12 +342,15 @@ export function getActiveAppointmentForLead(db: DB, leadId: string): Appointment
   return r ? toAppointment(r) : null;
 }
 
-export function insertAppointment(db: DB, a: { leadId: string; startUtc: string; endUtc: string; notes: string }): Appointment {
+export function insertAppointment(
+  db: DB,
+  a: { leadId: string; marketId: string; startUtc: string; endUtc: string; notes: string },
+): Appointment {
   const ts = now();
   const id = randomUUID();
   db.prepare(
-    "INSERT INTO appointments (id, lead_id, start_utc, end_utc, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?)",
-  ).run(id, a.leadId, a.startUtc, a.endUtc, a.notes, ts, ts);
+    "INSERT INTO appointments (id, lead_id, market_id, start_utc, end_utc, status, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'scheduled', ?, ?, ?)",
+  ).run(id, a.leadId, a.marketId, a.startUtc, a.endUtc, a.notes, ts, ts);
   return toAppointment(db.prepare('SELECT * FROM appointments WHERE id = ?').get(id) as Row);
 }
 
@@ -283,40 +360,43 @@ export function setAppointmentStatus(db: DB, id: string, status: Appointment['st
   return r ? toAppointment(r) : null;
 }
 
-export function listAppointments(db: DB, f: { fromUtc?: string; leadId?: string } = {}): Appointment[] {
+export function listAppointments(db: DB, f: { fromUtc?: string; leadId?: string; market?: string } = {}): Appointment[] {
   if (f.leadId) {
     return (db.prepare(`${APPT_JOIN} WHERE a.lead_id = ? ORDER BY a.start_utc DESC`).all(f.leadId) as Row[]).map(toAppointment);
   }
-  return (
-    db.prepare(`${APPT_JOIN} WHERE a.start_utc >= ? ORDER BY a.start_utc LIMIT 500`).all(f.fromUtc ?? '') as Row[]
-  ).map(toAppointment);
+  const rows = f.market
+    ? db.prepare(`${APPT_JOIN} WHERE a.start_utc >= ? AND a.market_id = ? ORDER BY a.start_utc LIMIT 500`).all(f.fromUtc ?? '', f.market)
+    : db.prepare(`${APPT_JOIN} WHERE a.start_utc >= ? ORDER BY a.start_utc LIMIT 500`).all(f.fromUtc ?? '');
+  return (rows as Row[]).map(toAppointment);
 }
 
 // ------------------------------------------------------------------ events --
 export function insertEvent(
   db: DB,
-  e: { name: string; sessionId: string; path: string; props: Record<string, unknown>; utmSource: string; utmCampaign: string },
+  e: { name: string; sessionId: string; path: string; props: Record<string, unknown>; utmSource: string; utmCampaign: string; marketId?: string },
 ) {
   db.prepare(
-    'INSERT INTO events (name, session_id, path, props, utm_source, utm_campaign, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-  ).run(e.name, e.sessionId, e.path, JSON.stringify(e.props), e.utmSource, e.utmCampaign, now());
+    'INSERT INTO events (name, session_id, path, props, utm_source, utm_campaign, market_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(e.name, e.sessionId, e.path, JSON.stringify(e.props), e.utmSource, e.utmCampaign, e.marketId ?? '', now());
 }
 
 /** Funnel + attribution summary for the admin dashboard. */
-export function conversionStats(db: DB, days = 30) {
+export function conversionStats(db: DB, days = 30, market?: string) {
   const since = new Date(Date.now() - days * 86400000).toISOString();
+  const mf = market ? ' AND market_id = ?' : '';
+  const args = market ? [since, market] : [since];
   const funnel = db
     .prepare(
       `SELECT name, COUNT(*) AS events, COUNT(DISTINCT NULLIF(session_id, '')) AS sessions
-       FROM events WHERE created_at >= ? GROUP BY name`,
+       FROM events WHERE created_at >= ?${mf} GROUP BY name`,
     )
-    .all(since) as { name: string; events: number; sessions: number }[];
+    .all(...args) as { name: string; events: number; sessions: number }[];
   const sources = db
     .prepare(
       `SELECT COALESCE(NULLIF(utm_source, ''), source) AS source, COUNT(*) AS leads,
               SUM(CASE WHEN status IN ('appointment_set','sold','install_scheduled','installed') THEN 1 ELSE 0 END) AS qualified
-       FROM leads WHERE created_at >= ? GROUP BY 1 ORDER BY leads DESC LIMIT 10`,
+       FROM leads WHERE created_at >= ?${mf} GROUP BY 1 ORDER BY leads DESC LIMIT 10`,
     )
-    .all(since) as { source: string; leads: number; qualified: number }[];
+    .all(...args) as { source: string; leads: number; qualified: number }[];
   return { days, funnel: Object.fromEntries(funnel.map((f) => [f.name, f])), sources };
 }

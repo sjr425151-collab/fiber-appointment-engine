@@ -1,20 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BRAND, BROADBAND_DISCLOSURE, OMNI_LINKS, PARTNER_DISCLOSURE } from '../../../shared/content';
+import { BRAND, broadbandDisclosure, partnerDisclosure, place } from '../../../shared/content';
 import { track } from '../../lib/analytics';
+import { allMarkets, hasPhone, marketPath, useMarket } from '../../lib/market';
 import { Logo } from '../ui';
 
 const YEAR = new Date().getFullYear();
-
-export const hasPhone = Boolean(BRAND.phoneDisplay && BRAND.phoneE164);
-
-const NAV = [
-  { href: '#plans', label: 'Plans' },
-  { href: '#offer', label: 'Free consultation' },
-  { href: '#compare', label: 'Why fiber' },
-  { href: '#how', label: 'How it works' },
-  { href: '#faq', label: 'FAQ' },
-];
 
 export function PhoneIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
@@ -24,19 +15,29 @@ export function PhoneIcon({ className = 'h-4 w-4' }: { className?: string }) {
   );
 }
 
-export function CallButton({ location, className = '' }: { location: string; className?: string }) {
-  if (!hasPhone) return null;
+function PinIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
-    <a href={`tel:${BRAND.phoneE164}`} onClick={() => track('call_click', { location })} className={className}>
-      <PhoneIcon /> <span>{BRAND.phoneDisplay}</span>
+    <svg viewBox="0 0 20 20" fill="currentColor" className={className} aria-hidden>
+      <path fillRule="evenodd" d="M10 18s6-5.33 6-10A6 6 0 0 0 4 8c0 4.67 6 10 6 10Zm0-7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
+export function CallButton({ location, className = '' }: { location: string; className?: string }) {
+  const m = useMarket();
+  if (!hasPhone(m)) return null;
+  return (
+    <a href={`tel:${m.phoneE164}`} onClick={() => track('call_click', { location })} className={className}>
+      <PhoneIcon /> <span>{m.phoneDisplay}</span>
     </a>
   );
 }
 
 export function TextButton({ location, className = '' }: { location: string; className?: string }) {
-  if (!hasPhone) return null;
+  const m = useMarket();
+  if (!hasPhone(m)) return null;
   return (
-    <a href={`sms:${BRAND.phoneE164}`} onClick={() => track('sms_click', { location })} className={className}>
+    <a href={`sms:${m.phoneE164}`} onClick={() => track('sms_click', { location })} className={className}>
       <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden>
         <path d="M3 4.5A2.5 2.5 0 0 1 5.5 2h9A2.5 2.5 0 0 1 17 4.5v7a2.5 2.5 0 0 1-2.5 2.5H8l-3.6 2.7A.9.9 0 0 1 3 16v-2.3A2.5 2.5 0 0 1 3 11.5v-7Z" />
       </svg>
@@ -45,9 +46,83 @@ export function TextButton({ location, className = '' }: { location: string; cla
   );
 }
 
+/**
+ * Location switcher. Uses plain links (full page loads) so each location page
+ * arrives with its own server-rendered SEO tags and embedded data.
+ */
+export function LocationSwitcher({ className = '' }: { className?: string }) {
+  const m = useMarket();
+  const markets = allMarkets();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', close);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', close);
+    };
+  }, [open]);
+
+  if (markets.length < 2) {
+    return (
+      <span className={`inline-flex items-center gap-1 text-xs text-slate-300 ${className}`}>
+        <PinIcon className="h-3.5 w-3.5 text-fiber-400" /> {place(m)}
+      </span>
+    );
+  }
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      <button
+        type="button"
+        aria-haspopup="true"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-xs text-slate-200 hover:bg-white/5"
+      >
+        <PinIcon className="h-3.5 w-3.5 text-fiber-400" /> {place(m)}
+        <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" aria-hidden>
+          <path d="M5.5 7.5 10 12l4.5-4.5" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+        </svg>
+        <span className="sr-only">— change location</span>
+      </button>
+      {open && (
+        <ul className="absolute left-0 top-full z-50 mt-1 min-w-48 rounded-xl border border-white/10 bg-ink-900 p-1 shadow-2xl">
+          {markets.map((x) => (
+            <li key={x.slug}>
+              <a
+                href={marketPath(x.slug)}
+                aria-current={x.slug === m.slug ? 'page' : undefined}
+                className={`block rounded-lg px-3 py-2.5 text-sm ${x.slug === m.slug ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
+              >
+                {x.name}, {x.state}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+const NAV = [
+  { href: '#plans', label: 'Plans' },
+  { href: '#offer', label: 'Free consultation' },
+  { href: '#compare', label: 'Why fiber' },
+  { href: '#how', label: 'How it works' },
+  { href: '#faq', label: 'FAQ' },
+];
+
 export function SiteHeader() {
+  const m = useMarket();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const nav = m.plans.length ? NAV : NAV.filter((n) => n.href !== '#plans');
 
   useEffect(() => {
     // Only flips a boolean when crossing the threshold — no per-frame rerenders.
@@ -68,12 +143,15 @@ export function SiteHeader() {
     <header
       className={`fixed inset-x-0 top-0 z-40 transition-colors duration-300 ${scrolled || open ? 'border-b border-white/10 bg-ink-950/85 backdrop-blur-xl' : 'bg-transparent'}`}
     >
-      <nav aria-label="Primary" className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <a href="#top" aria-label="Monroe Fiber Connect — back to top">
-          <Logo />
-        </a>
-        <div className="hidden items-center gap-7 text-sm text-slate-300 lg:flex">
-          {NAV.map((n) => (
+      <nav aria-label="Primary" className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <a href="#top" aria-label={`${BRAND.name} — back to top`}>
+            <Logo />
+          </a>
+          <LocationSwitcher className="hidden sm:block" />
+        </div>
+        <div className="hidden items-center gap-6 text-sm text-slate-300 xl:flex">
+          {nav.map((n) => (
             <a key={n.href} href={n.href} className="transition hover:text-white">
               {n.label}
             </a>
@@ -81,12 +159,12 @@ export function SiteHeader() {
         </div>
         <div className="flex items-center gap-2">
           <CallButton location="header" className="btn-ghost hidden px-3 py-2 text-sm md:inline-flex" />
-          {hasPhone && (
+          {hasPhone(m) && (
             <a
-              href={`tel:${BRAND.phoneE164}`}
+              href={`tel:${m.phoneE164}`}
               onClick={() => track('call_click', { location: 'header_mobile' })}
               className="grid h-11 w-11 place-items-center rounded-xl border border-white/15 text-cyan-200 md:hidden"
-              aria-label={`Call ${BRAND.phoneDisplay}`}
+              aria-label={`Call ${m.phoneDisplay}`}
             >
               <PhoneIcon className="h-5 w-5" />
             </a>
@@ -96,7 +174,7 @@ export function SiteHeader() {
           </a>
           <button
             type="button"
-            className="grid h-11 w-11 place-items-center rounded-xl border border-white/15 text-slate-200 lg:hidden"
+            className="grid h-11 w-11 place-items-center rounded-xl border border-white/15 text-slate-200 xl:hidden"
             aria-expanded={open}
             aria-controls="mobile-menu"
             aria-label={open ? 'Close menu' : 'Open menu'}
@@ -109,9 +187,10 @@ export function SiteHeader() {
         </div>
       </nav>
       {open && (
-        <div id="mobile-menu" className="border-t border-white/10 px-4 pb-5 pt-2 lg:hidden">
+        <div id="mobile-menu" className="border-t border-white/10 px-4 pb-5 pt-2 xl:hidden">
+          <LocationSwitcher className="mb-1 sm:hidden" />
           <ul className="flex flex-col">
-            {NAV.map((n) => (
+            {nav.map((n) => (
               <li key={n.href}>
                 <a href={n.href} onClick={() => setOpen(false)} className="block rounded-lg px-2 py-3 text-base text-slate-200 hover:bg-white/5">
                   {n.label}
@@ -120,7 +199,14 @@ export function SiteHeader() {
             ))}
           </ul>
           <div className="mt-3 grid gap-2">
-            <a href="#check" onClick={() => { setOpen(false); track('cta_click', { location: 'mobile_menu' }); }} className="btn-primary w-full">
+            <a
+              href="#check"
+              onClick={() => {
+                setOpen(false);
+                track('cta_click', { location: 'mobile_menu' });
+              }}
+              className="btn-primary w-full"
+            >
               Check availability
             </a>
             <CallButton location="mobile_menu" className="btn-ghost w-full" />
@@ -137,6 +223,7 @@ export function SiteHeader() {
  * away and hides again while the signup form is on screen.
  */
 export function MobileCtaBar({ signupOpen }: { signupOpen: boolean }) {
+  const m = useMarket();
   const [show, setShow] = useState(false);
 
   useEffect(() => {
@@ -167,8 +254,8 @@ export function MobileCtaBar({ signupOpen }: { signupOpen: boolean }) {
         <a href="#check" tabIndex={show ? 0 : -1} onClick={() => track('cta_click', { location: 'sticky_bar' })} className="btn-primary flex-1">
           Check my address
         </a>
-        {hasPhone && (
-          <a href={`tel:${BRAND.phoneE164}`} tabIndex={show ? 0 : -1} onClick={() => track('call_click', { location: 'sticky_bar' })} className="btn-ghost px-4" aria-label={`Call ${BRAND.phoneDisplay}`}>
+        {hasPhone(m) && (
+          <a href={`tel:${m.phoneE164}`} tabIndex={show ? 0 : -1} onClick={() => track('call_click', { location: 'sticky_bar' })} className="btn-ghost px-4" aria-label={`Call ${m.phoneDisplay}`}>
             <PhoneIcon className="h-5 w-5" />
           </a>
         )}
@@ -178,31 +265,51 @@ export function MobileCtaBar({ signupOpen }: { signupOpen: boolean }) {
 }
 
 export function SiteFooter() {
+  const m = useMarket();
+  const markets = allMarkets();
   return (
     <footer className="border-t border-white/10 px-4 pb-28 pt-12 text-sm text-slate-400 sm:px-6 md:pb-12">
       <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-[1.5fr_1fr]">
         <div className="space-y-4">
           <Logo />
-          <p className="max-w-xl">{PARTNER_DISCLOSURE}</p>
-          <p className="max-w-xl">{BROADBAND_DISCLOSURE}</p>
+          <p className="max-w-xl">{partnerDisclosure(m)}</p>
+          <p className="max-w-xl">{broadbandDisclosure(m)}</p>
           <p>
             © {YEAR} {BRAND.agency}. All rights reserved.
           </p>
         </div>
-        <nav aria-label="Footer" className="grid grid-cols-2 gap-x-6 gap-y-2 md:justify-self-end">
-          <a href="/#check" className="hover:text-white">Check availability</a>
-          <a href="/#faq" className="hover:text-white">FAQ</a>
-          <Link to="/privacy" className="hover:text-white">Privacy notice</Link>
-          <a href={OMNI_LINKS.broadbandLabels} target="_blank" rel="noopener" onClick={() => track('outbound_click', { target: 'broadband_labels', location: 'footer' })} className="hover:text-white">
-            Broadband Facts labels
-          </a>
-          <Link to="/admin" className="hover:text-white" rel="nofollow">Team login</Link>
-          {hasPhone && (
-            <a href={`tel:${BRAND.phoneE164}`} onClick={() => track('call_click', { location: 'footer' })} className="hover:text-white">
-              {BRAND.phoneDisplay}
-            </a>
+        <div className="space-y-6 md:justify-self-end">
+          <nav aria-label="Footer" className="grid grid-cols-2 gap-x-6 gap-y-2">
+            <a href="#check" className="hover:text-white">Check availability</a>
+            <a href="#faq" className="hover:text-white">FAQ</a>
+            <Link to="/privacy" className="hover:text-white">Privacy notice</Link>
+            {m.broadbandLabelsUrl && (
+              <a href={m.broadbandLabelsUrl} target="_blank" rel="noopener" onClick={() => track('outbound_click', { target: 'broadband_labels', location: 'footer' })} className="hover:text-white">
+                Broadband Facts labels
+              </a>
+            )}
+            <Link to="/admin" className="hover:text-white" rel="nofollow">Team login</Link>
+            {hasPhone(m) && (
+              <a href={`tel:${m.phoneE164}`} onClick={() => track('call_click', { location: 'footer' })} className="hover:text-white">
+                {m.phoneDisplay}
+              </a>
+            )}
+          </nav>
+          {markets.length > 1 && (
+            <nav aria-label="Locations">
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-300">Locations</h2>
+              <ul className="grid grid-cols-2 gap-x-6 gap-y-2">
+                {markets.map((x) => (
+                  <li key={x.slug}>
+                    <a href={marketPath(x.slug)} className="hover:text-white">
+                      {x.name}, {x.state}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
           )}
-        </nav>
+        </div>
       </div>
     </footer>
   );

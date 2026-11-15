@@ -17,7 +17,7 @@ export function Logo({ compact = false }: { compact?: boolean }) {
       </svg>
       {!compact && (
         <span className="whitespace-nowrap font-display text-base font-bold tracking-tight sm:text-lg">
-          Monroe <span className="text-gradient">Fiber Connect</span>
+          Fiber <span className="text-gradient">Connect</span>
         </span>
       )}
     </span>

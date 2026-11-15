@@ -1,6 +1,6 @@
 # Fiber Appointment Engine
 
-Organic lead-generation, appointment-setting and AI marketing platform built by **Spotlight Marketing LLC** for **Omni Fiber**, launching in **Monroe, Michigan**.
+**Fiber Connect** — an organic lead-generation, appointment-setting and AI marketing platform operated by **Spotlight Marketing LLC**. Multi-location by design: launching with **Omni Fiber in Monroe, Michigan**, with new cities added from the admin panel.
 
 ## Status
 
@@ -8,6 +8,7 @@ Organic lead-generation, appointment-setting and AI marketing platform built by 
 | --- | --- | --- |
 | 1 | Public availability landing page, lead capture, database, appointment scheduling, secure admin | ✅ Built & tested |
 | 1.5 | Cinematic hero, parallax, conversion tracking & attribution, technical SEO, performance | ✅ Built & tested (Lighthouse 100/100/100/100) |
+| 1.6 | Multi-location: per-city pages, plans, phone, provider links, calendars and SEO | ✅ Built & tested |
 | 2 | Sales & installation tracking, configurable commissions | 🧱 DB tables in place (`sales`, `commission_rules`, `commissions`) |
 | 3 | AI-generated daily Facebook content | 🧱 DB table in place (`content_posts`) |
 | 4 | Higgsfield visual generation | Planned |
@@ -59,6 +60,25 @@ npm run admin:hash -- "your-long-password"
 
 **Admin (`/admin`):** lead list with search/filter, stats, CSV export, lead detail with pipeline stages (new → contacted → appointment set → sold → install scheduled → installed / lost), notes and activity log, appointment board (complete / no-show / cancel), service-area management.
 
+## Locations (multi-market)
+
+Everything that differs between cities is a **location** (`shared/market.ts`), managed in **Admin → Locations**:
+
+| Setting | Effect |
+|---|---|
+| City, state, region, coverage note | Headline, badges, ZIP-form note, SEO title/description, structured data |
+| Provider | Copy, consent wording (recorded per lead), disclosures |
+| Plans + "verified on" date | Plans section, hero "from" price, FAQ, meta description |
+| Phone (call & text) | Every click-to-call / text button |
+| Provider checker + Broadband Facts URLs | Official exact-address check and FCC label links |
+| Schedule (days, hours, slot length, reps per slot, notice, horizon, timezone) | That location's own appointment calendar and capacity |
+| Live / Default | Live locations are public at `/<url>`; the default location is the home page `/` (`/<default-url>` 301-redirects to `/`) |
+
+- **ZIP routing:** each ZIP in Service areas belongs to a location. A visitor who enters a ZIP served by another location (same provider) is told so, and their lead and appointment go to that location's calendar.
+- **SEO per location:** the server renders each page's title, description, canonical, Open Graph, JSON-LD and embedded location data; the sitemap lists every live location.
+- **Admin:** leads, funnel, CSV export and appointments can be filtered by location; appointments display in each location's timezone.
+- **New locations start hidden** — review the page via "View page" after making it live.
+
 ## Cinematic hero & motion
 
 - **Art:** generated with Higgsfield (GPT Image 2.6, 2K) — a Monroe-style town at blue hour with fiber light threading into homes. Sources in `media/source/`.
@@ -108,10 +128,11 @@ Put it behind HTTPS (the host's TLS or a reverse proxy). Health check: `GET /api
 
 ## Before going live — needs your input
 
+0. **Domain.** `fiberconnect.com` has been registered by someone else since 1999. Available alternatives (checked Nov 15, 2026): `fiberconnect.app`, `fiberconnecthome.com`, `joinfiberconnect.com`, `fiberconnectnow.com`, `fiberconnecthq.com`. Set `SITE_URL` to whichever you choose.
 1. **Coverage.** Exact-address coverage is confirmed with Omni Fiber's official checker (linked on the site). The ZIP statuses in Admin → Service areas only control the on-site message; keep Monroe at `verify` unless Omni confirms a whole ZIP.
 2. **Confirm brand & disclosure wording** in `shared/content.ts` (the working site name "Monroe Fiber Connect", the partner disclosure, the consent text and the team phone number) with Omni Fiber and, ideally, counsel.
 3. **Hosting.** Nothing is deployed yet — see *Deployment* above.
-4. **Plans & phone.** Monroe plans (1 Gig $50/mo, 2 Gig $70/mo) live in `shared/plans.ts` with a "verified on" date — update both when Omni changes pricing. Team phone (734) 731-1946 is in `shared/content.ts`.
+4. **Plans & phone.** Monroe plans (1 Gig $50/mo, 2 Gig $70/mo) and the team phone (734) 731-1946 are edited in Admin → Locations (seed values in `shared/market.ts`). Update the "verified on" date whenever pricing changes.
 
 ## Project layout
 
