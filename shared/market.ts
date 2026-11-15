@@ -85,11 +85,12 @@ export { plansFrom } from './market-utils';
 /**
  * Pricing presets for the location editor (provided by Spotlight Marketing LLC,
  * 2026-11-15). Monroe has its own launch pricing; other Omni Fiber areas use
- * the standard prices. Inclusions beyond "no contracts" and "free installation"
- * (which Omni states for all plans) must be confirmed per market.
+ * the standard prices. The same inclusions apply in every area (confirmed by
+ * Spotlight Marketing LLC, 2026-11-15).
  */
-const MONROE_INCLUDED = ['Free installation', 'Free equipment', 'No extra taxes or fees', 'No contracts'];
-const STANDARD_INCLUDED = ['Free installation', 'No contracts'];
+const INCLUDED = ['Free installation', 'Free equipment', 'No extra taxes or fees', 'No contracts'];
+const MONROE_INCLUDED = INCLUDED;
+const STANDARD_INCLUDED = INCLUDED;
 
 export const PRICING_PRESETS: { id: string; label: string; plans: Plan[] }[] = [
   {

@@ -26,7 +26,7 @@ const blank = (): Market => ({
   areaNote: '',
   phoneDisplay: MONROE.phoneDisplay,
   phoneE164: MONROE.phoneE164,
-  // New locations start from the standard Omni Fiber prices — confirm before going live.
+  // New locations start from the standard Omni Fiber prices and inclusions.
   plans: PRICING_PRESETS[0].plans,
   plansVerifiedOn: PRICING_PRESETS_DATE,
   ogImage: '',

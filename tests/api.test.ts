@@ -371,5 +371,6 @@ describe('pricing presets', () => {
     for (const preset of PRICING_PRESETS) for (const plan of preset.plans) expect(planSchema.safeParse(plan).success).toBe(true);
     expect(plansFrom({ plans: std.plans })).toEqual({ name: '500 Mbps', price: '$65/mo' });
     expect(MONROE.plans.map((p) => p.price)).toEqual(['$50/mo', '$50/mo', '$70/mo']);
+    for (const plan of std.plans) expect(plan.highlights).toEqual(['Free installation', 'Free equipment', 'No extra taxes or fees', 'No contracts']);
   });
 });
