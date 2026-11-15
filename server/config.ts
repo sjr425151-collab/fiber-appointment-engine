@@ -8,6 +8,8 @@ export interface AppConfig {
   adminEmail: string;
   adminPasswordHash: string;
   timezone: string;
+  /** Public origin used for canonical URLs, OG tags and the sitemap. */
+  siteUrl: string;
   isProduction: boolean;
 }
 
@@ -41,6 +43,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     adminEmail,
     adminPasswordHash,
     timezone: env.APP_TIMEZONE ?? 'America/Detroit',
+    siteUrl: (env.SITE_URL ?? 'http://localhost:' + (env.PORT ?? 3001)).replace(/\/+$/, ''),
     isProduction,
   };
 }

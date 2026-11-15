@@ -52,7 +52,10 @@ export default function LeadDetail() {
     ['Area status', lead.areaStatus],
     ['Prefers', lead.preferredContact],
     ['Current provider', lead.currentProvider || '—'],
-    ['Source', [lead.source, lead.utmSource, lead.utmMedium, lead.utmCampaign].filter(Boolean).join(' / ')],
+    ['Source', [lead.source, lead.utmSource, lead.utmMedium, lead.utmCampaign, lead.utmContent, lead.utmTerm].filter(Boolean).join(' / ')],
+    ['Click ID', lead.clickId || '—'],
+    ['Referrer', lead.referrer || '—'],
+    ['Landing page', lead.landingPage || '—'],
     ['Consent recorded', fmtDateTime(lead.consentAt)],
     ['Created', fmtDateTime(lead.createdAt)],
   ];

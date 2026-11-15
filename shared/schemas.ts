@@ -47,6 +47,13 @@ export const leadInputSchema = z.object({
   utmSource: z.string().trim().max(100).optional().default(''),
   utmMedium: z.string().trim().max(100).optional().default(''),
   utmCampaign: z.string().trim().max(100).optional().default(''),
+  utmContent: z.string().trim().max(100).optional().default(''),
+  utmTerm: z.string().trim().max(100).optional().default(''),
+  /** gclid / fbclid / msclkid from ad or social clicks. */
+  clickId: z.string().trim().max(255).optional().default(''),
+  referrer: z.string().trim().max(500).optional().default(''),
+  landingPage: z.string().trim().max(300).optional().default(''),
+  sessionId: z.string().trim().max(64).optional().default(''),
   /** Honeypot: real users never fill this hidden field. */
   website: z.string().optional().default(''),
 });
@@ -62,6 +69,29 @@ export const bookingInputSchema = z.object({
 
 export const slotsQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
+});
+
+/** Conversion events accepted from the browser. */
+export const TRACKED_EVENTS = [
+  'page_view',
+  'cta_click',
+  'zip_check',
+  'form_start',
+  'lead_submit',
+  'appointment_booked',
+  'booking_skipped',
+  'call_click',
+  'sms_click',
+] as const;
+export type TrackedEvent = (typeof TRACKED_EVENTS)[number];
+
+export const eventInputSchema = z.object({
+  name: z.enum(TRACKED_EVENTS),
+  sessionId: z.string().trim().max(64).default(''),
+  path: z.string().trim().max(300).default(''),
+  props: z.record(z.string().max(40), z.union([z.string().max(200), z.number(), z.boolean()])).default({}),
+  utmSource: z.string().trim().max(100).default(''),
+  utmCampaign: z.string().trim().max(100).default(''),
 });
 
 export const loginSchema = z.object({
@@ -118,6 +148,11 @@ export interface Lead {
   utmSource: string;
   utmMedium: string;
   utmCampaign: string;
+  utmContent: string;
+  utmTerm: string;
+  clickId: string;
+  referrer: string;
+  landingPage: string;
   consentAt: string;
   createdAt: string;
   updatedAt: string;

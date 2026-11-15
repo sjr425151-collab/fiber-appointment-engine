@@ -4,6 +4,68 @@ import { LEAD_STATUSES, type Lead } from '../../../shared/schemas';
 import { api, fmtDateTime, fmtPhone, STATUS_LABELS } from '../../lib/api';
 import { Spinner, StatusBadge } from '../../components/ui';
 
+interface Conversions {
+  days: number;
+  funnel: Record<string, { events: number; sessions: number }>;
+  sources: { source: string; leads: number; qualified: number }[];
+}
+
+const FUNNEL: [string, string][] = [
+  ['page_view', 'Visits'],
+  ['zip_check', 'ZIP checks'],
+  ['form_start', 'Form starts'],
+  ['lead_submit', 'Leads'],
+  ['appointment_booked', 'Appointments'],
+  ['call_click', 'Call clicks'],
+];
+
+function ConversionPanel() {
+  const [c, setC] = useState<Conversions | null>(null);
+  useEffect(() => {
+    api<Conversions>('/admin/conversions').then(setC);
+  }, []);
+  if (!c) return null;
+  // Visit-based steps count unique sessions; server-recorded conversions count events.
+  const value = (k: string) => (k === 'lead_submit' || k === 'appointment_booked' ? c.funnel[k]?.events : c.funnel[k]?.sessions) ?? 0;
+  const visits = value('page_view');
+  return (
+    <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+      <div className="glass p-5">
+        <h2 className="font-semibold">Conversion funnel <span className="text-sm font-normal text-slate-400">· last {c.days} days</span></h2>
+        <ol className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {FUNNEL.map(([k, label]) => {
+            const v = value(k);
+            return (
+              <li key={k} className="rounded-xl bg-white/[0.03] p-3">
+                <p className="text-xs text-slate-400">{label}</p>
+                <p className="mt-1 font-display text-2xl font-bold">{v}</p>
+                {k !== 'page_view' && visits > 0 && <p className="text-xs text-cyan-300">{((v / visits) * 100).toFixed(1)}% of visits</p>}
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+      <div className="glass p-5">
+        <h2 className="font-semibold">Top lead sources</h2>
+        {c.sources.length === 0 ? (
+          <p className="mt-3 text-sm text-slate-400">No leads yet.</p>
+        ) : (
+          <ul className="mt-3 space-y-2 text-sm">
+            {c.sources.map((s) => (
+              <li key={s.source} className="flex justify-between gap-3">
+                <span className="truncate text-slate-200">{s.source}</span>
+                <span className="shrink-0 text-slate-400">
+                  {s.leads} leads · {s.qualified} booked+
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface Stats {
   byStatus: Record<string, number>;
   last24h: number;
@@ -54,6 +116,8 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      <ConversionPanel />
 
       <div className="glass overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 border-b border-white/10 p-4">
@@ -114,7 +178,7 @@ export default function Dashboard() {
                     <td className="px-4 py-3">
                       <StatusBadge status={l.status} />
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">{l.utmCampaign || l.utmSource || l.source}</td>
+                    <td className="px-4 py-3 text-xs text-slate-400">{[l.utmSource || l.source, l.utmCampaign].filter(Boolean).join(' / ')}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-400">{fmtDateTime(l.createdAt)}</td>
                   </tr>
                 ))}

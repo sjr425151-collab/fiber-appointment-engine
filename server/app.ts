@@ -1,13 +1,15 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import helmet from 'helmet';
+import compression from 'compression';
 import { rateLimit } from 'express-rate-limit';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 import {
   appointmentUpdateSchema,
   availabilityQuerySchema,
   bookingInputSchema,
+  eventInputSchema,
   leadInputSchema,
   leadUpdateSchema,
   LEAD_STATUSES,
@@ -92,14 +94,16 @@ export function createApp(config: AppConfig, db: DB) {
         directives: {
           defaultSrc: ["'self'"],
           imgSrc: ["'self'", 'data:'],
-          styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-          fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          fontSrc: ["'self'"],
+          mediaSrc: ["'self'"],
           connectSrc: ["'self'"],
           frameAncestors: ["'none'"],
         },
       },
     }),
   );
+  app.use(compression());
   app.use(express.json({ limit: '20kb' }));
 
   const isTest = process.env.NODE_ENV === 'test';
@@ -126,7 +130,7 @@ export function createApp(config: AppConfig, db: DB) {
     }
     const area = repo.getServiceArea(db, input.zip);
     const bookingToken = newToken();
-    const { lead } = repo.createOrRefreshLead(db, {
+    const { lead, duplicate } = repo.createOrRefreshLead(db, {
       firstName: input.firstName,
       lastName: input.lastName,
       email: input.email,
@@ -142,12 +146,34 @@ export function createApp(config: AppConfig, db: DB) {
       utmSource: input.utmSource,
       utmMedium: input.utmMedium,
       utmCampaign: input.utmCampaign,
+      utmContent: input.utmContent,
+      utmTerm: input.utmTerm,
+      clickId: input.clickId,
+      referrer: input.referrer,
+      landingPage: input.landingPage,
+      sessionId: input.sessionId,
       bookingTokenHash: sha256(bookingToken),
       consentText: `[${CONSENT_VERSION}] ${CONSENT_TEXT}`,
       consentIp: req.ip ?? '',
       consentUserAgent: String(req.headers['user-agent'] ?? '').slice(0, 300),
     });
+    // Recorded server-side so conversions count even when the browser blocks beacons.
+    repo.insertEvent(db, {
+      name: 'lead_submit',
+      sessionId: input.sessionId,
+      path: input.landingPage,
+      props: { areaStatus: area?.status ?? 'unknown', duplicate },
+      utmSource: input.utmSource,
+      utmCampaign: input.utmCampaign,
+    });
     res.status(201).json({ leadId: lead.id, bookingToken, availability: describeAvailability(input.zip, area) });
+  });
+
+  // First-party conversion events. Server-recorded events are not accepted from clients.
+  api.post('/events', limiter(120, 15), (req, res) => {
+    const e = parse(eventInputSchema, req.body);
+    if (e.name !== 'lead_submit' && e.name !== 'appointment_booked') repo.insertEvent(db, e);
+    res.status(204).end();
   });
 
   api.get('/schedule/dates', (_req, res) => {
@@ -163,6 +189,15 @@ export function createApp(config: AppConfig, db: DB) {
   api.post('/appointments', limiter(20, 15), (req, res) => {
     const input = parse(bookingInputSchema, req.body);
     const appt = bookAppointment(db, input, config.timezone);
+    const booked = repo.getLead(db, input.leadId);
+    repo.insertEvent(db, {
+      name: 'appointment_booked',
+      sessionId: '',
+      path: booked?.landingPage ?? '',
+      props: {},
+      utmSource: booked?.utmSource ?? '',
+      utmCampaign: booked?.utmCampaign ?? '',
+    });
     res.status(201).json({ appointment: { id: appt.id, startUtc: appt.startUtc, endUtc: appt.endUtc, status: appt.status } });
   });
 
@@ -204,6 +239,8 @@ export function createApp(config: AppConfig, db: DB) {
   admin.get('/me', (req, res) => res.json({ email: req.session!.email }));
 
   admin.get('/stats', (_req, res) => res.json(repo.leadStats(db)));
+
+  admin.get('/conversions', (_req, res) => res.json(repo.conversionStats(db, 30)));
 
   admin.get('/leads', (req, res) => {
     const q = parse(
@@ -270,10 +307,33 @@ export function createApp(config: AppConfig, db: DB) {
   app.use('/api', api);
 
   // ----------------------------------------------- static (production) --
+  app.get('/robots.txt', (_req, res) => {
+    res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\n\nSitemap: ${config.siteUrl}/sitemap.xml\n`);
+  });
+  app.get('/sitemap.xml', (_req, res) => {
+    const urls = ['/', '/privacy'].map((p) => `  <url><loc>${config.siteUrl}${p === '/' ? '/' : p}</loc></url>`).join('\n');
+    res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
+  });
+
   const dist = resolve('dist');
   if (config.isProduction && existsSync(dist)) {
-    app.use(express.static(dist, { index: false, maxAge: '1h' }));
-    app.get(/^(?!\/api).*/, (_req, res) => res.sendFile(resolve(dist, 'index.html')));
+    // Hashed build assets never change; media changes rarely.
+    app.use('/assets', express.static(resolve(dist, 'assets'), { immutable: true, maxAge: '1y', index: false }));
+    app.use('/media', express.static(resolve(dist, 'media'), { maxAge: '30d', index: false }));
+    app.use(express.static(dist, { index: false, maxAge: '1d' }));
+    const html = readFileSync(resolve(dist, 'index.html'), 'utf8').replaceAll('__SITE_URL__', config.siteUrl);
+    app.get(/^(?!\/api).*/, (req, res) => {
+      const isAdmin = req.path.startsWith('/admin');
+      const canonicalPath = req.path === '/privacy' ? '/privacy' : '/';
+      res
+        .set('Cache-Control', 'no-cache')
+        .type('html')
+        .send(
+          html
+            .replace(`<link rel="canonical" href="${config.siteUrl}/" />`, `<link rel="canonical" href="${config.siteUrl}${canonicalPath}" />`)
+            .replace('<meta name="robots" content="index, follow" />', isAdmin ? '<meta name="robots" content="noindex, nofollow" />' : '<meta name="robots" content="index, follow" />'),
+        );
+    });
   }
 
   // -------------------------------------------------------------- errors --

@@ -7,6 +7,7 @@ Organic lead-generation, appointment-setting and AI marketing platform built by 
 | Phase | Scope | State |
 | --- | --- | --- |
 | 1 | Public availability landing page, lead capture, database, appointment scheduling, secure admin | ✅ Built & tested |
+| 1.5 | Cinematic hero, parallax, conversion tracking & attribution, technical SEO, performance | ✅ Built & tested (Lighthouse 100/100/100/100) |
 | 2 | Sales & installation tracking, configurable commissions | 🧱 DB tables in place (`sales`, `commission_rules`, `commissions`) |
 | 3 | AI-generated daily Facebook content | 🧱 DB table in place (`content_posts`) |
 | 4 | Higgsfield visual generation | Planned |
@@ -16,7 +17,8 @@ Organic lead-generation, appointment-setting and AI marketing platform built by 
 - **Frontend:** React 19, TypeScript, Tailwind CSS v4, Vite, React Router
 - **API:** Express 5, Zod validation (schemas shared with the client in `shared/`)
 - **Database:** SQLite via Node's built-in `node:sqlite` — zero cost, no external service. All SQL lives in `server/repo.ts` so it can move to Postgres/Supabase later.
-- **Tests:** Vitest + Supertest
+- **Tests:** Vitest + Supertest; **lint:** oxlint
+- **Fonts:** self-hosted Inter + Sora (variable), preloaded, metric-matched fallbacks (zero layout shift)
 
 ## Quick start
 
@@ -40,7 +42,10 @@ npm run admin:hash -- "your-long-password"
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | API + web with hot reload |
-| `npm test` | API, scheduling and security tests |
+| `npm test` | API, scheduling, security, tracking and SEO tests |
+| `npm run lint` | oxlint (correctness + a11y + hooks rules) |
+| `npm run check` | typecheck + lint + tests |
+| `scripts/build-media.sh` | Rebuild all hero video/poster/image renditions from `media/source` |
 | `npm run build` | Typecheck + production build to `dist/` |
 | `npm start` | Production server (serves API + `dist/`). Requires `SESSION_SECRET` (≥32 chars) and `ADMIN_PASSWORD_HASH`. |
 
@@ -53,6 +58,43 @@ npm run admin:hash -- "your-long-password"
 - **Scheduling** defaults: Mon–Sat, 9am–7pm Eastern, 60-min slots, 2 reps per slot, 12h minimum notice, 21 days ahead (see the `settings` table). Bookings run in a write transaction so a slot can never be overbooked; booking again reschedules instead of double-booking.
 
 **Admin (`/admin`):** lead list with search/filter, stats, CSV export, lead detail with pipeline stages (new → contacted → appointment set → sold → install scheduled → installed / lost), notes and activity log, appointment board (complete / no-show / cancel), service-area management.
+
+## Cinematic hero & motion
+
+- **Art:** generated with Higgsfield (GPT Image 2.6, 2K) — a Monroe-style town at blue hour with fiber light threading into homes. Sources in `media/source/`.
+- **Video:** 12-second seamless loop rendered from the still with a sine-period camera drift (last frame flows into the first). Encoded as AV1 + H.264 fallback at 1920×1080, 1280×720 and a 720×1280 mobile crop (0.8–3.3 MB).
+- **Loading:** the art-directed poster `<picture>` (AVIF/WebP/JPEG, 23–89 KB) is the LCP image and is preloaded per viewport. The video loads only after the page is idle, fades in once playing, pauses off-screen / in background tabs, and is skipped entirely for reduced-motion, Save-Data, slow (2g/3g) or low-memory devices. Any video failure leaves the poster as the static fallback.
+- **Parallax:** three depths (media 0.3×, animated fiber lines 0.15×, content 1×). One `requestAnimationFrame` per scroll burst, transform-only writes, no React re-renders, paused when the hero is off-screen, disabled for reduced motion / constrained devices.
+- **Upgrading to a true AI video:** generate a clip, then `HERO_VIDEO=clip.mp4 scripts/build-media.sh` — same file names, no code changes.
+
+## Conversion tracking
+
+- First-party, cookie-free events (`page_view`, `cta_click`, `zip_check`, `form_start`, `lead_submit`, `appointment_booked`, `booking_skipped`, `call_click`) → `POST /api/events` (allow-listed, rate-limited). Leads and bookings are recorded **server-side** so ad blockers can't hide conversions.
+- Every event is also pushed to `window.dataLayer`, ready for Google Tag Manager / Meta Pixel if added later.
+- Leads store `utm_source/medium/campaign/content/term`, click ID (`gclid`/`fbclid`/`msclkid`/`ttclid`), referrer, landing page and session. Attribution is first-touch for 30 days unless a new campaign link is used.
+- Admin dashboard shows a 30-day funnel and top lead sources.
+- Click-to-call / text buttons appear automatically once `BRAND.phoneDisplay` and `BRAND.phoneE164` are set in `shared/content.ts`.
+
+## SEO
+
+Title/description, canonical, Open Graph + Twitter cards with a custom 1200×630 image, JSON-LD (`Organization`, `WebSite`, `Service`, `FAQPage` — generated from the same FAQ shown on the page), `robots.txt`, `sitemap.xml`, `noindex` on admin. The public origin is injected at runtime from `SITE_URL`, so one build works on any domain.
+
+## Deployment
+
+The app is a single Node process with a SQLite file — it needs one small server/container with a **persistent disk**.
+
+```bash
+docker build -t fiber-engine .
+docker run -d -p 3001:3001 -v fiber-data:/data \
+  -e SITE_URL=https://your-domain.com \
+  -e SESSION_SECRET=$(openssl rand -hex 32) \
+  -e ADMIN_EMAIL=you@yourdomain.com \
+  -e ADMIN_PASSWORD_HASH='scrypt:...' \
+  -e TRUST_PROXY=1 \
+  fiber-engine
+```
+
+Put it behind HTTPS (the host's TLS or a reverse proxy). Health check: `GET /api/health`. Without Docker: `npm ci && npm run build && npm start` with the same environment variables.
 
 ## Security
 
@@ -68,7 +110,8 @@ npm run admin:hash -- "your-long-password"
 
 1. **Verify service areas.** Seeded ZIPs are placeholders. Monroe 48161/48162 are `verify`; surrounding towns are `coming_soon`. Don't mark anything `available` until Omni Fiber confirms it.
 2. **Confirm brand & disclosure wording** in `shared/content.ts` (the working site name "Monroe Fiber Connect", the partner disclosure, the consent text and the team phone number) with Omni Fiber and, ideally, counsel.
-3. **Hosting.** Nothing is deployed. The app runs as one Node process with a SQLite file, so a single small VM or container with a persistent disk is enough.
+3. **Hosting.** Nothing is deployed yet — see *Deployment* above.
+4. **Plans & phone.** `shared/plans.ts` is intentionally empty until real Omni Fiber plans are verified; add the team phone number to enable click-to-call.
 
 ## Project layout
 
@@ -81,5 +124,9 @@ server/            Express API
   lib/             auth (scrypt, signed sessions) and timezone helpers
 shared/            Zod schemas, types and copy shared by client + server
 src/               React app (landing page + admin)
+  components/      HeroMedia (video/poster), SignupFlow, landing chrome
+  lib/             api client, analytics (attribution + events), motion (parallax)
+media/source/      original generated artwork
+public/media/      optimized video, posters and images (built by scripts/build-media.sh)
 tests/             Vitest API tests
 ```

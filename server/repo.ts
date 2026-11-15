@@ -29,6 +29,11 @@ function toLead(r: Row): Lead {
     utmSource: r.utm_source as string,
     utmMedium: r.utm_medium as string,
     utmCampaign: r.utm_campaign as string,
+    utmContent: (r.utm_content as string) ?? '',
+    utmTerm: (r.utm_term as string) ?? '',
+    clickId: (r.click_id as string) ?? '',
+    referrer: (r.referrer as string) ?? '',
+    landingPage: (r.landing_page as string) ?? '',
     consentAt: r.consent_at as string,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
@@ -105,6 +110,12 @@ export interface NewLead {
   utmSource: string;
   utmMedium: string;
   utmCampaign: string;
+  utmContent: string;
+  utmTerm: string;
+  clickId: string;
+  referrer: string;
+  landingPage: string;
+  sessionId: string;
   bookingTokenHash: string;
   consentText: string;
   consentIp: string;
@@ -139,12 +150,14 @@ export function createOrRefreshLead(db: DB, l: NewLead): { lead: Lead; duplicate
     db.prepare(
       `INSERT INTO leads (id, first_name, last_name, email, phone, street, unit, city, zip, preferred_contact,
          current_provider, status, area_status, source, utm_source, utm_medium, utm_campaign, booking_token_hash,
-         consent_text, consent_at, consent_ip, consent_user_agent, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         consent_text, consent_at, consent_ip, consent_user_agent, created_at, updated_at,
+         utm_content, utm_term, click_id, referrer, landing_page, session_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id, l.firstName, l.lastName, l.email, l.phone, l.street, l.unit, l.city, l.zip, l.preferredContact,
       l.currentProvider, l.areaStatus, l.source, l.utmSource, l.utmMedium, l.utmCampaign, l.bookingTokenHash,
       l.consentText, ts, l.consentIp, l.consentUserAgent, ts, ts,
+      l.utmContent, l.utmTerm, l.clickId, l.referrer, l.landingPage, l.sessionId,
     );
     return { lead: getLead(db, id)!, duplicate: false };
   });
@@ -277,4 +290,33 @@ export function listAppointments(db: DB, f: { fromUtc?: string; leadId?: string 
   return (
     db.prepare(`${APPT_JOIN} WHERE a.start_utc >= ? ORDER BY a.start_utc LIMIT 500`).all(f.fromUtc ?? '') as Row[]
   ).map(toAppointment);
+}
+
+// ------------------------------------------------------------------ events --
+export function insertEvent(
+  db: DB,
+  e: { name: string; sessionId: string; path: string; props: Record<string, unknown>; utmSource: string; utmCampaign: string },
+) {
+  db.prepare(
+    'INSERT INTO events (name, session_id, path, props, utm_source, utm_campaign, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).run(e.name, e.sessionId, e.path, JSON.stringify(e.props), e.utmSource, e.utmCampaign, now());
+}
+
+/** Funnel + attribution summary for the admin dashboard. */
+export function conversionStats(db: DB, days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const funnel = db
+    .prepare(
+      `SELECT name, COUNT(*) AS events, COUNT(DISTINCT NULLIF(session_id, '')) AS sessions
+       FROM events WHERE created_at >= ? GROUP BY name`,
+    )
+    .all(since) as { name: string; events: number; sessions: number }[];
+  const sources = db
+    .prepare(
+      `SELECT COALESCE(NULLIF(utm_source, ''), source) AS source, COUNT(*) AS leads,
+              SUM(CASE WHEN status IN ('appointment_set','sold','install_scheduled','installed') THEN 1 ELSE 0 END) AS qualified
+       FROM leads WHERE created_at >= ? GROUP BY 1 ORDER BY leads DESC LIMIT 10`,
+    )
+    .all(since) as { source: string; leads: number; qualified: number }[];
+  return { days, funnel: Object.fromEntries(funnel.map((f) => [f.name, f])), sources };
 }

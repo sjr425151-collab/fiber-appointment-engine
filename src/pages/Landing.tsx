@@ -1,37 +1,82 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { AvailabilityResult } from '../../shared/schemas';
-import { BRAND, PARTNER_DISCLOSURE } from '../../shared/content';
+import { BRAND, FAQ } from '../../shared/content';
+import { PLANS, PLANS_VERIFIED_ON } from '../../shared/plans';
 import { api, ApiError } from '../lib/api';
-import SignupFlow, { AvailabilityBanner } from '../components/SignupFlow';
-import { Check, Logo, Spinner } from '../components/ui';
+import { attribution, track } from '../lib/analytics';
+import { attachParallax } from '../lib/motion';
+import HeroMedia from '../components/HeroMedia';
+import AvailabilityBanner from '../components/AvailabilityBanner';
+import { CallButton, hasPhone, MobileCtaBar, SiteFooter, SiteHeader } from '../components/landing/Chrome';
+import { Check, Spinner } from '../components/ui';
 
-const BENEFITS = [
-  { title: 'Fiber all the way home', body: 'A dedicated fiber-optic line built for today’s streaming, gaming and video calls — not a legacy copper network.' },
-  { title: 'Fast uploads, too', body: 'Fiber is designed for strong upload speeds, so backups, livestreams and work-from-home calls stay smooth.' },
-  { title: 'Every device, every room', body: 'Plenty of headroom for smart TVs, phones, consoles and cameras running at the same time.' },
-  { title: 'Local Monroe specialists', body: 'Talk with someone who knows the area, can confirm your address and walks you through install day.' },
+const SignupFlow = lazy(() => import('../components/SignupFlow'));
+
+const TRUST = ['Free consultation', 'No obligation', 'Local Monroe specialists', 'Confirmed address by address'];
+
+const OFFER = [
+  { title: 'Address-level confirmation', body: 'We check service at your exact address — not just your ZIP — so you know where you stand.' },
+  { title: 'Plan walkthrough', body: 'A specialist explains the Omni Fiber plans and offers available at your home, with no pressure.' },
+  { title: 'Install guidance', body: 'Know what to expect on installation day and how to get set up quickly.' },
+  { title: 'Priority list', body: 'Not live on your street yet? We’ll put you first in line and reach out when it is.' },
 ];
 
 const STEPS = [
   { n: '01', title: 'Check your ZIP', body: 'See whether your neighborhood is live, in the build area, or on the expansion map.' },
-  { n: '02', title: 'Book a free consultation', body: 'Pick a time that works. We confirm your exact address and match you to the right plan.' },
+  { n: '02', title: 'Book a free consultation', body: 'Pick a time that suits you. We confirm your address and match you to the right plan.' },
   { n: '03', title: 'Get connected', body: 'Omni Fiber schedules your professional installation and you’re online with fiber.' },
 ];
 
-const FAQ = [
-  { q: 'Is the consultation really free?', a: 'Yes. There’s no cost and no obligation — it’s a conversation to confirm availability at your address and answer questions.' },
-  { q: 'How do I know if fiber is available at my house?', a: 'Availability is confirmed address-by-address. Enter your ZIP for a quick read on your area, then book a consultation for a definitive answer.' },
-  { q: 'What are the plans and prices?', a: 'Plans and current offers are set by Omni Fiber and can vary by address. Your specialist will walk you through the options available to you.' },
-  { q: 'What if my area isn’t ready yet?', a: 'Leave your details and you’ll be on the priority list — we’ll reach out as soon as service reaches your street.' },
+/** General technology characteristics only — no provider-specific claims. */
+const COMPARE: { label: string; fiber: string; others: [string, string, string] }[] = [
+  { label: 'Line into your home', fiber: 'Fiber-optic (light)', others: ['Coaxial copper', 'Phone-line copper', 'Satellite dish'] },
+  { label: 'Upload speed', fiber: 'Often equal to download', others: ['Usually far below download', 'Low', 'Low'] },
+  { label: 'Latency (lag)', fiber: 'Very low', others: ['Low to moderate', 'Moderate', 'Higher'] },
+  { label: 'Speed over distance', fiber: 'Holds up over long runs', others: ['Shared neighborhood capacity', 'Drops with distance', 'Not distance-based'] },
+  { label: 'Weather sensitivity', fiber: 'Minimal', others: ['Low', 'Low', 'Can be affected'] },
 ];
+const OTHERS = ['Cable', 'DSL', 'Satellite'];
+
+function FiberLines() {
+  return (
+    <svg className="h-full w-full" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" aria-hidden>
+      <defs>
+        <linearGradient id="hl" x1="0" x2="1">
+          <stop offset="0" stopColor="#22d3ee" stopOpacity="0" />
+          <stop offset=".5" stopColor="#22d3ee" />
+          <stop offset="1" stopColor="#8b5cf6" />
+        </linearGradient>
+      </defs>
+      {[0, 1, 2].map((i) => (
+        <path
+          key={i}
+          d={`M-50 ${560 + i * 50} C 320 ${430 + i * 30}, 720 ${640 - i * 50}, 1250 ${300 + i * 60}`}
+          fill="none"
+          stroke="url(#hl)"
+          strokeWidth="1.6"
+          className="animate-pulse-line"
+          style={{ animationDelay: `${i * 1.1}s` }}
+        />
+      ))}
+    </svg>
+  );
+}
 
 export default function Landing() {
   const [zip, setZip] = useState('');
   const [checking, setChecking] = useState(false);
   const [zipError, setZipError] = useState('');
   const [result, setResult] = useState<AvailabilityResult | null>(null);
+  const heroRef = useRef<HTMLElement>(null);
   const flowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    attribution();
+    track('page_view');
+  }, []);
+
+  useEffect(() => (heroRef.current ? attachParallax(heroRef.current) : undefined), []);
 
   async function check(e: FormEvent) {
     e.preventDefault();
@@ -44,166 +89,329 @@ export default function Landing() {
     try {
       const r = await api<AvailabilityResult>(`/availability?zip=${zip}`);
       setResult(r);
-      requestAnimationFrame(() => flowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+      track('zip_check', { status: r.status });
+      setTimeout(() => flowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350);
     } catch (err) {
-      setZipError(err instanceof ApiError ? err.message : 'Network error. Please try again.');
+      setZipError(err instanceof ApiError ? (Object.values(err.fields)[0] ?? err.message) : 'Network error. Please try again.');
     } finally {
       setChecking(false);
     }
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden">
-      {/* ---------------------------------------------------------- nav -- */}
-      <header className="sticky top-0 z-30 border-b border-white/5 bg-ink-950/70 backdrop-blur-xl">
-        <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-          <Logo />
-          <div className="flex items-center gap-6 text-sm text-slate-300">
-            <a href="#how" className="hidden hover:text-white sm:inline">How it works</a>
-            <a href="#faq" className="hidden hover:text-white sm:inline">FAQ</a>
-            <a href="#check" className="btn-primary whitespace-nowrap px-4 py-2 text-sm">
-              <span className="sm:hidden">Check</span>
-              <span className="hidden sm:inline">Check availability</span>
-            </a>
-          </div>
-        </nav>
-      </header>
+    <div id="top" className="min-h-screen overflow-x-clip">
+      <a href="#check" className="sr-only z-50 rounded-lg bg-white px-4 py-2 text-ink-950 focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
+        Skip to availability check
+      </a>
+      <span id="top-sentinel" className="absolute top-0 h-px w-px" aria-hidden />
+      <SiteHeader />
 
-      {/* --------------------------------------------------------- hero -- */}
-      <section id="check" className="fiber-lines relative">
-        <svg className="pointer-events-none absolute inset-x-0 top-0 h-full w-full opacity-40" viewBox="0 0 1200 600" preserveAspectRatio="none" aria-hidden>
-          {[0, 1, 2, 3].map((i) => (
-            <path key={i} d={`M-50 ${420 + i * 40} C 300 ${300 + i * 30}, 700 ${520 - i * 40}, 1250 ${180 + i * 50}`} fill="none" stroke="url(#hl)" strokeWidth="1.5" className="animate-pulse-line" style={{ animationDelay: `${i * 0.7}s` }} />
-          ))}
-          <defs>
-            <linearGradient id="hl" x1="0" x2="1">
-              <stop offset="0" stopColor="#22d3ee" />
-              <stop offset="1" stopColor="#8b5cf6" />
-            </linearGradient>
-          </defs>
-        </svg>
-        <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 pb-20 pt-16 sm:px-6 lg:grid-cols-[1.15fr_1fr] lg:pt-24">
-          <div>
-            <p className="inline-flex items-center gap-2 rounded-full border border-fiber-400/30 bg-fiber-400/10 px-3 py-1 text-xs font-medium text-fiber-400">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-fiber-400" /> Now expanding across {BRAND.market}
-            </p>
-            <h1 className="mt-5 font-display text-4xl font-extrabold leading-[1.08] tracking-tight sm:text-6xl">
-              {BRAND.provider} is bringing fiber internet to <span className="text-gradient">Monroe</span>.
-            </h1>
-            <p className="mt-5 max-w-xl text-lg text-slate-300">
-              Find out if your home qualifies and reserve a free, no-pressure consultation with a local fiber specialist.
-            </p>
-            <ul className="mt-6 grid gap-2 text-slate-300 sm:grid-cols-2">
-              {['Free in-home consultation', 'Address-level availability check', 'Local Monroe team', 'No obligation'].map((t) => (
-                <li key={t} className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-fiber-400" /> {t}
-                </li>
-              ))}
-            </ul>
+      <main>
+        {/* ------------------------------------------------------- hero -- */}
+        <section ref={heroRef} id="check" aria-labelledby="hero-title" className="relative isolate flex min-h-[100svh] scroll-mt-16 items-end overflow-hidden lg:items-center">
+          {/* Depth 1 — cinematic media, slowest */}
+          <div data-depth="0.3" className="absolute inset-0 -z-30">
+            <HeroMedia />
           </div>
-
-          <div className="glass p-6 shadow-2xl shadow-pulse-500/10 sm:p-8">
-            <h2 className="font-display text-xl font-bold">Check fiber availability</h2>
-            <p className="mt-1 text-sm text-slate-400">Start with your ZIP code — it takes seconds.</p>
-            <form onSubmit={check} className="mt-5 flex gap-2" noValidate>
-              <label htmlFor="zip" className="sr-only">ZIP code</label>
-              <input
-                id="zip"
-                className="input text-lg tracking-widest"
-                inputMode="numeric"
-                autoComplete="postal-code"
-                maxLength={5}
-                placeholder="48161"
-                value={zip}
-                onChange={(e) => setZip(e.target.value.replace(/\D/g, ''))}
-                aria-invalid={!!zipError}
-              />
-              <button className="btn-primary shrink-0 px-6" disabled={checking}>
-                {checking ? <Spinner /> : 'Check'}
-              </button>
-            </form>
-            {zipError && <p className="field-error">{zipError}</p>}
-            {result && (
-              <div className="mt-5">
-                <AvailabilityBanner result={result} />
-              </div>
-            )}
-            <p className="mt-5 text-xs text-slate-500">Serving Monroe (48161, 48162) and surrounding Monroe County communities.</p>
+          {/* Depth 2 — animated fiber light */}
+          <div data-depth="0.15" className="pointer-events-none absolute inset-0 -z-20 opacity-60 mix-blend-screen motion-reduce:hidden">
+            <FiberLines />
           </div>
-        </div>
-      </section>
+          {/* Readability scrims (static) */}
+          <div className="absolute inset-0 -z-10 bg-gradient-to-b from-ink-950/80 via-ink-950/35 to-ink-950 lg:bg-gradient-to-r lg:from-ink-950/95 lg:via-ink-950/60 lg:to-ink-950/10" aria-hidden />
+          <div className="absolute inset-x-0 bottom-0 -z-10 h-40 bg-gradient-to-t from-ink-950 to-transparent" aria-hidden />
 
-      {/* -------------------------------------------------- signup flow -- */}
-      {result && (
-        <section ref={flowRef} className="scroll-mt-20 px-4 pb-20 sm:px-6">
-          <div className="mx-auto max-w-3xl">
-            <SignupFlow zip={result.zip} city={result.city ?? ''} availability={result} />
+          {/* Depth 3 — content, moves with the page (never parallaxed, for readability) */}
+          <div className="mx-auto grid w-full max-w-6xl items-center gap-8 px-4 pb-10 pt-24 sm:px-6 lg:grid-cols-[1.15fr_1fr] lg:gap-12 lg:pb-16 lg:pt-28">
+            <div>
+              <p className="inline-flex items-center gap-2 rounded-full border border-fiber-400/40 bg-ink-950/50 px-3 py-1 text-xs font-medium text-cyan-200 backdrop-blur">
+                <span className="h-1.5 w-1.5 rounded-full bg-fiber-400 motion-safe:animate-pulse" /> Now expanding across {BRAND.market}
+              </p>
+              <h1 id="hero-title" className="mt-4 font-display text-[2.6rem] font-extrabold leading-[1.04] tracking-tight [text-shadow:0_2px_24px_rgb(6_9_20/0.6)] sm:text-6xl lg:text-[4.2rem]">
+                {BRAND.provider} is bringing fiber internet to <span className="text-gradient">Monroe</span>.
+              </h1>
+              <p className="mt-4 max-w-xl text-lg text-slate-200 sm:text-xl">
+                Find out if your home qualifies and reserve a free, no-pressure consultation with a local fiber specialist.
+              </p>
+              <ul className="mt-5 hidden gap-2 text-slate-200 sm:grid sm:grid-cols-2">
+                {TRUST.map((t) => (
+                  <li key={t} className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-fiber-400" /> {t}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="glass bg-ink-950/60 p-5 shadow-2xl shadow-pulse-500/10 sm:p-8">
+              <h2 className="font-display text-xl font-bold">Check fiber availability</h2>
+              <p className="mt-1 text-sm text-slate-300">Start with your ZIP code — it takes seconds.</p>
+              <form id="zip-form" onSubmit={check} className="mt-4 flex gap-2" noValidate>
+                <label htmlFor="zip" className="sr-only">
+                  ZIP code
+                </label>
+                <input
+                  id="zip"
+                  name="zip"
+                  className="input text-lg tracking-widest"
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  maxLength={5}
+                  placeholder="ZIP code"
+                  value={zip}
+                  onChange={(e) => setZip(e.target.value.replace(/\D/g, ''))}
+                  aria-invalid={!!zipError}
+                  aria-describedby={zipError ? 'zip-error' : undefined}
+                />
+                <button className="btn-primary shrink-0 px-6" disabled={checking}>
+                  {checking ? <Spinner /> : 'Check'}
+                </button>
+              </form>
+              {zipError && (
+                <p id="zip-error" className="field-error" role="alert">
+                  {zipError}
+                </p>
+              )}
+              {result && (
+                <div className="mt-4">
+                  <AvailabilityBanner result={result} />
+                </div>
+              )}
+              <p className="mt-4 text-xs text-slate-300">Monroe (48161, 48162) and surrounding Monroe County communities.</p>
+              {hasPhone && (
+                <p className="mt-3 border-t border-white/10 pt-3 text-sm text-slate-300">
+                  Prefer to talk? <CallButton location="hero" className="inline-flex items-center gap-1 font-semibold text-cyan-200 underline-offset-4 hover:underline" />
+                </p>
+              )}
+            </div>
           </div>
         </section>
-      )}
 
-      {/* ----------------------------------------------------- benefits -- */}
-      <section className="border-t border-white/5 bg-ink-900/50 px-4 py-20 sm:px-6">
-        <div className="mx-auto max-w-6xl">
-          <h2 className="max-w-2xl font-display text-3xl font-bold sm:text-4xl">Internet that keeps up with your household.</h2>
-          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {BENEFITS.map((b) => (
-              <div key={b.title} className="glass p-6 transition hover:border-fiber-400/30">
-                <div className="mb-4 h-10 w-10 rounded-xl bg-gradient-to-br from-fiber-400/30 to-pulse-500/30 ring-1 ring-white/10" />
-                <h3 className="font-semibold">{b.title}</h3>
-                <p className="mt-2 text-sm text-slate-400">{b.body}</p>
+        {/* ------------------------------------------------- signup flow -- */}
+        {result && (
+          <section ref={flowRef} id="signup-section" aria-label="Sign up" className="scroll-mt-20 px-4 py-12 sm:px-6">
+            <div className="mx-auto max-w-3xl">
+              <Suspense
+                fallback={
+                  <div className="glass grid h-96 place-items-center text-slate-400">
+                    <Spinner />
+                  </div>
+                }
+              >
+                <SignupFlow key={result.zip} zip={result.zip} city={result.city ?? ''} availability={result} />
+              </Suspense>
+            </div>
+          </section>
+        )}
+
+        {/* --------------------------------------------------- trust bar -- */}
+        <section aria-label="Why people book with us" className="border-y border-white/10 bg-ink-900/60">
+          <ul className="mx-auto grid max-w-6xl grid-cols-2 gap-4 px-4 py-6 text-sm text-slate-200 sm:px-6 md:grid-cols-4">
+            {TRUST.map((t) => (
+              <li key={t} className="flex items-center gap-2">
+                <Check className="h-4 w-4 shrink-0 text-fiber-400" /> {t}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* ------------------------------------------------------ offer -- */}
+        <section id="offer" aria-labelledby="offer-title" className="scroll-mt-16 px-4 py-20 sm:px-6 lg:py-28">
+          <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-widest text-cyan-300">The offer</p>
+              <h2 id="offer-title" className="mt-3 font-display text-3xl font-bold sm:text-4xl">
+                A free, no-obligation fiber consultation.
+              </h2>
+              <p className="mt-4 text-lg text-slate-300">
+                Spend a few minutes with a local specialist and leave knowing exactly what’s available at your home.
+              </p>
+              <ul className="mt-8 grid gap-5 sm:grid-cols-2">
+                {OFFER.map((o) => (
+                  <li key={o.title}>
+                    <h3 className="flex items-center gap-2 font-semibold">
+                      <span className="grid h-6 w-6 place-items-center rounded-full bg-gradient-to-br from-fiber-400 to-pulse-500 text-ink-950">
+                        <Check className="h-3.5 w-3.5" />
+                      </span>
+                      {o.title}
+                    </h3>
+                    <p className="mt-1.5 text-sm text-slate-300">{o.body}</p>
+                  </li>
+                ))}
+              </ul>
+              <a href="#check" onClick={() => track('cta_click', { location: 'offer' })} className="btn-primary mt-9">
+                Book my free consultation →
+              </a>
+            </div>
+            <figure className="relative">
+              <div className="absolute -inset-6 -z-10 rounded-[2rem] bg-gradient-to-br from-fiber-400/20 to-pulse-500/20 blur-2xl" aria-hidden />
+              <picture>
+                <source type="image/avif" srcSet="/media/home-640.avif 640w, /media/home-960.avif 960w, /media/home-1400.avif 1400w" sizes="(min-width: 1024px) 560px, 100vw" />
+                <source type="image/webp" srcSet="/media/home-640.webp 640w, /media/home-960.webp 960w, /media/home-1400.webp 1400w" sizes="(min-width: 1024px) 560px, 100vw" />
+                <img
+                  src="/media/home-960.jpg"
+                  srcSet="/media/home-640.jpg 640w, /media/home-960.jpg 960w, /media/home-1400.jpg 1400w"
+                  sizes="(min-width: 1024px) 560px, 100vw"
+                  width={1400}
+                  height={1045}
+                  loading="lazy"
+                  decoding="async"
+                  alt="A fiber-optic line glowing as it runs from a wall outlet to a home Wi-Fi router in a cozy living room at dusk"
+                  className="aspect-[4/3] w-full rounded-3xl border border-white/10 object-cover"
+                />
+              </picture>
+            </figure>
+          </div>
+        </section>
+
+        {/* ---------------------------------------------- why / compare -- */}
+        <section id="compare" aria-labelledby="compare-title" className="scroll-mt-16 border-t border-white/10 bg-ink-900/50 px-4 py-20 sm:px-6 lg:py-28">
+          <div className="mx-auto max-w-6xl">
+            <p className="text-sm font-semibold uppercase tracking-widest text-cyan-300">Why fiber</p>
+            <h2 id="compare-title" className="mt-3 max-w-2xl font-display text-3xl font-bold sm:text-4xl">
+              How fiber compares to other home internet.
+            </h2>
+
+            {PLANS.length > 0 && (
+              <div className="mt-10 grid gap-5 md:grid-cols-3">
+                {PLANS.map((p) => (
+                  <div key={p.name} className={`glass p-6 ${p.featured ? 'border-fiber-400/50 ring-1 ring-fiber-400/40' : ''}`}>
+                    <h3 className="font-display text-xl font-bold">{p.name}</h3>
+                    <p className="mt-2 text-2xl font-semibold text-gradient">{p.speed}</p>
+                    <p className="mt-1 text-slate-200">{p.price}</p>
+                    <ul className="mt-4 space-y-2 text-sm text-slate-300">
+                      {p.highlights.map((h) => (
+                        <li key={h} className="flex gap-2">
+                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-fiber-400" />
+                          {h}
+                        </li>
+                      ))}
+                    </ul>
+                    {p.fineprint && <p className="mt-4 text-xs text-slate-400">{p.fineprint}</p>}
+                  </div>
+                ))}
+                <p className="text-xs text-slate-400 md:col-span-3">Plan details verified {PLANS_VERIFIED_ON}. Availability and pricing confirmed per address.</p>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
+            )}
 
-      {/* ------------------------------------------------- how it works -- */}
-      <section id="how" className="px-4 py-20 sm:px-6">
-        <div className="mx-auto max-w-6xl">
-          <h2 className="font-display text-3xl font-bold sm:text-4xl">How it works</h2>
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
-            {STEPS.map((s) => (
-              <div key={s.n} className="relative">
-                <span className="font-display text-5xl font-extrabold text-white/10">{s.n}</span>
-                <h3 className="mt-2 text-lg font-semibold">{s.title}</h3>
-                <p className="mt-2 text-slate-400">{s.body}</p>
-              </div>
-            ))}
+            {/* Desktop table */}
+            <div className="glass mt-10 hidden overflow-hidden md:block">
+              <table className="w-full text-left text-sm">
+                <caption className="sr-only">Typical characteristics of home internet technologies</caption>
+                <thead>
+                  <tr className="border-b border-white/10 text-slate-300">
+                    <th scope="col" className="px-5 py-4 font-medium">
+                      <span className="sr-only">Characteristic</span>
+                    </th>
+                    <th scope="col" className="bg-fiber-400/10 px-5 py-4 font-display text-base font-bold text-white">Fiber</th>
+                    {OTHERS.map((o) => (
+                      <th key={o} scope="col" className="px-5 py-4 font-medium">{o}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {COMPARE.map((r) => (
+                    <tr key={r.label}>
+                      <th scope="row" className="px-5 py-4 font-medium text-slate-200">{r.label}</th>
+                      <td className="bg-fiber-400/[0.06] px-5 py-4 font-semibold text-cyan-100">{r.fiber}</td>
+                      {r.others.map((o, i) => (
+                        <td key={i} className="px-5 py-4 text-slate-300">{o}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Mobile cards */}
+            <dl className="mt-8 grid gap-3 md:hidden">
+              {COMPARE.map((r) => (
+                <div key={r.label} className="glass p-4">
+                  <dt className="text-sm font-medium text-slate-300">{r.label}</dt>
+                  <dd className="mt-1 font-semibold text-cyan-100">Fiber: {r.fiber}</dd>
+                  <dd className="mt-1 text-sm text-slate-300">
+                    {OTHERS.map((o, i) => `${o}: ${r.others[i]}`).join(' · ')}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <p className="mt-4 text-xs text-slate-400">
+              General characteristics of each technology. Actual speeds and performance depend on the plan and provider. {BRAND.provider} plans and pricing are confirmed for your address during your consultation.
+            </p>
           </div>
-          <a href="#check" className="btn-primary mt-12">Check my address →</a>
-        </div>
-      </section>
+        </section>
 
-      {/* ---------------------------------------------------------- faq -- */}
-      <section id="faq" className="border-t border-white/5 bg-ink-900/50 px-4 py-20 sm:px-6">
-        <div className="mx-auto max-w-3xl">
-          <h2 className="font-display text-3xl font-bold sm:text-4xl">Questions, answered</h2>
-          <div className="mt-8 divide-y divide-white/10">
-            {FAQ.map((f) => (
-              <details key={f.q} className="group py-5">
-                <summary className="flex cursor-pointer list-none items-center justify-between font-medium">
-                  {f.q}
-                  <span className="text-fiber-400 transition group-open:rotate-45">+</span>
-                </summary>
-                <p className="mt-3 text-slate-400">{f.a}</p>
-              </details>
-            ))}
+        {/* ----------------------------------------------- how it works -- */}
+        <section id="how" aria-labelledby="how-title" className="scroll-mt-16 px-4 py-20 sm:px-6 lg:py-28">
+          <div className="mx-auto max-w-6xl">
+            <h2 id="how-title" className="font-display text-3xl font-bold sm:text-4xl">
+              How it works
+            </h2>
+            <ol className="mt-10 grid gap-8 md:grid-cols-3">
+              {STEPS.map((s) => (
+                <li key={s.n} className="relative">
+                  <span className="text-gradient font-display text-5xl font-extrabold" aria-hidden>
+                    {s.n}
+                  </span>
+                  <h3 className="mt-2 text-lg font-semibold">{s.title}</h3>
+                  <p className="mt-2 text-slate-300">{s.body}</p>
+                </li>
+              ))}
+            </ol>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ------------------------------------------------------- footer -- */}
-      <footer className="border-t border-white/5 px-4 py-10 text-sm text-slate-500 sm:px-6">
-        <div className="mx-auto flex max-w-6xl flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-          <div className="max-w-xl space-y-3">
-            <Logo />
-            <p>{PARTNER_DISCLOSURE}</p>
-            <p>© {new Date().getFullYear()} {BRAND.agency}. All rights reserved.</p>
+        {/* -------------------------------------------------------- faq -- */}
+        <section id="faq" aria-labelledby="faq-title" className="scroll-mt-16 border-t border-white/10 bg-ink-900/50 px-4 py-20 sm:px-6 lg:py-28">
+          <div className="mx-auto max-w-3xl">
+            <h2 id="faq-title" className="font-display text-3xl font-bold sm:text-4xl">
+              Questions, answered
+            </h2>
+            <div className="mt-8 divide-y divide-white/10">
+              {FAQ.map((f) => (
+                <details key={f.q} className="group py-5">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 font-medium [&::-webkit-details-marker]:hidden">
+                    {f.q}
+                    <span className="text-xl text-fiber-400 transition group-open:rotate-45" aria-hidden>
+                      +
+                    </span>
+                  </summary>
+                  <p className="mt-2 text-slate-300">
+                    {f.a}
+                    {f.q.startsWith('What do you do') && (
+                      <>
+                        {' '}
+                        <Link to="/privacy" className="text-cyan-200 underline underline-offset-4">
+                          Read the privacy notice
+                        </Link>
+                        .
+                      </>
+                    )}
+                  </p>
+                </details>
+              ))}
+            </div>
           </div>
-          <Link to="/admin" className="hover:text-slate-300">Team login</Link>
-        </div>
-      </footer>
+        </section>
+
+        {/* -------------------------------------------------- final CTA -- */}
+        <section aria-labelledby="cta-title" className="relative isolate overflow-hidden px-4 py-20 sm:px-6 lg:py-28">
+          <div className="fiber-lines absolute inset-0 -z-10" aria-hidden />
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 id="cta-title" className="font-display text-3xl font-bold sm:text-5xl">
+              Ready to see if fiber reaches <span className="text-gradient">your street</span>?
+            </h2>
+            <p className="mx-auto mt-4 max-w-xl text-lg text-slate-300">It takes seconds to check, and the consultation is always free.</p>
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <a href="#check" onClick={() => track('cta_click', { location: 'final' })} className="btn-primary px-8 py-4 text-base">
+                Check availability
+              </a>
+              <CallButton location="final" className="btn-ghost px-6 py-4" />
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <SiteFooter />
+      <MobileCtaBar signupOpen={!!result} />
     </div>
   );
 }

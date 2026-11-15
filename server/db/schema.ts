@@ -123,6 +123,31 @@ export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
       );
     `,
   },
+  {
+    id: 2,
+    name: 'attribution_and_events',
+    sql: `
+      ALTER TABLE leads ADD COLUMN utm_content  TEXT NOT NULL DEFAULT '';
+      ALTER TABLE leads ADD COLUMN utm_term     TEXT NOT NULL DEFAULT '';
+      ALTER TABLE leads ADD COLUMN click_id     TEXT NOT NULL DEFAULT '';
+      ALTER TABLE leads ADD COLUMN referrer     TEXT NOT NULL DEFAULT '';
+      ALTER TABLE leads ADD COLUMN landing_page TEXT NOT NULL DEFAULT '';
+      ALTER TABLE leads ADD COLUMN session_id   TEXT NOT NULL DEFAULT '';
+
+      -- First-party conversion events (no third-party trackers, no cookies).
+      CREATE TABLE events (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        name          TEXT NOT NULL,
+        session_id    TEXT NOT NULL DEFAULT '',
+        path          TEXT NOT NULL DEFAULT '',
+        props         TEXT NOT NULL DEFAULT '{}',
+        utm_source    TEXT NOT NULL DEFAULT '',
+        utm_campaign  TEXT NOT NULL DEFAULT '',
+        created_at    TEXT NOT NULL
+      );
+      CREATE INDEX idx_events_name_time ON events(name, created_at);
+    `,
+  },
 ];
 
 /**

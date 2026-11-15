@@ -17,6 +17,7 @@ const config: AppConfig = {
   adminEmail: 'admin@example.com',
   adminPasswordHash: hashPassword('correct-horse-battery'),
   timezone: TZ,
+  siteUrl: 'https://fiber.example.com',
   isProduction: false,
 };
 
@@ -164,5 +165,48 @@ describe('admin', () => {
   });
   it('rejects tampered session cookies', async () => {
     await request(app).get('/api/admin/me').set('Cookie', 'fae_session=eyJlbWFpbCI6ImEifQ.forged').expect(401);
+  });
+});
+
+describe('conversion tracking & SEO', () => {
+  it('stores attribution on leads and records server-side conversion events', async () => {
+    const r = await request(app)
+      .post('/api/leads')
+      .send({ ...validLead, utmSource: 'facebook', utmCampaign: 'monroe_launch', clickId: 'fbclid:abc', referrer: 'https://m.facebook.com/', landingPage: '/?utm_source=facebook', sessionId: 's1' })
+      .expect(201);
+    const lead = repo.getLead(db, r.body.leadId)!;
+    expect(lead.clickId).toBe('fbclid:abc');
+    expect(lead.landingPage).toBe('/?utm_source=facebook');
+    const slot = await firstOpenSlot();
+    await request(app).post('/api/appointments').send({ leadId: r.body.leadId, token: r.body.bookingToken, startUtc: slot.startUtc }).expect(201);
+    const stats = repo.conversionStats(db);
+    expect(stats.funnel.lead_submit.events).toBe(1);
+    expect(stats.funnel.appointment_booked.events).toBe(1);
+    expect(stats.sources[0]).toMatchObject({ source: 'facebook', leads: 1, qualified: 1 });
+  });
+
+  it('accepts allowlisted client events and ignores spoofed server-side ones', async () => {
+    await request(app).post('/api/events').send({ name: 'zip_check', sessionId: 's1', props: { status: 'verify' } }).expect(204);
+    await request(app).post('/api/events').send({ name: 'lead_submit', sessionId: 's1' }).expect(204);
+    await request(app).post('/api/events').send({ name: 'drop_tables' }).expect(400);
+    const { funnel } = repo.conversionStats(db);
+    expect(funnel.zip_check.sessions).toBe(1);
+    expect(funnel.lead_submit).toBeUndefined();
+  });
+
+  it('serves robots.txt and sitemap.xml with the configured origin', async () => {
+    const robots = await request(app).get('/robots.txt').expect(200);
+    expect(robots.text).toContain('Sitemap: https://fiber.example.com/sitemap.xml');
+    expect(robots.text).toContain('Disallow: /admin');
+    const sitemap = await request(app).get('/sitemap.xml').expect(200);
+    expect(sitemap.text).toContain('<loc>https://fiber.example.com/</loc>');
+    expect(sitemap.text).toContain('<loc>https://fiber.example.com/privacy</loc>');
+  });
+
+  it('exposes conversion stats to admins only', async () => {
+    await request(app).get('/api/admin/conversions').expect(401);
+    const agent = await adminAgent();
+    const r = await agent.get('/api/admin/conversions').expect(200);
+    expect(r.body).toHaveProperty('funnel');
   });
 });

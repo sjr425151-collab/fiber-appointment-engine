@@ -49,7 +49,7 @@ export function Field({ label, error, children, htmlFor }: { label: string; erro
       </label>
       {children}
       {error && (
-        <p className="field-error" role="alert">
+        <p className="field-error" role="alert" id={`${htmlFor}-error`}>
           {error}
         </p>
       )}

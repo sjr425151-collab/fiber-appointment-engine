@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { AvailabilityResult, Slot } from '../../shared/schemas';
 import { CONSENT_TEXT } from '../../shared/content';
 import { api, ApiError, fmtCalendarDate, fmtDateTime } from '../lib/api';
+import { attribution, sessionId, track } from '../lib/analytics';
+import AvailabilityBanner from './AvailabilityBanner';
 import { Check, Field, Spinner } from './ui';
 
 type Step = 'details' | 'schedule' | 'done';
@@ -10,33 +12,6 @@ interface LeadResponse {
   leadId: string;
   bookingToken: string;
   availability: AvailabilityResult;
-}
-
-const STATUS_TONE: Record<string, string> = {
-  available: 'from-emerald-400/20 to-fiber-400/10 border-emerald-400/30',
-  verify: 'from-fiber-400/20 to-pulse-500/10 border-fiber-400/30',
-  coming_soon: 'from-pulse-500/20 to-fiber-400/10 border-pulse-500/30',
-  not_serviceable: 'from-slate-500/20 to-slate-500/5 border-slate-500/30',
-  unknown: 'from-amber-400/15 to-slate-500/5 border-amber-400/30',
-};
-
-export function AvailabilityBanner({ result }: { result: AvailabilityResult }) {
-  return (
-    <div className={`rounded-2xl border bg-gradient-to-br p-5 ${STATUS_TONE[result.status]}`} role="status">
-      <p className="font-display text-lg font-bold">{result.headline}</p>
-      <p className="mt-1 text-slate-300">{result.message}</p>
-    </div>
-  );
-}
-
-function utm() {
-  const p = new URLSearchParams(window.location.search);
-  return {
-    utmSource: p.get('utm_source') ?? '',
-    utmMedium: p.get('utm_medium') ?? '',
-    utmCampaign: p.get('utm_campaign') ?? '',
-    source: p.get('src') ?? 'landing_page',
-  };
 }
 
 export default function SignupFlow({ zip, city, availability }: { zip: string; city: string; availability: AvailabilityResult | null }) {
@@ -48,17 +23,17 @@ export default function SignupFlow({ zip, city, availability }: { zip: string; c
   const wantsBooking = availability?.status !== 'not_serviceable';
 
   return (
-    <div className="glass overflow-hidden">
-      <ol className="flex border-b border-white/10 text-sm">
+    <div className="glass overflow-hidden" id="signup">
+      <ol className="flex border-b border-white/10 text-sm" aria-label="Progress">
         {(['details', 'schedule', 'done'] as Step[]).map((s, i) => {
           const active = s === step;
           const doneIdx = ['details', 'schedule', 'done'].indexOf(step);
           return (
-            <li key={s} className={`flex flex-1 items-center gap-2 px-4 py-3 sm:px-6 ${active ? 'text-white' : 'text-slate-500'}`}>
+            <li key={s} aria-current={active ? 'step' : undefined} className={`flex flex-1 items-center gap-2 px-4 py-3 sm:px-6 ${active ? 'text-white' : 'text-slate-400'}`}>
               <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${i < doneIdx ? 'bg-fiber-400 text-ink-950' : active ? 'bg-white text-ink-950' : 'bg-white/10'}`}>
                 {i < doneIdx ? <Check className="h-3.5 w-3.5" /> : i + 1}
               </span>
-              <span className="hidden sm:inline">{['Your details', 'Pick a time', 'Confirmed'][i]}</span>
+              <span className="sr-only sm:not-sr-only">{['Your details', 'Pick a time', 'Confirmed'][i]}</span>
             </li>
           );
         })}
@@ -109,10 +84,16 @@ function DetailsStep({ zip, city, onDone }: { zip: string; city: string; onDone:
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [started, setStarted] = useState(false);
 
-  useEffect(() => setForm((f) => ({ ...f, zip: zip || f.zip, city: city || f.city })), [zip, city]);
 
-  const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k: keyof typeof form) => (e: { target: { value: string } }) => {
+    if (!started) {
+      setStarted(true);
+      track('form_start');
+    }
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+  };
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -120,7 +101,8 @@ function DetailsStep({ zip, city, onDone }: { zip: string; city: string; onDone:
     setErrors({});
     setFormError('');
     try {
-      const r = await api<LeadResponse>('/leads', { method: 'POST', body: { ...form, consent, ...utm() } });
+      const r = await api<LeadResponse>('/leads', { method: 'POST', body: { ...form, consent, ...attribution(), sessionId: sessionId() } });
+      track('lead_submit', { area_status: r.availability.status }, false);
       onDone(r, form.firstName);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -134,15 +116,24 @@ function DetailsStep({ zip, city, onDone }: { zip: string; city: string; onDone:
 
   const input = (k: keyof typeof form, label: string, props: Record<string, string> = {}) => (
     <Field label={label} error={errors[k]} htmlFor={`f-${k}`}>
-      <input id={`f-${k}`} className="input" value={form[k]} onChange={set(k)} aria-invalid={!!errors[k]} {...props} />
+      <input
+        id={`f-${k}`}
+        name={k}
+        className="input"
+        value={form[k]}
+        onChange={set(k)}
+        aria-invalid={!!errors[k]}
+        aria-describedby={errors[k] ? `f-${k}-error` : undefined}
+        {...props}
+      />
     </Field>
   );
 
   return (
     <form onSubmit={submit} noValidate className="space-y-5">
       <div>
-        <h3 className="font-display text-2xl font-bold">Reserve your free fiber consultation</h3>
-        <p className="mt-1 text-slate-400">Takes under a minute. No obligation and no credit check to get started.</p>
+        <h2 className="font-display text-2xl font-bold">Reserve your free fiber consultation</h2>
+        <p className="mt-1 text-slate-300">Takes under a minute. No obligation to get started.</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         {input('firstName', 'First name', { autoComplete: 'given-name' })}
@@ -173,11 +164,11 @@ function DetailsStep({ zip, city, onDone }: { zip: string; city: string; onDone:
         <input id="f-website" tabIndex={-1} autoComplete="off" value={form.website} onChange={set('website')} />
       </div>
 
-      <label className="flex cursor-pointer gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-4 text-xs leading-relaxed text-slate-400">
-        <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-400" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+      <label className="flex cursor-pointer gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-4 text-xs leading-relaxed text-slate-300">
+        <input type="checkbox" name="consent" aria-invalid={!!errors.consent} className="mt-0.5 h-5 w-5 shrink-0 accent-cyan-400" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
         <span>{CONSENT_TEXT}</span>
       </label>
-      {errors.consent && <p className="field-error">{errors.consent}</p>}
+      {errors.consent && <p className="field-error" role="alert">{errors.consent}</p>}
       {formError && !Object.keys(errors).length && <p className="field-error">{formError}</p>}
 
       <button type="submit" className="btn-primary w-full py-4 text-base" disabled={busy}>
@@ -201,12 +192,11 @@ function ScheduleStep({ lead, onBooked, onSkip }: { lead: LeadResponse; onBooked
       setDates(r.dates);
       setDate(r.dates[0] ?? '');
     });
+    // Runs once on mount: loading the bookable dates from the API.
   }, []);
 
   useEffect(() => {
     if (!date) return;
-    setSlots(null);
-    setSelected('');
     api<{ slots: Slot[] }>(`/schedule/slots?date=${date}`).then((r) => setSlots(r.slots)).catch(() => setSlots([]));
   }, [date]);
 
@@ -224,6 +214,7 @@ function ScheduleStep({ lead, onBooked, onSkip }: { lead: LeadResponse; onBooked
     setError('');
     try {
       await api('/appointments', { method: 'POST', body: { leadId: lead.leadId, token: lead.bookingToken, startUtc: selected, notes } });
+      track('appointment_booked', {}, false);
       onBooked(selected);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Network error. Please try again.');
@@ -242,18 +233,23 @@ function ScheduleStep({ lead, onBooked, onSkip }: { lead: LeadResponse; onBooked
     <div className="space-y-6">
       <AvailabilityBanner result={lead.availability} />
       <div>
-        <h3 className="font-display text-2xl font-bold">Pick a time for your consultation</h3>
-        <p className="mt-1 text-slate-400">A local specialist will confirm your address, walk through plans, and answer questions. Times shown in Eastern Time.</p>
+        <h2 className="font-display text-2xl font-bold">Pick a time for your consultation</h2>
+        <p className="mt-1 text-slate-300">A local specialist will confirm your address, walk through plans, and answer questions. Times shown in Eastern Time.</p>
       </div>
-      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2" role="listbox" aria-label="Choose a date">
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2" role="group" aria-label="Choose a date">
         {dates.map((d) => {
           const [wd, rest] = fmtCalendarDate(d).split(', ');
           return (
             <button
               key={d}
-              role="option"
-              aria-selected={d === date}
-              onClick={() => setDate(d)}
+              type="button"
+              aria-pressed={d === date}
+              onClick={() => {
+                if (d === date) return;
+                setSlots(null);
+                setSelected('');
+                setDate(d);
+              }}
               className={`shrink-0 rounded-xl border px-4 py-3 text-center transition ${d === date ? 'border-fiber-400 bg-fiber-400/10 text-white' : 'border-white/10 text-slate-400 hover:border-white/25'}`}
             >
               <span className="block text-xs uppercase tracking-wider">{wd}</span>
@@ -264,7 +260,7 @@ function ScheduleStep({ lead, onBooked, onSkip }: { lead: LeadResponse; onBooked
       </div>
       <div className="min-h-40">
         {slots === null ? (
-          <div className="grid place-items-center py-10 text-slate-500">
+          <div className="grid place-items-center py-10 text-slate-400">
             <Spinner />
           </div>
         ) : slots.length === 0 ? (
@@ -273,13 +269,14 @@ function ScheduleStep({ lead, onBooked, onSkip }: { lead: LeadResponse; onBooked
           <div className="space-y-4">
             {grouped.map(([label, group]) => (
               <div key={label}>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</p>
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                   {group.map((s) => (
                     <button
                       key={s.startUtc}
                       onClick={() => setSelected(s.startUtc)}
-                      className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition ${selected === s.startUtc ? 'border-transparent bg-gradient-to-r from-fiber-400 to-pulse-500 text-ink-950' : 'border-white/10 hover:border-fiber-400/50'}`}
+                      aria-pressed={selected === s.startUtc}
+                      className={`min-h-11 rounded-xl border px-3 py-2.5 text-sm font-medium transition ${selected === s.startUtc ? 'border-transparent bg-gradient-to-r from-fiber-400 to-pulse-500 text-ink-950' : 'border-white/10 hover:border-fiber-400/50'}`}
                     >
                       {s.label}
                     </button>
@@ -295,7 +292,7 @@ function ScheduleStep({ lead, onBooked, onSkip }: { lead: LeadResponse; onBooked
       </Field>
       {error && <p className="field-error">{error}</p>}
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-        <button className="btn-ghost" onClick={onSkip}>
+        <button className="btn-ghost" onClick={() => { track('booking_skipped'); onSkip(); }}>
           I’d rather get a call first
         </button>
         <button className="btn-primary sm:min-w-56" disabled={!selected || busy} onClick={book}>
@@ -312,7 +309,7 @@ function DoneStep({ name, bookedAt }: { name: string; bookedAt: string | null })
       <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br from-fiber-400 to-pulse-500 text-ink-950">
         <Check className="h-8 w-8" />
       </div>
-      <h3 className="mt-5 font-display text-2xl font-bold">You’re all set{name ? `, ${name}` : ''}!</h3>
+      <h2 className="mt-5 font-display text-2xl font-bold" tabIndex={-1} ref={(el) => el?.focus()}>You’re all set{name ? `, ${name}` : ''}!</h2>
       {bookedAt ? (
         <p className="mx-auto mt-2 max-w-md text-slate-300">
           Your consultation is booked for <strong className="text-white">{fmtDateTime(bookedAt)}</strong> (Eastern). We’ll reach out beforehand to confirm.
