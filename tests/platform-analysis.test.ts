@@ -3,6 +3,7 @@ import { assessmentSchema, type AssessmentInput } from '../shared/platform/asses
 import { buildAnalysis, currentStreamsFor } from '../shared/platform/analysis';
 import { estimateSolar, SAMPLE_SOLAR_PROGRAMS, SOLAR_PROGRAMS, solarOffer } from '../shared/platform/solar';
 import { projectStream, ASSUMPTIONS_V1 } from '../shared/finance/engine';
+import { offersFromMarket, parseMonthlyPrice, parseSpeedMbps, pricingHealth } from '../shared/platform/market-offers';
 
 const AT = '2026-11-16T12:00:00.000Z';
 const parse = (a: AssessmentInput) => assessmentSchema.parse(a);
@@ -59,7 +60,8 @@ describe('real offers (Monroe pilot, no samples)', () => {
   it('downgrades stale offers automatically (data verified > 30 days before the analysis)', () => {
     const later = buildAnalysis(a, { includeSamples: false, computedAt: '2027-01-30T00:00:00.000Z' });
     expect(later.categories[0].options).toEqual([]);
-    expect(later.categories[0].selected).toBe('keep');
+    // Nothing verified left to compare → the default becomes a free advisor review.
+    expect(later.categories[0].selected).toBe('review');
   });
 });
 
@@ -67,7 +69,9 @@ describe('outside covered areas', () => {
   it('without samples: no alternatives, an honest note, current spend still analysed', () => {
     const r = buildAnalysis(parse({ zip: '10001', categories: ['internet'], internet: internet() }), { includeSamples: false, computedAt: AT });
     expect(r.categories[0].options).toEqual([]);
-    expect(r.categories[0].notes.join(' ')).toMatch(/don’t have verified alternatives/);
+    expect(r.categories[0].notes.join(' ')).toMatch(/don’t have verified prices to compare.*advisor can review this bill/);
+    expect(r.categories[0].selected).toBe('review');
+    expect(r.opportunities).toEqual([]); // a review request is never counted as savings
     expect(r.status).toBe('complete');
     expect(r.projectionBasis).toBe('current_only');
   });
@@ -138,7 +142,7 @@ describe('incomplete inputs, energy and solar', () => {
     const e = r.categories[0];
     expect(e.options).toEqual([]);
     expect(e.solar).toBe('advisor');
-    expect(e.selected).toBe('keep');
+    expect(e.selected).toBe('review');
     expect(r.opportunities).toEqual([]);
     expect(e.notes.join(' ')).toMatch(/advisor can prepare a free site-specific estimate/);
   });
@@ -191,5 +195,76 @@ describe('incomplete inputs, energy and solar', () => {
     const m = r.household!.scenarios[0].months;
     expect(m[5].current).toBe(5000);
     expect(m[6].current).toBe(8500);
+  });
+});
+
+describe('offers from admin-managed locations', () => {
+  const toledo = {
+    slug: 'toledo',
+    name: 'Toledo',
+    provider: 'Omni Fiber',
+    plansVerifiedOn: 'November 15, 2026',
+    broadbandLabelsUrl: 'https://www.omnifiber.com/broadbandlabels/',
+    plans: [
+      { name: '500 Mbps', speed: 'Fiber internet', price: '$65/mo', highlights: ['Free installation'] },
+      { name: '1 Gig', speed: 'Fiber internet', price: '$85/mo', highlights: [] },
+      { name: 'Custom', speed: '', price: 'Call for pricing', highlights: [] },
+    ],
+  };
+  const a = parse({ zip: '43604', categories: ['internet', 'mobile'], internet: internet({ monthlyCents: 9500 }), mobile: { carrier: 'X', monthlyCents: 12000, lines: 3 } });
+
+  it('reads prices and speeds exactly, and skips anything it cannot read', () => {
+    expect(parseMonthlyPrice('$65/mo')).toBe(6500);
+    expect(parseMonthlyPrice('$49.99')).toBe(4999);
+    expect(parseMonthlyPrice('$1,050 / month')).toBe(105000);
+    for (const bad of ['Call for pricing', 'from $50', '$50-70', '$0', '50', '$49.9']) expect(parseMonthlyPrice(bad)).toBeNull();
+    expect([parseSpeedMbps('500 Mbps'), parseSpeedMbps('1 Gig'), parseSpeedMbps('2.5 Gbps'), parseSpeedMbps('Basic')]).toEqual([500, 1000, 2500, null]);
+    const offers = offersFromMarket(toledo, ['43604']);
+    expect(offers.map((o) => [o.id, o.pricing.baseMonthly, o.attributes?.downloadMbps])).toEqual([
+      ['toledo-500-mbps', 6500, 500],
+      ['toledo-1-gig', 8500, 1000],
+    ]);
+  });
+
+  it('gives any configured location real comparisons, and unreviewed categories a bill review', () => {
+    const r = buildAnalysis(a, { includeSamples: false, computedAt: AT, catalog: { internet: offersFromMarket(toledo, ['43604']) } });
+    const [net, mobile] = r.categories;
+    expect(net.options.map((o) => [o.planName, o.kind, o.monthlyPrice])).toEqual([
+      ['500 Mbps', 'pending_address', 6500],
+      ['1 Gig', 'pending_address', 8500],
+    ]);
+    expect(net.selected).toBe('toledo-500-mbps');
+    expect(net.options[0].candidate.steadyMonthlySavings).toBe(9500 + 1500 - 6500);
+    expect(mobile).toMatchObject({ options: [], selected: 'review' });
+    expect(mobile.insights).toEqual(['That’s $40.00 per line for 3 lines.']);
+    expect(net.insights).toEqual(['Equipment rental costs you $180 a year.']);
+    expect(r.catalog?.internet).toHaveLength(2); // stored with the snapshot for later recalculation
+    // The customer can decline the review or ask for one even when options exist.
+    const custom = buildAnalysis(a, { includeSamples: false, computedAt: AT, catalog: r.catalog, selections: { internet: 'review', mobile: 'keep' } });
+    expect(custom.categories.map((c) => c.selected)).toEqual(['review', 'keep']);
+    expect(custom.projectionBasis).toBe('current_only');
+  });
+
+  it('hides prices with no readable verification date, and never falls back to built-in data', () => {
+    const unverified = offersFromMarket({ ...toledo, plansVerifiedOn: 'last week' }, ['43604']);
+    expect(buildAnalysis(a, { includeSamples: false, computedAt: AT, catalog: { internet: unverified } }).categories[0].options).toEqual([]);
+    // Monroe ZIP with an empty catalog: the pilot data must not leak in.
+    const monroe = parse({ zip: '48161', categories: ['internet'], internet: internet() });
+    const r = buildAnalysis(monroe, { includeSamples: false, computedAt: AT, catalog: { internet: [], internetNote: 'Coming soon note' } });
+    expect(r.categories[0].options).toEqual([]);
+    expect(r.categories[0].notes).toContain('Coming soon note');
+    expect(r.categories[0].notes.join(' ')).not.toMatch(/don’t have verified prices/);
+  });
+});
+
+describe('price freshness warnings for the team', () => {
+  const m = (plansVerifiedOn: string, price = '$50/mo') => ({ plansVerifiedOn, plans: [{ name: '1 Gig', speed: '', price, highlights: [] }] });
+  const at = (iso: string) => new Date(iso);
+  it('warns a week before prices drop out of results, and when they already have', () => {
+    expect(pricingHealth(m('November 15, 2026'), at('2026-11-16T12:00:00Z'))).toMatchObject({ state: 'ok', daysLeft: 29 });
+    expect(pricingHealth(m('November 15, 2026'), at('2026-12-09T12:00:00Z')).state).toBe('expiring');
+    expect(pricingHealth(m('November 15, 2026'), at('2026-12-20T12:00:00Z')).state).toBe('hidden');
+    expect(pricingHealth(m(''), at('2026-11-16T12:00:00Z')).state).toBe('hidden');
+    expect(pricingHealth(m('November 15, 2026', 'Call us'), at('2026-11-16T12:00:00Z')).state).toBe('none');
   });
 });

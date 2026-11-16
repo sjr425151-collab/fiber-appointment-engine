@@ -12,6 +12,7 @@
 ## Deploying
 
 - **Every push to the production branch deploys and causes ~1 minute of downtime** (persistent disk → no zero-downtime deploys).
+- **`[skip render]` is not a guarantee:** saving an environment variable or using Manual Deploy in Render deploys the newest pushed commit even if it was skipped. Only push production-safe, tested commits.
 - **To push without deploying**, include `[skip render]` in the commit message (Render documented feature; the skipped deploy still appears on the service's Events page).
 - Before any production deploy:
   1. `npm run check` (typecheck, lint, unit, API and DB tests) and `npm run test:e2e` (build plus browser suite) must pass.

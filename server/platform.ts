@@ -8,7 +8,8 @@ import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { PLATFORM_CONSENT_VERSION, platformConsentText } from '../shared/content';
 import { assessmentSchema, contactSchema, submissionSchema } from '../shared/platform/assessment';
-import { buildAnalysis, type PlatformAnalysis } from '../shared/platform/analysis';
+import { buildAnalysis, type AreaCatalog, type PlatformAnalysis } from '../shared/platform/analysis';
+import { offersFromMarket } from '../shared/platform/market-offers';
 import { opportunitiesFrom } from '../shared/platform/opportunity';
 import type { AppConfig } from './config';
 import type { DB } from './db';
@@ -40,6 +41,20 @@ function parse<T extends z.ZodType>(schema: T, data: unknown): z.output<T> {
 const potentialSavings = (a: PlatformAnalysis) => a.opportunities.reduce((s, o) => s + o.monthlySavings, 0);
 
 export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
+  /** Real offers for a ZIP, from the location that serves it (admin → Locations and Service areas). */
+  const areaCatalog = (zip: string): AreaCatalog => {
+    const area = repo.getServiceArea(db, zip);
+    const market = area ? repo.getMarket(db, area.marketId) : null;
+    if (!area || !market?.active) return { internet: [] };
+    if (area.status === 'available' || area.status === 'verify') return { internet: offersFromMarket(market, [zip]) };
+    if (area.status === 'coming_soon') {
+      return {
+        internet: [],
+        internetNote: `${market.provider} is coming to ${area.city} but isn’t available to order yet. An advisor can review your current internet bill now and let you know when it arrives.`,
+      };
+    }
+    return { internet: [] };
+  };
   const r = express.Router();
   const isTest = process.env.NODE_ENV === 'test';
   const limiter = (limit: number) => rateLimit({ windowMs: 15 * 60_000, limit, standardHeaders: 'draft-8', legacyHeaders: false, skip: () => isTest });
@@ -55,7 +70,7 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
     const sub = parse(submissionSchema, req.body);
     const assessment = parse(assessmentSchema, sub.assessment);
     const computedAt = new Date().toISOString();
-    const analysis = buildAnalysis(assessment, { includeSamples: config.flags.sampleData, computedAt });
+    const analysis = buildAnalysis(assessment, { includeSamples: config.flags.sampleData, computedAt, catalog: areaCatalog(assessment.zip) });
     const area = repo.getServiceArea(db, assessment.zip);
     const token = newToken();
     const id = repo.insertAssessment(db, {
@@ -111,7 +126,13 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
     // the snapshot's time and data scope. Prices are never taken from the request;
     // unknown option ids fall back to the default selection.
     const snapshot = a.analysis as PlatformAnalysis;
-    const chosen = buildAnalysis(assessment, { includeSamples: snapshot.includeSamples && config.flags.sampleData, computedAt: snapshot.computedAt, selections: input.selections });
+    const chosen = buildAnalysis(assessment, {
+      includeSamples: snapshot.includeSamples && config.flags.sampleData,
+      computedAt: snapshot.computedAt,
+      selections: input.selections,
+      // The offers the customer saw, exactly as stored (older snapshots have none and use the pilot data).
+      catalog: snapshot.catalog,
+    });
     const drafts = opportunitiesFrom(chosen);
     const bookingToken = newToken();
     const { lead, duplicate } = repo.createLead(db, {

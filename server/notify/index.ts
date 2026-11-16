@@ -1,3 +1,4 @@
+import { BRAND } from '../../shared/content';
 import { randomUUID } from 'node:crypto';
 import type { Appointment, Lead } from '../../shared/schemas';
 import type { Market } from '../../shared/market';
@@ -133,7 +134,7 @@ export function createNotifier(db: DB, config: AppConfig, mailer: Mailer = maile
           startUtc: appt.startUtc,
           endUtc: appt.endUtc,
           summary: `Free fiber consultation (${market.provider})`,
-          description: `Your free fiber consultation with ${market.name} Fiber Connect.${market.phoneDisplay ? ` Questions? Call or text ${market.phoneDisplay}.` : ''}`,
+          description: `Your free consultation with ${BRAND.name} (${market.name}).${market.phoneDisplay ? ` Questions? Call or text ${market.phoneDisplay}.` : ''}`,
           location: [lead.street, lead.unit, `${lead.city}, ${market.state} ${lead.zip}`].filter(Boolean).join(', '),
         });
         return forCustomer(t.customerConfirmation(lead, appt, market), {

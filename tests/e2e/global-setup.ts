@@ -11,6 +11,8 @@ declare module 'vitest' {
   export interface ProvidedContext {
     stagingUrl: string;
     productionUrl: string;
+    /** Production settings with the platform switched on (what livefiberconnect.com runs). */
+    liveUrl: string;
   }
 }
 
@@ -66,6 +68,7 @@ export default async function setup(project: TestProject) {
   const productionUrl = await start(base + 1, { APP_ENV: 'production' });
   project.provide('stagingUrl', stagingUrl);
   project.provide('productionUrl', productionUrl);
+  project.provide('liveUrl', await start(base + 2, { APP_ENV: 'production', PLATFORM_ENABLED: 'true' }));
 
   return async () => {
     await Promise.all(

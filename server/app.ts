@@ -27,6 +27,7 @@ import { renderHtml, type BootData } from './html';
 import { platformPreloader } from './preload';
 import { PLATFORM_META } from '../shared/platform/brand';
 import { OPPORTUNITY_STATUSES } from '../shared/platform/opportunity';
+import { pricingHealth } from '../shared/platform/market-offers';
 import { createNotifier, listNotifications, type Notifier } from './notify';
 import { platformRouter, PlatformError } from './platform';
 import {
@@ -316,7 +317,14 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
 
   admin.get('/me', (req, res) => {
     const missingTeam = repo.listMarkets(db, { activeOnly: true }).filter((m) => !notifier.teamTo(m).length).map((m) => m.name);
-    res.json({ email: req.session!.email, emailEnabled: notifier.enabled, locationsWithoutTeamEmail: missingTeam });
+    // Prices that are (about to be) hidden from the savings comparison because nobody re-verified them.
+    const pricing = config.flags.platform
+      ? repo
+          .listMarkets(db, { activeOnly: true })
+          .map((m) => ({ name: m.name, ...pricingHealth(m, new Date()) }))
+          .filter((p) => p.state === 'expiring' || p.state === 'hidden')
+      : [];
+    res.json({ email: req.session!.email, emailEnabled: notifier.enabled, locationsWithoutTeamEmail: missingTeam, pricingWarnings: pricing });
   });
 
   admin.get('/stats', (_req, res) => res.json(repo.leadStats(db)));

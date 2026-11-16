@@ -6,19 +6,22 @@
  * using the snapshot's `computedAt` so offer freshness can't drift.
  */
 import { analyzeHousehold, ASSUMPTIONS_V1, type Category, type CostStream, type HouseholdService, type HouseholdAnalysis } from '../finance/engine';
-import type { Cents } from '../finance/money';
+import { divRound, formatCents, type Cents } from '../finance/money';
 import { rankOffers, type Candidate, type LensResult } from '../offers/rank';
 import { offerSchema, type Offer } from '../offers/model';
 import { CATEGORY_LABEL, PROMO_MONTHS, type Assessment, type PlatformCategory } from './assessment';
 import { CATALOG_VERSION, offersFor } from './catalog';
 import { SAMPLE_SOLAR_PROGRAMS, SOLAR_FACTS, SOLAR_PROGRAMS, solarAssumptions, solarOffer } from './solar';
 
-export const ANALYSIS_VERSION = `analysis-2/${CATALOG_VERSION}`;
+export const ANALYSIS_VERSION = `analysis-3/${CATALOG_VERSION}`;
 export const HORIZONS = [12, 60, 120] as const;
 export type Horizon = (typeof HORIZONS)[number];
 export type ScenarioId = 'flat' | 'moderate' | 'high';
 
-/** Per-category choice: an offer id, or "keep" the current service. */
+/**
+ * Per-category choice: an offer id, "keep" the current service, or "review"
+ * (ask an advisor to look for a better price on this bill).
+ */
 export type Selections = Partial<Record<PlatformCategory, string>>;
 
 export interface AnalysisOptions {
@@ -26,6 +29,19 @@ export interface AnalysisOptions {
   /** Fixed analysis time (stored with the snapshot) — never "now" during re-computation. */
   computedAt: string;
   selections?: Selections;
+  /**
+   * Real offers for this household's area, supplied by the server from the
+   * admin-managed locations and stored with the snapshot so every later
+   * recalculation uses exactly what the customer saw. Omitted only for
+   * snapshots made before this existed (they fall back to the built-in pilot data).
+   */
+  catalog?: AreaCatalog;
+}
+
+export interface AreaCatalog {
+  internet: Offer[];
+  /** Shown when there are no internet offers, e.g. "Fiber is coming soon to your area". */
+  internetNote?: string;
 }
 
 export type OptionKind = 'verified' | 'pending_address' | 'sample';
@@ -55,9 +71,11 @@ export interface CategoryResult {
   /** Lenses over verified-and-eligible options, else over pending-address options, else samples. */
   lenses: LensResult[];
   lensKind: OptionKind | null;
-  /** Option used in the household projection, or 'keep'. */
+  /** Option used in the household projection, 'keep', or 'review' (advisor bill review requested). */
   selected: string;
   notes: string[];
+  /** Plain facts worked out from the household's own numbers (no outside prices). */
+  insights: string[];
   /** False when this service has no comparison at all (kept for snapshot compatibility). */
   comparisonAvailable: boolean;
   /** Electricity only: why solar is or isn't shown, for the advisor call-to-action. */
@@ -88,6 +106,8 @@ export interface PlatformAnalysis {
   projectionBasis: OptionKind | 'current_only';
   /** Categories ordered by steady-state monthly savings of the selected option. */
   opportunities: { category: PlatformCategory; label: string; monthlySavings: Cents; kind: OptionKind }[];
+  /** The area catalog used (see AnalysisOptions.catalog). */
+  catalog?: AreaCatalog;
   notes: string[];
 }
 
@@ -205,10 +225,12 @@ function solarOffersFor(a: Assessment, includeSamples: boolean): CategoryOffers 
   return { ...out, solar: out.real.length || out.samples.length ? 'estimated' : 'advisor' };
 }
 
-function offersForCategory(c: PlatformCategory, a: Assessment, includeSamples: boolean): CategoryOffers {
+function offersForCategory(c: PlatformCategory, a: Assessment, includeSamples: boolean, catalog: AreaCatalog | undefined): CategoryOffers {
   if (c === 'electricity') return solarOffersFor(a, includeSamples);
   const cat = offersFor(c, { zip: a.zip, mobileLines: a.mobile?.lines, mobileDataNeed: a.mobile?.dataNeed, mobileInternational: a.mobile?.international, includeSamples });
-  return { ...cat, assumptions: new Map(), notes: [] };
+  // With an area catalog, real internet offers come from it (never from the built-in pilot data).
+  if (catalog && c === 'internet') return { real: catalog.internet, samples: cat.samples, assumptions: new Map(), notes: !catalog.internet.length && catalog.internetNote ? [catalog.internetNote] : [] };
+  return { ...cat, real: catalog ? [] : cat.real, assumptions: new Map(), notes: [] };
 }
 
 const kindOf = (status: Candidate['status'], eligible: Candidate['eligible']): OptionKind | null =>
@@ -234,7 +256,7 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
     let options: CategoryOption[] = [];
     let lenses: LensResult[] = [];
     let lensKind: OptionKind | null = null;
-    const cat = offersForCategory(c, a, opts.includeSamples);
+    const cat = offersForCategory(c, a, opts.includeSamples, opts.catalog);
     notes.push(...cat.notes);
     const offerById = new Map([...cat.real, ...cat.samples].map((o) => [o.id, offerSchema.parse(o)]));
     {
@@ -271,16 +293,20 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
       if (real?.recommendable.length) [lenses, lensKind] = [real.lenses, 'verified'];
       else if (real?.provisionalLenses.some((l) => l.offerId)) [lenses, lensKind] = [real.provisionalLenses, 'pending_address'];
       else if (samples?.recommendable.length) [lenses, lensKind] = [samples.lenses, 'sample'];
-      if (!options.length && c !== 'electricity')
-        notes.push(opts.includeSamples ? 'No alternatives found for this service.' : 'We don’t have verified alternatives for this service in your area yet — an advisor can check for you.');
+      if (!options.length && c !== 'electricity' && !cat.notes.length)
+        notes.push(opts.includeSamples ? 'No alternatives found for this service.' : 'We don’t have verified prices to compare for this service in your area yet. An advisor can review this bill for you, free.');
     }
 
     // Default selection: the lowest-cost option, but only if it actually costs less.
     const lowest = lenses.find((l) => l.lens === 'lowest_cost')?.offerId ?? null;
     const lowestCand = options.find((o) => o.offerId === lowest)?.candidate;
     const requested = opts.selections?.[c];
-    const validRequest = requested === 'keep' || options.some((o) => o.offerId === requested);
-    const selected = validRequest ? requested! : known && lowestCand && lowestCand.savingsTotal > 0 ? lowest! : 'keep';
+    // With nothing verified to compare, the helpful default is a free advisor review of the bill
+    // (not for electricity when solar can't apply — there is nothing an advisor could offer).
+    const reviewable = c !== 'electricity' || cat.solar === 'advisor' || cat.solar === 'needs_info';
+    const validRequest = requested === 'keep' || (requested === 'review' && reviewable) || options.some((o) => o.offerId === requested);
+    const selected = validRequest ? requested! : known && lowestCand && lowestCand.savingsTotal > 0 ? lowest! : !options.length && reviewable ? 'review' : 'keep';
+    const chosen = options.find((o) => o.offerId === selected);
 
     categories.push({
       category: c,
@@ -292,14 +318,15 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
       lensKind,
       selected,
       notes,
+      insights: insightsFor(a, c),
       comparisonAvailable,
       ...(cat.solar ? { solar: cat.solar } : {}),
     });
 
     // Household services (for the projection).
     streams.forEach((s, i) => {
-      if (i === 0 && selected !== 'keep') {
-        const offer = toStream(offerById.get(selected)!, options.find((o) => o.offerId === selected)!.kind);
+      if (i === 0 && chosen) {
+        const offer = toStream(offerById.get(selected)!, chosen.kind);
         services.push({ current: s, action: { type: 'replace', with: offer } });
       } else services.push({ current: s, action: { type: 'keep' } });
     });
@@ -311,7 +338,8 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
     );
   }
 
-  const selectedKinds = categories.filter((c) => c.selected !== 'keep').map((c) => c.options.find((o) => o.offerId === c.selected)!.kind);
+  const selectedOption = (c: CategoryResult) => c.options.find((o) => o.offerId === c.selected);
+  const selectedKinds = categories.flatMap((c) => selectedOption(c)?.kind ?? []);
   const projectionBasis: PlatformAnalysis['projectionBasis'] = selectedKinds.length
     ? selectedKinds.reduce((w, k) => (KIND_RANK[k] < KIND_RANK[w] ? k : w), 'verified' as OptionKind)
     : 'current_only';
@@ -329,6 +357,7 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
       household: null,
       projectionBasis,
       opportunities: [],
+      ...(opts.catalog ? { catalog: opts.catalog } : {}),
       notes: globalNotes,
     };
   }
@@ -337,10 +366,9 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
   if (household.status !== 'complete') throw new Error('Unexpected incomplete household analysis');
 
   const opportunities = categories
-    .filter((c) => c.selected !== 'keep')
-    .map((c) => {
-      const o = c.options.find((x) => x.offerId === c.selected)!;
-      return { category: c.category, label: c.label, monthlySavings: o.candidate.steadyMonthlySavings, kind: o.kind };
+    .flatMap((c) => {
+      const o = selectedOption(c);
+      return o ? [{ category: c.category, label: c.label, monthlySavings: o.candidate.steadyMonthlySavings, kind: o.kind }] : [];
     })
     .filter((o) => o.monthlySavings > 0)
     .sort((x, y) => y.monthlySavings - x.monthlySavings);
@@ -357,8 +385,35 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
     household,
     projectionBasis,
     opportunities,
+    ...(opts.catalog ? { catalog: opts.catalog } : {}),
     notes: [...globalNotes, ...household.notes],
   };
+}
+
+/** Facts from the household's own answers — arithmetic only, never outside prices or guesses. */
+function insightsFor(a: Assessment, c: PlatformCategory): string[] {
+  const out: string[] = [];
+  const yr = (monthly: Cents) => formatCents(monthly * 12, { cents: false });
+  if (c === 'internet' && a.internet) {
+    const i = a.internet;
+    if (i.equipmentFeeCents) out.push(`Equipment rental costs you ${yr(i.equipmentFeeCents)} a year.`);
+    if (i.monthlyCents !== null && i.promoRegularCents !== null && i.promoRegularCents > i.monthlyCents && PROMO_MONTHS[i.promoEnds] !== null) {
+      out.push(`When your promotion ends, this bill goes up ${formatCents(i.promoRegularCents - i.monthlyCents, { cents: false })} a month (${yr(i.promoRegularCents - i.monthlyCents)} a year).`);
+    }
+    if (i.contractMonthsRemaining > 0) out.push(`You have about ${i.contractMonthsRemaining} month${i.contractMonthsRemaining === 1 ? '' : 's'} left on your contract${i.earlyTerminationCents ? `; leaving early costs ${formatCents(i.earlyTerminationCents, { cents: false })}` : ''}.`);
+  }
+  if (c === 'mobile' && a.mobile?.monthlyCents) {
+    const m = a.mobile;
+    if (m.lines > 1) out.push(`That’s ${formatCents(divRound(m.monthlyCents as Cents, m.lines))} per line for ${m.lines} lines.`);
+    if (m.deviceFinancingCents) out.push(`Phone payments add ${formatCents(m.deviceFinancingCents, { cents: false })} a month on top (not part of the plan comparison).`);
+  }
+  if (c === 'tv' && a.tv) {
+    const t = a.tv;
+    if (t.equipmentFeeCents) out.push(`TV boxes and DVR cost you ${yr(t.equipmentFeeCents)} a year.`);
+    if (t.monthlyCents !== null && t.otherStreamingCents) out.push(`With your other subscriptions, TV and streaming total ${formatCents(t.monthlyCents + (t.equipmentFeeCents ?? 0) + t.otherStreamingCents, { cents: false })} a month.`);
+  }
+  if (c === 'electricity' && a.electricity?.monthlyCents) out.push(`Electricity costs you about ${yr(a.electricity.monthlyCents)} a year at today’s rates.`);
+  return out;
 }
 
 /** What the plan costs in its first month: the (promotional) rate plus recurring charges that start right away. */

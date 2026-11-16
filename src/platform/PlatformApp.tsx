@@ -29,7 +29,6 @@ function Shell({ children }: { children: ReactNode }) {
               ¢
             </span>
             {PLATFORM.name}
-            <span className="hidden rounded-full bg-pf-sample-soft px-2 py-0.5 text-xs font-semibold text-pf-sample sm:inline">Preview</span>
           </Link>
           <div className="flex shrink-0 items-center gap-1 text-sm sm:gap-4">
             <a href="/savings#how" className="hidden rounded-lg px-2 py-2 text-pf-muted hover:text-pf-ink sm:inline">
@@ -58,7 +57,7 @@ function Shell({ children }: { children: ReactNode }) {
       <footer className="border-t border-pf-line bg-pf-surface px-4 py-8 text-sm text-pf-muted sm:px-6">
         <div className="mx-auto max-w-6xl space-y-3">
           <p>
-            <strong className="text-pf-ink">{PLATFORM.name}</strong> (working name) is operated by {PLATFORM.operator}. We may be paid by providers when a
+            <strong className="text-pf-ink">{PLATFORM.name}</strong> is operated by {PLATFORM.operator}. We may be paid by providers when a
             household switches; payment never changes how options are ranked, and every price shows where it came from and when it was checked.
           </p>
           <p>Savings shown are estimates based on what you tell us and the prices on file. Future price increases are hypothetical scenarios, not predictions.</p>

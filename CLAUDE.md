@@ -1,9 +1,13 @@
 # Working on this repository
 
-Read `docs/README.md` first — it links the audit, architecture, roadmap, risk register and operations guide, and shows what is Live vs Built vs Proposed.
+**LiveFiberConnect** is a household bill optimization and service brokerage platform (internet, mobile, TV, electricity/solar), operated by Spotlight Marketing LLC. It grew out of a fiber appointment engine; home internet is now one category, and the per-location fiber landing pages are one acquisition channel. Don't add provider- or city-specific logic to shared code: providers, plans and prices come from admin-managed data (`shared/platform/market-offers.ts`).
+
+Read `docs/README.md` first — it links the audit, architecture, roadmap, risk register and operations guide, and shows what is Live vs Built vs Proposed. `docs/13-transition.md` is the short map of what is reusable, adapted and next.
 
 ## Production safety (most important)
 - **Pushing to `claude/busy-bohr-j8rie0` deploys to production (livefiberconnect.com) with ~1 minute of downtime.** Put `[skip render]` in the commit message for anything that is not an approved deploy.
+- **`[skip render]` only skips the automatic deploy.** Saving an environment variable or clicking Manual Deploy in Render deploys the newest pushed commit, skipped or not (this happened on 2026-11-16). So everything pushed must be production-safe and fully tested.
+- The household platform is **live** in production (`PLATFORM_ENABLED=true`). Changes under `src/platform`, `shared/platform` and `server/platform.ts` reach real customers on the next deploy.
 - Never modify production environment variables, DNS, Render services or data without explicit owner approval.
 - Migrations are append-only and additive; rehearse new ones against a DB created by the deployed commit (see `docs/08-operations.md`).
 

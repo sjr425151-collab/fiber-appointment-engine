@@ -8,8 +8,8 @@ import type { Market } from './market';
 import { listJoin, plansFrom } from './market-utils';
 
 export const BRAND = {
-  /** Public site name (multi-location brand). */
-  name: 'Fiber Connect',
+  /** Public site name: the household savings and service brokerage brand (same as the domain). */
+  name: 'LiveFiberConnect',
   /** Legal operator of the site and the contacting party. */
   agency: 'Spotlight Marketing LLC',
 };

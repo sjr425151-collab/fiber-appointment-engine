@@ -1,6 +1,6 @@
 # Project documentation
 
-Household expense intelligence & service brokerage platform — starting with the **Fiber Connect** acquisition funnel (livefiberconnect.com, Monroe, MI).
+**LiveFiberConnect** (livefiberconnect.com): household bill optimization and service brokerage — internet, mobile, TV and electricity/solar. The per-location fiber pages are one acquisition channel into it.
 
 | Doc | Contents |
 |---|---|
@@ -13,6 +13,7 @@ Household expense intelligence & service brokerage platform — starting with th
 | [09-design-system.md](09-design-system.md) | Household-platform tokens, components, accessibility patterns, style isolation from the fiber site |
 | [10-milestone-m1.md](10-milestone-m1.md) | Milestone M1 stages, acceptance criteria and validation results |
 | [11-creative-production.md](11-creative-production.md) | Higgsfield production package: art direction, storyboard, prompts, delivery, performance and accessibility limits, budget gates (proposed) |
+| [13-transition.md](13-transition.md) | Short map of the move from fiber appointment engine to the LiveFiberConnect platform: reusable, adapted, still fiber-specific, next |
 | [12-phase3-readiness.md](12-phase3-readiness.md) | Phase 3: verified customer journey, solar alternative, fixes, test inventory, risks, costs, pilot readiness, approvals |
 
 ## Implementation status at a glance (2026-11-16, after the production deploy of `79b37cb`)
@@ -23,7 +24,8 @@ Household expense intelligence & service brokerage platform — starting with th
 | Email notifications (outbox, alerts, confirmations, reminders) | **Live** in code; **not sending** until `RESEND_API_KEY` is set |
 | Security fixes H1, H2, H3 (partial), M2, M3 (notice), lows | **Live** (deployed 2026-11-16) |
 | Ops: JSON error logs + request ids, DB-backed `/api/health` (shows the deployed commit), `npm run db:backup` | **Live**; backup schedule and off-site copy need approval |
-| Household platform: assessment, results, solar estimates, advisor booking, opportunities + admin pipeline | **Deployed but switched off** in production (`PLATFORM_ENABLED` not set; `/savings` returns 404). Turning it on is a Render environment change (see below). |
+| Household platform: assessment, results, solar estimates, advisor booking, opportunities + admin pipeline | **Live** at `/savings` since 2026-11-16 (owner set `PLATFORM_ENABLED=true`; live commit `5c3a008`) |
+| Location-driven internet offers, free bill-review requests, bill insights, address capture, LiveFiberConnect brand, price-freshness warning | **Built & tested, not deployed** (see `13-transition.md`) |
 | Real solar program terms | **Missing**: without them, electricity results offer an advisor estimate, not a number |
 | Staging service, monitoring/alerting, off-site backups | Proposed — need approval |
 

@@ -61,12 +61,12 @@ const admin = async () => {
 describe('opportunities from an advisor request', () => {
   it('records the options the customer selected, not our defaults', async () => {
     const { body: a } = await submit().expect(201);
-    expect(a.analysis.categories.find((c: { category: string }) => c.category === 'internet').selected).toBe('omni-monroe-1g');
+    expect(a.analysis.categories.find((c: { category: string }) => c.category === 'internet').selected).toBe('monroe-1-gig');
     // Customer switches internet to 2 Gig and keeps their mobile plan.
-    const c = await contact(a, { selections: { internet: 'omni-monroe-2g', mobile: 'keep' } }).expect(201);
+    const c = await contact(a, { selections: { internet: 'monroe-2-gig', mobile: 'keep' } }).expect(201);
     const opps = repo.opportunitiesForLead(db, c.body.leadId);
     expect(opps.map((o) => [o.category, o.offerId, o.kind, o.status])).toEqual([
-      ['internet', 'omni-monroe-2g', 'pending_address', 'new'],
+      ['internet', 'monroe-2-gig', 'pending_address', 'new'],
       ['electricity', 'sample-solar-ppa', 'sample', 'new'],
     ]);
     const net = opps[0];
@@ -81,7 +81,7 @@ describe('opportunities from an advisor request', () => {
     const c = await contact(a, { selections: { internet: 'not-a-real-offer', mobile: 'sample-unlimited' }, monthlySavingsCents: 999999, proposedMonthlyCents: 1 }).expect(201);
     const opps = repo.opportunitiesForLead(db, c.body.leadId);
     // Unknown id → our default (1 Gig); valid sample id is honoured.
-    expect(opps.find((o) => o.category === 'internet')!.offerId).toBe('omni-monroe-1g');
+    expect(opps.find((o) => o.category === 'internet')!.offerId).toBe('monroe-1-gig');
     expect(opps.find((o) => o.category === 'mobile')!.offerId).toBe('sample-unlimited');
     expect(opps.every((o) => (o.monthlySavingsCents ?? 0) < 999999)).toBe(true);
     // Unknown categories in selections are rejected outright.
@@ -95,6 +95,48 @@ describe('opportunities from an advisor request', () => {
     const c = await contact(a).expect(201);
     const [o] = repo.opportunitiesForLead(db, c.body.leadId);
     expect(o).toMatchObject({ category: 'electricity', kind: 'advisor', planName: 'Solar estimate requested', currentMonthlyCents: 16000, monthlySavingsCents: null });
+  });
+
+  it('turns categories with nothing verified into bill-review opportunities (production-like data)', async () => {
+    setup(false);
+    const { body: a } = await submit().expect(201);
+    expect(a.analysis.categories.map((c: { category: string; selected: string }) => [c.category, c.selected])).toEqual([
+      ['internet', 'monroe-1-gig'],
+      ['mobile', 'review'],
+      ['electricity', 'review'],
+    ]);
+    const c = await contact(a, { street: '12 W Front St', city: 'Monroe' }).expect(201);
+    expect(repo.opportunitiesForLead(db, c.body.leadId).map((o) => [o.category, o.planName, o.kind, o.monthlySavingsCents])).toEqual([
+      ['internet', '1 Gig', 'pending_address', 5500],
+      ['mobile', 'Mobile phones bill review requested', 'advisor', null],
+      ['electricity', 'Solar estimate requested', 'advisor', null],
+    ]);
+    expect(repo.getLead(db, c.body.leadId)).toMatchObject({ street: '12 W Front St', city: 'Monroe' });
+    // The customer can opt out of a review.
+    const { body: b } = await submit().expect(201);
+    const d = await contact(b, { selections: { mobile: 'keep' }, email: 'other@example.com' }).expect(201);
+    expect(repo.opportunitiesForLead(db, d.body.leadId).map((o) => o.category)).toEqual(['internet', 'electricity']);
+  });
+
+  it('uses each location’s own plans, and explains "coming soon" areas', async () => {
+    setup(false);
+    // 48166 (Newport) is seeded as coming soon.
+    const soon = (await submit({ zip: '48166', categories: ['internet'], internet: HOUSEHOLD.internet }).expect(201)).body;
+    expect(soon.analysis.categories[0]).toMatchObject({ options: [], selected: 'review' });
+    expect(soon.analysis.categories[0].notes.join(' ')).toMatch(/Omni Fiber is coming to Newport but isn’t available to order yet/);
+    // A ZIP nobody serves: no offers, generic note.
+    const none = (await submit({ zip: '10001', categories: ['internet'], internet: HOUSEHOLD.internet }).expect(201)).body;
+    expect(none.analysis.categories[0].notes.join(' ')).toMatch(/don’t have verified prices to compare/);
+    // Changing a location's prices in the admin changes new analyses, with no code change.
+    const monroe = repo.getMarket(db, 'monroe')!;
+    repo.saveMarket(db, { ...monroe, plans: [{ name: '1 Gig', speed: 'Fiber', price: '$60/mo', highlights: [] }] });
+    const updated = (await submit({ zip: '48161', categories: ['internet'], internet: HOUSEHOLD.internet }).expect(201)).body;
+    expect(updated.analysis.categories[0].options.map((o: { planName: string; monthlyPrice: number }) => [o.planName, o.monthlyPrice])).toEqual([['1 Gig', 6000]]);
+    // …while an earlier customer's stored snapshot keeps the prices they saw.
+    const earlier = (await submit().expect(201)).body;
+    repo.saveMarket(db, { ...monroe, plans: [] });
+    const c = await contact(earlier).expect(201);
+    expect(repo.opportunitiesForLead(db, c.body.leadId)[0]).toMatchObject({ planName: '1 Gig', proposedMonthlyCents: 6000 });
   });
 
   it('records a general review when the customer keeps everything', async () => {

@@ -59,14 +59,14 @@ export function opportunitiesFrom(analysis: PlatformAnalysis): OpportunityDraft[
         monthlySavingsCents: o.candidate.steadyMonthlySavings,
         fiveYearSavingsCents: o.candidate.savingsTotal,
       });
-    } else if (c.category === 'electricity' && c.solar === 'advisor') {
-      // The household may benefit from solar, but no program pricing is on file: an advisor quotes it.
+    } else if (c.selected === 'review') {
+      // Nothing verified to compare (or the customer asked for a human look): an advisor reviews this bill.
       out.push({
         category: c.category,
         offerId: '',
-        planName: 'Solar estimate requested',
+        planName: c.category === 'electricity' ? 'Solar estimate requested' : `${c.label} bill review requested`,
         kind: 'advisor',
-        estimate: true,
+        estimate: c.category === 'electricity',
         currentMonthlyCents: c.currentMonthly,
         proposedMonthlyCents: null,
         monthlySavingsCents: null,

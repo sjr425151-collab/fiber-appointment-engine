@@ -67,7 +67,7 @@ export default function Results() {
   const analysis: PlatformAnalysis | null = useMemo(() => {
     if (!data) return null;
     if (!Object.keys(selections).length) return data.analysis;
-    return buildAnalysis(assessmentSchema.parse(data.assessment), { includeSamples: data.analysis.includeSamples, computedAt: data.analysis.computedAt, selections });
+    return buildAnalysis(assessmentSchema.parse(data.assessment), { includeSamples: data.analysis.includeSamples, computedAt: data.analysis.computedAt, selections, catalog: data.analysis.catalog });
   }, [data, selections]);
 
   // Screen-reader summary of recalculated totals, announced (debounced) only when
@@ -135,6 +135,8 @@ export default function Results() {
   const atHorizon = scenario?.atHorizons.find((h) => h.months === horizon) ?? null;
   const priorities = new Set((data.assessment.priorities ?? []).map((p) => PRIORITY_LENS[p]).filter(Boolean));
   const monthlyPotential = analysis.opportunities.reduce((s, o) => s + o.monthlySavings, 0);
+  const reviews = analysis.categories.filter((c) => c.selected === 'review').map((c) => (c.category === 'electricity' ? 'electricity (solar)' : c.label.toLowerCase()));
+  const listText = (items: string[]) => (items.length < 3 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
@@ -227,14 +229,14 @@ export default function Results() {
           {/* --------------------------------------------------- opportunities */}
           {analysis.opportunities.length === 0 && (
             <Card className="mt-6">
-              <h2 className="font-display text-xl font-bold text-pf-ink">No savings found with the information we have</h2>
+              <h2 className="font-display text-xl font-bold text-pf-ink">{reviews.length ? 'Next: a free review of your bills' : 'No savings found with the information we have'}</h2>
               <p className="mt-1 text-pf-muted">
-                {analysis.categories.some((c) => c.solar === 'advisor')
-                  ? 'Solar may still lower your electric bill — an advisor can prepare a site-specific estimate.'
+                {reviews.length
+                  ? `We don’t have verified prices to compare for ${listText(reviews)} in your area yet, so we won’t guess. An advisor can check current offers for you and come back with real numbers.`
                   : 'Your current services look competitive against the options we can verify for your area. An advisor can still double-check your bills.'}
               </p>
               <a href="#next-steps" className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-pf-brand px-5 font-semibold text-white hover:bg-pf-brand-strong">
-                Talk to an advisor
+                {reviews.length ? 'Request my free review' : 'Talk to an advisor'}
               </a>
             </Card>
           )}
@@ -255,7 +257,10 @@ export default function Results() {
                 ))}
               </ol>
               <div className="mt-4 flex flex-col gap-3 border-t border-pf-line pt-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-pf-muted">An advisor can confirm prices and availability at your address and handle the switch with you.</p>
+                <p className="text-sm text-pf-muted">
+                  An advisor can confirm prices and availability at your address and handle the switch with you
+                  {reviews.length ? `, and review your ${listText(reviews)} for better prices` : ''}.
+                </p>
                 <a href="#next-steps" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-pf-brand px-5 font-semibold text-white hover:bg-pf-brand-strong">
                   Get help switching
                 </a>
@@ -359,7 +364,13 @@ export default function Results() {
       </section>
 
       {/* ----------------------------------------------------- next steps */}
-      <ContactPanel id={id} token={token} contacted={data.contacted} selections={Object.fromEntries(analysis.categories.map((c) => [c.category, c.selected]))} />
+      <ContactPanel
+        id={id}
+        token={token}
+        contacted={data.contacted}
+        selections={Object.fromEntries(analysis.categories.map((c) => [c.category, c.selected]))}
+        needsAddress={analysis.categories.some((c) => c.options.find((o) => o.offerId === c.selected)?.kind === 'pending_address')}
+      />
 
       {/* ----------------------------------------------------- methodology */}
       <Card className="mt-10">
@@ -410,6 +421,13 @@ function CategoryCard({ c, priorities, canSelect, onSelect }: { c: CategoryResul
         </div>
       </div>
 
+      {(c.insights ?? []).length > 0 && (
+        <ul className="mt-4 space-y-1 rounded-xl bg-pf-bg p-3 text-sm text-pf-ink">
+          {(c.insights ?? []).map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+        </ul>
+      )}
       {!c.comparisonAvailable ? (
         <p className="mt-4 text-sm text-pf-muted">Included in your spending. We don’t compare this service yet.</p>
       ) : c.options.length === 0 && c.category === 'electricity' ? (
@@ -421,14 +439,13 @@ function CategoryCard({ c, priorities, canSelect, onSelect }: { c: CategoryResul
               ))}
             </ul>
           </Callout>
-          {c.solar === 'advisor' && (
-            <a href="#next-steps" className="mt-3 inline-flex min-h-11 items-center rounded-xl border border-pf-field px-4 text-sm font-semibold text-pf-ink hover:bg-pf-bg">
-              Ask for a free solar estimate
-            </a>
-          )}
+          {c.solar !== 'not_suitable' && <ReviewToggle c={c} label="Include a free solar estimate from an advisor" onSelect={onSelect} />}
         </div>
       ) : c.options.length === 0 ? (
-        <p className="mt-4 text-sm text-pf-muted">{c.notes.find((n) => /alternatives/.test(n)) ?? 'No alternatives found yet.'}</p>
+        <div className="mt-5">
+          <p className="text-sm text-pf-muted">{c.notes.find((n) => /verified prices|alternatives|isn’t available to order/.test(n)) ?? 'No verified prices to compare yet.'}</p>
+          <ReviewToggle c={c} label={`Have an advisor look for a better price on my ${c.label.toLowerCase()} bill (free)`} onSelect={onSelect} />
+        </div>
       ) : (
         <fieldset className="mt-5" disabled={!canSelect}>
           <legend className="text-sm font-semibold text-pf-ink">Compare options for {c.label}{c.lensKind === 'pending_address' ? ' (if available at your address)' : ''}</legend>
@@ -517,16 +534,26 @@ function CategoryCard({ c, priorities, canSelect, onSelect }: { c: CategoryResul
           )}
         </fieldset>
       )}
-      {!(c.category === 'electricity' && c.options.length === 0) && c.notes.filter((n) => !/alternatives/.test(n) && !/don’t compare/.test(n)).length > 0 && (
+      {!(c.category === 'electricity' && c.options.length === 0) && c.notes.filter((n) => !/alternatives|verified prices|isn’t available to order/.test(n) && !/don’t compare/.test(n)).length > 0 && (
         <ul className="mt-4 space-y-1 text-sm text-pf-muted">
           {c.notes
-            .filter((n) => !/alternatives/.test(n) && !/don’t compare/.test(n))
+            .filter((n) => !/alternatives|verified prices|isn’t available to order/.test(n) && !/don’t compare/.test(n))
             .map((n) => (
               <li key={n}>• {n}</li>
             ))}
         </ul>
       )}
     </Card>
+  );
+}
+
+/** Opt in/out of a free advisor review for a service we can't price-compare yet. */
+function ReviewToggle({ c, label, onSelect }: { c: CategoryResult; label: string; onSelect: (v: string) => void }) {
+  return (
+    <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-pf-line p-4 text-sm font-semibold text-pf-ink has-[:checked]:border-pf-brand has-[:checked]:bg-pf-brand-soft has-[:focus-visible]:outline has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-pf-brand">
+      <input type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--color-pf-brand)]" checked={c.selected === 'review'} onChange={(e) => onSelect(e.target.checked ? 'review' : 'keep')} />
+      {label}
+    </label>
   );
 }
 
@@ -566,9 +593,9 @@ function OptionRow({ id, name, checked, onChange, title, children }: { id: strin
 // ------------------------------------------------------------- conversion --
 type Intent = 'callback' | 'appointment' | 'advisor';
 
-function ContactPanel({ id, token, contacted, selections }: { id: string; token: string; contacted: boolean; selections: Selections }) {
+function ContactPanel({ id, token, contacted, selections, needsAddress }: { id: string; token: string; contacted: boolean; selections: Selections; needsAddress: boolean }) {
   const [intent, setIntent] = useState<Intent[]>(['appointment']);
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', preferredContact: 'phone' });
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', preferredContact: 'phone', street: '', unit: '', city: '' });
   const [consent, setConsent] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -653,6 +680,27 @@ function ContactPanel({ id, token, contacted, selections }: { id: string; token:
               </Field>
             ))}
           </div>
+          {needsAddress && (
+            <fieldset>
+              <legend className="text-sm font-semibold text-pf-ink">
+                Service address <span className="font-normal text-pf-subtle">(optional)</span>
+              </legend>
+              <p className="mt-0.5 text-sm text-pf-subtle">Lets us confirm availability at your home before we contact you.</p>
+              <div className="mt-2 grid gap-4 sm:grid-cols-[2fr_1fr_1.5fr]">
+                {(
+                  [
+                    ['street', 'Street address', 'address-line1'],
+                    ['unit', 'Apt / unit', 'address-line2'],
+                    ['city', 'City', 'address-level2'],
+                  ] as const
+                ).map(([k, label, ac]) => (
+                  <Field key={k} label={label} error={errors[k]} id={`pf-contact-${k}`}>
+                    {(p) => <TextInput id={p.id} autoComplete={ac} aria-describedby={p.describedBy} aria-invalid={p.invalid || undefined} value={form[k]} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))} />}
+                  </Field>
+                ))}
+              </div>
+            </fieldset>
+          )}
           <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-pf-line p-4 text-sm text-pf-muted">
             <input
               id="pf-contact-consent"

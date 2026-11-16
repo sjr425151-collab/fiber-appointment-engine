@@ -10,7 +10,7 @@ import { attachParallax } from '../lib/motion';
 import HeroMedia from '../components/HeroMedia';
 import AvailabilityBanner from '../components/AvailabilityBanner';
 import { CallButton, MobileCtaBar, SiteFooter, SiteHeader, TextButton } from '../components/landing/Chrome';
-import { hasPhone } from '../lib/market';
+import { bootFlags, hasPhone } from '../lib/market';
 import { Check, Spinner } from '../components/ui';
 
 const SignupFlow = lazy(() => import('../components/SignupFlow'));
@@ -316,6 +316,25 @@ function LandingPage() {
             </figure>
           </div>
         </section>
+
+        {/* ------------------------------------- whole-household savings -- */}
+        {bootFlags().platform && (
+          <section aria-labelledby="savings-title" className="border-t border-white/10 bg-ink-900/60 px-4 py-14 sm:px-6">
+            <div className="mx-auto flex max-w-6xl flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+              <div className="max-w-2xl">
+                <h2 id="savings-title" className="font-display text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                  Internet is one bill. See them all.
+                </h2>
+                <p className="mt-3 text-slate-300">
+                  Add what you pay for internet, mobile, TV and electricity. In about 3 minutes you’ll see where your money goes, real options where we can verify them, and a free advisor review for the rest.
+                </p>
+              </div>
+              <a href="/savings" onClick={() => track('cta_click', { location: 'landing_savings' })} className="btn-primary shrink-0 justify-center">
+                Analyze my household bills
+              </a>
+            </div>
+          </section>
+        )}
 
         {/* ------------------------------------------------------ plans -- */}
         {m.plans.length > 0 && (

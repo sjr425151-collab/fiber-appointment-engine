@@ -22,12 +22,14 @@ export default function AdminLayout() {
   const nav = useNavigate();
   const [email, setEmail] = useState<string | null>(null);
   const [emailStatus, setEmailStatus] = useState<{ enabled: boolean; missing: string[] }>({ enabled: true, missing: [] });
+  const [pricing, setPricing] = useState<{ name: string; state: 'expiring' | 'hidden'; daysLeft: number | null }[]>([]);
 
   useEffect(() => {
-    api<{ email: string; emailEnabled: boolean; locationsWithoutTeamEmail: string[] }>('/admin/me')
+    api<{ email: string; emailEnabled: boolean; locationsWithoutTeamEmail: string[]; pricingWarnings?: typeof pricing }>('/admin/me')
       .then((r) => {
         setEmail(r.email);
         setEmailStatus({ enabled: r.emailEnabled, missing: r.locationsWithoutTeamEmail ?? [] });
+        setPricing(r.pricingWarnings ?? []);
       })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) nav('/admin/login', { replace: true });
@@ -78,6 +80,18 @@ export default function AdminLayout() {
           {!emailStatus.enabled
             ? 'Email notifications are off — lead alerts and customer confirmations are logged but not sent. Add RESEND_API_KEY to turn them on.'
             : `No team alert email set for: ${emailStatus.missing.join(', ')}. Add one in Locations so new leads aren’t missed.`}
+        </div>
+      )}
+      {pricing.length > 0 && (
+        <div role="status" className="border-b border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-center text-sm text-amber-100 sm:px-6">
+          {pricing
+            .map((p) =>
+              p.state === 'hidden'
+                ? `${p.name}: plan prices are hidden from customers’ savings results until re-verified.`
+                : `${p.name}: plan prices will be hidden from savings results in ${p.daysLeft} day${p.daysLeft === 1 ? '' : 's'} unless re-verified.`,
+            )
+            .join(' ')}{' '}
+          Confirm the prices and update “Prices verified on” in Locations.
         </div>
       )}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
