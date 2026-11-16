@@ -15,22 +15,19 @@ Household expense intelligence & service brokerage platform — starting with th
 | [11-creative-production.md](11-creative-production.md) | Higgsfield production package: art direction, storyboard, prompts, delivery, performance and accessibility limits, budget gates (proposed) |
 | [12-phase3-readiness.md](12-phase3-readiness.md) | Phase 3: verified customer journey, solar alternative, fixes, test inventory, risks, costs, pilot readiness, approvals |
 
-## Implementation status at a glance (2026-11-16)
+## Implementation status at a glance (2026-11-16, after the production deploy of `79b37cb`)
 
 | Capability | Status |
 |---|---|
 | Fiber funnel, locations, booking, admin, SEO | **Live** |
 | Email notifications (outbox, alerts, confirmations, reminders) | **Live** in code; **not sending** until `RESEND_API_KEY` is set |
-| Security fixes H1, H2, H3 (partial), M2, M3 (notice), lows | **Built & tested, not deployed** — awaiting approval |
-| Deterministic financial engine (`shared/finance`) | **Built & tested**, powering the platform results |
-| Provider/offer/provenance model, eligibility, ranking (`shared/offers`) | **Built & tested**, used by the platform catalog (offers still in code, not the DB) |
-| Household platform: assessment, analysis snapshots, results dashboard, advisor handoff/booking, admin Assessments | **Built & tested on local staging**, behind `PLATFORM_ENABLED` (off in production), **not deployed** |
-| Electricity → rooftop solar estimates (labelled, assumption-based) | **Built & tested**; production has no real program terms yet, so it offers an advisor estimate |
-| Opportunities (per-service, as the customer selected) + admin pipeline | **Built & tested**, not deployed |
-| Ops: JSON error logs + request ids, DB health check, staging email allow-list, `npm run db:backup` | **Built & tested**, not deployed; scheduling/off-site backups need approval |
-| Staging workflow: flags, `render.staging.yaml`, banner, noindex | **Built & tested**; Render staging service **not created** (needs approval, about $7.25/mo) |
-| Parent brand/domain, sales ops, RBAC, AI layer | Proposed |
-| Backups, monitoring | Proposed — need approval |
+| Security fixes H1, H2, H3 (partial), M2, M3 (notice), lows | **Live** (deployed 2026-11-16) |
+| Ops: JSON error logs + request ids, DB-backed `/api/health` (shows the deployed commit), `npm run db:backup` | **Live**; backup schedule and off-site copy need approval |
+| Household platform: assessment, results, solar estimates, advisor booking, opportunities + admin pipeline | **Deployed but switched off** in production (`PLATFORM_ENABLED` not set; `/savings` returns 404). Turning it on is a Render environment change (see below). |
+| Real solar program terms | **Missing**: without them, electricity results offer an advisor estimate, not a number |
+| Staging service, monitoring/alerting, off-site backups | Proposed — need approval |
+
+**Turning the household platform on in production:** Render → fiber-connect → Environment → add `PLATFORM_ENABLED` = `true` → Save (Render restarts the service, about 1 minute). Do **not** set `SAMPLE_DATA_ENABLED` in production (the server refuses to start with it). To turn the platform off again, delete the variable.
 
 ## Tests
 
