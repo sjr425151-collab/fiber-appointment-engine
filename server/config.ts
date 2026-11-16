@@ -1,8 +1,20 @@
 import { randomBytes } from 'node:crypto';
 import { hashPassword } from './lib/auth';
 
+export type AppEnv = 'development' | 'staging' | 'production';
+
+/** Feature flags. All default OFF so production behaves exactly as before. */
+export interface Flags {
+  env: AppEnv;
+  /** Parent household-savings platform (/savings, /api/platform). */
+  platform: boolean;
+  /** Clearly-labelled illustrative offers. Never allowed in production. */
+  sampleData: boolean;
+}
+
 export interface AppConfig {
   port: number;
+  flags: Flags;
   databasePath: string;
   sessionSecret: string;
   adminEmail: string;
@@ -53,8 +65,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     }
   }
 
+  const appEnv = (env.APP_ENV ?? (isProduction ? 'production' : 'development')) as AppEnv;
+  if (!['development', 'staging', 'production'].includes(appEnv)) throw new Error(`APP_ENV must be development, staging or production (got "${appEnv}")`);
+  const flag = (name: string) => {
+    const v = (env[name] ?? '').trim().toLowerCase();
+    if (v && !['true', 'false', '1', '0'].includes(v)) throw new Error(`${name} must be true or false`);
+    return v === 'true' || v === '1';
+  };
+  const flags: Flags = { env: appEnv, platform: flag('PLATFORM_ENABLED'), sampleData: flag('SAMPLE_DATA_ENABLED') };
+  if (flags.sampleData && appEnv === 'production') throw new Error('SAMPLE_DATA_ENABLED cannot be used when APP_ENV=production');
+
   return {
     port: Number(env.PORT ?? 3001),
+    flags,
     databasePath: env.DATABASE_PATH ?? './data/fiber.db',
     sessionSecret,
     adminEmail,

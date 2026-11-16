@@ -6,6 +6,7 @@ interface Boot {
   market: Market;
   markets: MarketSummary[];
   defaultSlug: string;
+  flags?: { env: 'development' | 'staging' | 'production'; platform: boolean; sampleData: boolean };
 }
 
 /** Location data the server embedded in the page (see server/html.ts). */
@@ -26,6 +27,9 @@ let currentSlug = boot?.market.slug ?? '';
 export const currentMarketSlug = () => currentSlug;
 export const allMarkets = (): MarketSummary[] => boot?.markets ?? [];
 export const defaultMarketSlug = () => boot?.defaultSlug ?? '';
+/** Feature flags rendered by the server (all off in production). */
+export const bootFlags = () => boot?.flags ?? { env: 'production' as const, platform: false, sampleData: false };
+export const bootDefaultMarket = () => boot?.market ?? null;
 
 type State = { status: 'ready'; market: Market } | { status: 'loading' } | { status: 'notfound' };
 

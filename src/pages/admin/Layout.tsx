@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../lib/api';
 import { Logo, Spinner } from '../../components/ui';
+import { bootFlags } from '../../lib/market';
 
 const NAV = [
   { to: '/admin', label: 'Leads', end: true },
   { to: '/admin/appointments', label: 'Appointments' },
   { to: '/admin/locations', label: 'Locations' },
   { to: '/admin/areas', label: 'Service areas' },
+  // Parent-platform assessments (only when the platform is enabled).
+  ...(bootFlags().platform ? [{ to: '/admin/assessments', label: 'Assessments' }] : []),
 ];
 
 export default function AdminLayout() {

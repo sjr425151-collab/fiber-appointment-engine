@@ -37,6 +37,7 @@ function toLead(r: Row): Lead {
     landingPage: (r.landing_page as string) ?? '',
     marketId: (r.market_id as string) ?? '',
     duplicateOf: (r.duplicate_of as string) ?? null,
+    assessmentId: (r.assessment_id as string) ?? null,
     consentAt: r.consent_at as string,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
@@ -436,4 +437,124 @@ export function conversionStats(db: DB, days = 30, market?: string) {
     )
     .all(...args) as { source: string; leads: number; qualified: number }[];
   return { days, funnel: Object.fromEntries(funnel.map((f) => [f.name, f])), sources };
+}
+
+// ------------------------------------------------------------- assessments --
+export interface AssessmentRow {
+  id: string;
+  zip: string;
+  marketId: string;
+  categories: string[];
+  answers: unknown;
+  analysis: unknown;
+  analysisVersion: string;
+  assumptionsVersion: string;
+  includeSamples: boolean;
+  status: 'complete' | 'incomplete';
+  currentMonthlyCents: number | null;
+  potentialSavingsCents: number;
+  projectionBasis: string;
+  leadId: string | null;
+  utmSource: string;
+  utmCampaign: string;
+  createdAt: string;
+}
+
+const toAssessment = (r: Row): AssessmentRow => ({
+  id: r.id as string,
+  zip: r.zip as string,
+  marketId: r.market_id as string,
+  categories: JSON.parse(r.categories as string),
+  answers: JSON.parse(r.answers as string),
+  analysis: JSON.parse(r.analysis as string),
+  analysisVersion: r.analysis_version as string,
+  assumptionsVersion: r.assumptions_version as string,
+  includeSamples: !!r.include_samples,
+  status: r.status as AssessmentRow['status'],
+  currentMonthlyCents: (r.current_monthly_cents as number) ?? null,
+  potentialSavingsCents: r.potential_savings_cents as number,
+  projectionBasis: r.projection_basis as string,
+  leadId: (r.lead_id as string) ?? null,
+  utmSource: r.utm_source as string,
+  utmCampaign: r.utm_campaign as string,
+  createdAt: r.created_at as string,
+});
+
+export function insertAssessment(
+  db: DB,
+  a: {
+    tokenHash: string;
+    zip: string;
+    marketId: string;
+    categories: string[];
+    answers: unknown;
+    analysis: unknown;
+    analysisVersion: string;
+    assumptionsVersion: string;
+    includeSamples: boolean;
+    status: 'complete' | 'incomplete';
+    currentMonthlyCents: number | null;
+    potentialSavingsCents: number;
+    projectionBasis: string;
+    sessionId: string;
+    utmSource: string;
+    utmCampaign: string;
+    landingPage: string;
+    referrer: string;
+  },
+): string {
+  const id = randomUUID();
+  const ts = now();
+  db.prepare(
+    `INSERT INTO assessments (id, token_hash, zip, market_id, categories, answers, analysis, analysis_version, assumptions_version,
+       include_samples, status, current_monthly_cents, potential_savings_cents, projection_basis, session_id, utm_source, utm_campaign,
+       landing_page, referrer, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id, a.tokenHash, a.zip, a.marketId, JSON.stringify(a.categories), JSON.stringify(a.answers), JSON.stringify(a.analysis),
+    a.analysisVersion, a.assumptionsVersion, a.includeSamples ? 1 : 0, a.status, a.currentMonthlyCents, a.potentialSavingsCents,
+    a.projectionBasis, a.sessionId, a.utmSource, a.utmCampaign, a.landingPage, a.referrer, ts, ts,
+  );
+  return id;
+}
+
+export function getAssessment(db: DB, id: string): AssessmentRow | null {
+  const r = db.prepare('SELECT * FROM assessments WHERE id = ?').get(id) as Row | undefined;
+  return r ? toAssessment(r) : null;
+}
+
+export function getAssessmentTokenHash(db: DB, id: string): string | null {
+  const r = db.prepare('SELECT token_hash FROM assessments WHERE id = ?').get(id) as Row | undefined;
+  return r ? (r.token_hash as string) : null;
+}
+
+export function linkAssessmentLead(db: DB, assessmentId: string, leadId: string) {
+  transaction(db, () => {
+    db.prepare('UPDATE assessments SET lead_id = ?, updated_at = ? WHERE id = ?').run(leadId, now(), assessmentId);
+    db.prepare('UPDATE leads SET assessment_id = ?, updated_at = ? WHERE id = ?').run(assessmentId, now(), leadId);
+  });
+}
+
+export function listAssessments(db: DB, f: { limit?: number; offset?: number } = {}): { assessments: Omit<AssessmentRow, 'answers' | 'analysis'>[]; total: number } {
+  const { n } = db.prepare('SELECT COUNT(*) AS n FROM assessments').get() as { n: number };
+  const rows = db.prepare('SELECT * FROM assessments ORDER BY created_at DESC LIMIT ? OFFSET ?').all(Math.min(f.limit ?? 50, 200), f.offset ?? 0) as Row[];
+  return {
+    total: n,
+    assessments: rows.map((r) => {
+      const { answers: _a, analysis: _b, ...rest } = toAssessment(r);
+      return rest;
+    }),
+  };
+}
+
+export function assessmentStats(db: DB, days = 30) {
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS completed, SUM(CASE WHEN lead_id IS NOT NULL THEN 1 ELSE 0 END) AS withLead,
+              SUM(CASE WHEN potential_savings_cents > 0 THEN 1 ELSE 0 END) AS withOpportunity
+       FROM assessments WHERE created_at >= ?`,
+    )
+    .get(since) as { completed: number; withLead: number | null; withOpportunity: number | null };
+  return { days, completed: row.completed, withLead: row.withLead ?? 0, withOpportunity: row.withOpportunity ?? 0 };
 }

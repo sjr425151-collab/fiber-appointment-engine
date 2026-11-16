@@ -12,6 +12,8 @@ const LeadDetail = lazy(() => import('./pages/admin/LeadDetail'));
 const Appointments = lazy(() => import('./pages/admin/Appointments'));
 const ServiceAreas = lazy(() => import('./pages/admin/ServiceAreas'));
 const Locations = lazy(() => import('./pages/admin/Locations'));
+const PlatformApp = lazy(() => import('./platform/PlatformApp'));
+const AdminAssessments = lazy(() => import('./pages/admin/Assessments'));
 
 function ScrollReset() {
   const { pathname } = useLocation();
@@ -43,7 +45,9 @@ export default function App() {
           <Route path="appointments" element={<Appointments />} />
           <Route path="areas" element={<ServiceAreas />} />
           <Route path="locations" element={<Locations />} />
+          <Route path="assessments" element={<AdminAssessments />} />
         </Route>
+        <Route path="/savings/*" element={<PlatformApp />} />
         <Route path="/:market" element={<Landing />} />
         <Route path="*" element={<Landing />} />
       </Routes>

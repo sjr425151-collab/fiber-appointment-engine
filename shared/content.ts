@@ -32,6 +32,20 @@ export function consentText(m: Pick<Market, 'provider'>) {
   );
 }
 
+/**
+ * Consent for the parent platform (household services, not a single provider).
+ * ⚖ Pending legal review (risk register C1) before production use.
+ */
+export const PLATFORM_CONSENT_VERSION = 'platform-2026-11-16';
+export function platformConsentText() {
+  return (
+    `By checking this box, I agree that ${BRAND.agency} may contact me at the phone number and email provided, including by ` +
+    'calls and text messages that may use automated technology, about my household services (such as internet, mobile, TV and ' +
+    'energy), this assessment and any appointment I request. Consent is not a condition of purchase. Message and data rates may ' +
+    'apply. Reply STOP to opt out of texts.'
+  );
+}
+
 /** Confirm exact wording with each provider before launching a market. */
 export function partnerDisclosure(m: Pick<Market, 'provider'>) {
   return (

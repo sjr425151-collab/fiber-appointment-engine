@@ -1,0 +1,46 @@
+# STAGING environment — separate from production (render.yaml).
+# Render only reads this file if you create a Blueprint and point it at
+# "render.staging.yaml"; pushing changes to it never creates or alters services.
+#
+# Safety properties:
+#  - autoDeployTrigger: off  → staging deploys only when you click
+#    "Manual Deploy" (any commit, including [skip render] ones).
+#  - APP_ENV=staging          → noindex everywhere, robots.txt disallows all,
+#                               staging banner shown.
+#  - No RESEND_API_KEY        → emails are logged, never sent to real people.
+#  - SAMPLE_DATA_ENABLED=true → illustrative offers, always labelled "Sample".
+# Schema: https://render.com/schema/render.yaml.json
+services:
+  - type: web
+    name: fiber-connect-staging
+    runtime: docker
+    plan: starter
+    region: ohio
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeployTrigger: "off"
+    disk:
+      name: fiber-staging-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: staging
+      - key: PLATFORM_ENABLED
+        value: "true"
+      - key: SAMPLE_DATA_ENABLED
+        value: "true"
+      - key: DATABASE_PATH
+        value: /data/staging.db
+      - key: SITE_URL
+        sync: false          # e.g. https://fiber-connect-staging.onrender.com
+      - key: TRUST_PROXY
+        value: "1"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false          # use a different password from production

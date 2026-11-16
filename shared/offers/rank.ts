@@ -25,6 +25,8 @@ export interface Candidate {
   savingsTotal: number;
   upfrontSwitchingCost: number;
   steadyMonthlyCost: number;
+  /** Average monthly savings once promotions/one-time items settle (from the comparison). */
+  steadyMonthlySavings: number;
   breakEvenMonths: number | null;
 }
 
@@ -44,6 +46,11 @@ export interface Ranking {
   /** Not eligible or unavailable, with reasons. */
   excluded: Candidate[];
   lenses: LensResult[];
+  /**
+   * Same lenses over plans that are real and current but not yet confirmed at
+   * this address — shown as "if available at your address", never as a recommendation.
+   */
+  provisionalLenses: LensResult[];
 }
 
 export function rankOffers(o: {
@@ -55,6 +62,8 @@ export function rankOffers(o: {
   now: Date;
   horizonMonths?: number;
   scenario?: EscalationScenario;
+  /** Statuses that count as usable. Default: verified + manually verified. Pass ['sample'] for a sample-only comparison. */
+  usableStatuses?: PublicStatus[];
 }): Ranking {
   const horizonMonths = o.horizonMonths ?? 60;
   const scenario = o.scenario ?? ASSUMPTIONS_V1.escalationScenarios[0];
@@ -93,32 +102,41 @@ export function rankOffers(o: {
       savingsTotal: c.totals.savings,
       upfrontSwitchingCost: c.upfrontSwitchingCost,
       steadyMonthlyCost: divRound(sum(last12.map((m) => m.proposed)), Math.max(1, last12.length)),
+      steadyMonthlySavings: c.steadyStateMonthlySavings,
       breakEvenMonths: c.breakEvenMonths,
     };
   });
 
-  const usable = (c: Candidate) => c.status === 'verified' || c.status === 'manually_verified';
+  const usableStatuses = o.usableStatuses ?? ['verified', 'manually_verified'];
+  const usable = (c: Candidate) => usableStatuses.includes(c.status);
   const recommendable = candidates.filter((c) => usable(c) && c.eligible === true);
   const needsVerification = candidates.filter(
     (c) => c.eligible !== false && c.status !== 'unavailable' && !recommendable.includes(c),
   );
   const excluded = candidates.filter((c) => !recommendable.includes(c) && !needsVerification.includes(c));
 
+  const lenses = computeLenses(recommendable, horizonMonths);
+  const provisionalLenses = computeLenses(needsVerification.filter((c) => usable(c) && c.eligible === 'unknown'), horizonMonths);
+  return { horizonMonths, scenarioId: scenario.id, recommendable, needsVerification, excluded, lenses, provisionalLenses };
+}
+
+/** The four transparent lenses over a candidate list (pure). */
+export function computeLenses(list: Candidate[], horizonMonths: number): LensResult[] {
   const pick = (list: Candidate[], better: (a: Candidate, b: Candidate) => number) => [...list].sort(better)[0]?.offerId ?? null;
   // Equal cost → prefer the faster plan, then a stable id order (deterministic).
   const byCost = (a: Candidate, b: Candidate) =>
     a.proposedTotal - b.proposedTotal || (b.downloadMbps ?? 0) - (a.downloadMbps ?? 0) || a.offerId.localeCompare(b.offerId);
-  const lenses: LensResult[] = [
+  return [
     {
       lens: 'lowest_cost',
       criteria: `Lowest total household cost over ${horizonMonths} months, including fees, promotions ending and switching costs; ties go to the faster plan.`,
-      offerId: pick(recommendable, byCost),
+      offerId: pick(list, byCost),
     },
     {
       lens: 'best_value',
       criteria: 'Most download speed per dollar of the ongoing monthly price, among plans that cost no more than you pay today over the period.',
       offerId: pick(
-        recommendable.filter((c) => c.downloadMbps !== null && c.savingsTotal >= 0 && c.steadyMonthlyCost > 0),
+        list.filter((c) => c.downloadMbps !== null && c.savingsTotal >= 0 && c.steadyMonthlyCost > 0),
         (a, b) => b.downloadMbps! / b.steadyMonthlyCost - a.downloadMbps! / a.steadyMonthlyCost || byCost(a, b),
       ),
     },
@@ -126,7 +144,7 @@ export function rankOffers(o: {
       lens: 'highest_performance',
       criteria: 'Fastest advertised download speed; ties go to the lower total cost.',
       offerId: pick(
-        recommendable.filter((c) => c.downloadMbps !== null),
+        list.filter((c) => c.downloadMbps !== null),
         (a, b) => b.downloadMbps! - a.downloadMbps! || byCost(a, b),
       ),
     },
@@ -134,12 +152,12 @@ export function rankOffers(o: {
       lens: 'lowest_friction',
       criteria: 'Lowest upfront switching cost, then shortest contract, then fewest requirements.',
       offerId: pick(
-        recommendable,
+        list,
         (a, b) => a.upfrontSwitchingCost - b.upfrontSwitchingCost || a.contractMonths - b.contractMonths || a.requirements - b.requirements || byCost(a, b),
       ),
     },
   ];
-  return { horizonMonths, scenarioId: scenario.id, recommendable, needsVerification, excluded, lenses };
+
 }
 
 function earlyTermination(s: CostStream): number {

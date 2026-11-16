@@ -234,6 +234,42 @@ export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
       CREATE INDEX idx_leads_duplicate_of ON leads(duplicate_of);
     `,
   },
+  {
+    id: 6,
+    name: 'household_assessments',
+    sql: `
+      -- Parent-platform household assessments. Contains bill amounts and
+      -- providers but no name, contact details or street address (those only
+      -- exist on a lead, when the person asks to be contacted).
+      CREATE TABLE assessments (
+        id                       TEXT PRIMARY KEY,
+        token_hash               TEXT NOT NULL,
+        zip                      TEXT NOT NULL,
+        market_id                TEXT NOT NULL DEFAULT '',
+        categories               TEXT NOT NULL,
+        answers                  TEXT NOT NULL,
+        analysis                 TEXT NOT NULL,
+        analysis_version         TEXT NOT NULL,
+        assumptions_version      TEXT NOT NULL,
+        include_samples          INTEGER NOT NULL DEFAULT 0,
+        status                   TEXT NOT NULL CHECK (status IN ('complete','incomplete')),
+        current_monthly_cents    INTEGER,
+        potential_savings_cents  INTEGER NOT NULL DEFAULT 0,
+        projection_basis         TEXT NOT NULL DEFAULT 'current_only',
+        lead_id                  TEXT REFERENCES leads(id) ON DELETE SET NULL,
+        session_id               TEXT NOT NULL DEFAULT '',
+        utm_source               TEXT NOT NULL DEFAULT '',
+        utm_campaign             TEXT NOT NULL DEFAULT '',
+        landing_page             TEXT NOT NULL DEFAULT '',
+        referrer                 TEXT NOT NULL DEFAULT '',
+        created_at               TEXT NOT NULL,
+        updated_at               TEXT NOT NULL
+      );
+      CREATE INDEX idx_assessments_created ON assessments(created_at);
+      CREATE INDEX idx_assessments_lead ON assessments(lead_id);
+      ALTER TABLE leads ADD COLUMN assessment_id TEXT;
+    `,
+  },
 ];
 
 /**

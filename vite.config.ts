@@ -21,7 +21,12 @@ function seoHead(): Plugin {
         return renderHtml(html, {
           siteUrl: 'http://localhost:5173',
           canonicalPath: '/',
-          boot: { market: MONROE, markets: [{ slug: MONROE.slug, name: MONROE.name, state: MONROE.state }], defaultSlug: MONROE.slug },
+          boot: {
+            market: MONROE,
+            markets: [{ slug: MONROE.slug, name: MONROE.name, state: MONROE.state }],
+            defaultSlug: MONROE.slug,
+            flags: { env: 'development', platform: process.env.PLATFORM_ENABLED === 'true', sampleData: process.env.SAMPLE_DATA_ENABLED === 'true' },
+          },
         });
       }
       const fonts = Object.keys(ctx.bundle ?? {}).filter((f) => /(sora|inter)-latin-wght-normal-.*\.woff2$/.test(f));
@@ -40,5 +45,7 @@ export default defineConfig({
   build: {
     target: 'es2022',
     cssCodeSplit: true,
+    // dist/.vite/manifest.json lets the server preload lazy chunks for /savings pages.
+    manifest: true,
   },
 });

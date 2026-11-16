@@ -1,0 +1,50 @@
+/* Household platform stylesheet. Loaded only with the lazy /savings chunk, so the
+   live fiber site never downloads platform styles. Utilities are generated from
+   src/platform only; shared theme values (fonts) are redeclared here. */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities) source(none);
+@source './';
+
+@theme {
+  --font-sans: 'Inter Variable', 'Inter Fallback', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Sora Variable', 'Sora Fallback', ui-sans-serif, system-ui, sans-serif;
+  /* ---- Parent platform ("pf-"): light, finance-grade palette. All text pairs
+     measured ≥ 4.5:1 (see docs/09-design-system.md); input borders ≥ 3:1. */
+  --color-pf-bg: #f6f5f1;
+  --color-pf-surface: #ffffff;
+  --color-pf-ink: #101828;
+  --color-pf-muted: #475467;
+  --color-pf-subtle: #5d6b82;
+  --color-pf-line: #d9d6ce;
+  --color-pf-field: #7a8499;
+  --color-pf-brand: #1d3fd8;
+  --color-pf-brand-strong: #162fa3;
+  --color-pf-brand-soft: #eaefff;
+  --color-pf-save: #067647;
+  --color-pf-save-soft: #e6f4ec;
+  --color-pf-cost: #b42318;
+  --color-pf-cost-soft: #fdecea;
+  --color-pf-warn: #8a3a0c;
+  --color-pf-warn-soft: #fef3e2;
+  --color-pf-sample: #5b37b8;
+  --color-pf-sample-soft: #f3eeff;
+  --color-pf-info: #175cd3;
+  --color-pf-info-soft: #eaf2ff;
+  --shadow-pf-card: 0 1px 2px rgb(16 24 40 / 0.06), 0 1px 3px rgb(16 24 40 / 0.08);
+  --shadow-pf-raised: 0 12px 32px -12px rgb(16 24 40 / 0.18);
+}
+
+/* Parent platform scope: light surface, tabular money. */
+.pf {
+  background: var(--color-pf-bg);
+  color: var(--color-pf-ink);
+  color-scheme: light;
+}
+.pf :focus-visible {
+  outline: 3px solid var(--color-pf-brand);
+  outline-offset: 2px;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+}

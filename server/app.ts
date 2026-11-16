@@ -23,7 +23,10 @@ import { marketSchema, type Market } from '../shared/market';
 import type { AppConfig } from './config';
 import type { DB } from './db';
 import { renderHtml, type BootData } from './html';
+import { platformPreloader } from './preload';
+import { PLATFORM_META } from '../shared/platform/brand';
 import { createNotifier, listNotifications, type Notifier } from './notify';
+import { platformRouter, PlatformError } from './platform';
 import {
   createSessionToken,
   newToken,
@@ -93,7 +96,7 @@ export function describeAvailability(zip: string, area: repo.ServiceArea | null,
   }
 }
 
-export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier } = {}) {
+export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier; htmlTemplate?: string } = {}) {
   const notifier = deps.notifier ?? createNotifier(db, config);
   const app = express();
   app.disable('x-powered-by');
@@ -353,6 +356,17 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     res.type('text/csv').attachment('leads.csv').send(csv);
   });
 
+  admin.get('/assessments', (req, res) => {
+    const q = parse(z.object({ limit: z.coerce.number().int().min(1).max(200).optional(), offset: z.coerce.number().int().min(0).optional() }), req.query);
+    res.json({ ...repo.listAssessments(db, q), stats: repo.assessmentStats(db, 30) });
+  });
+
+  admin.get('/assessments/:id', (req, res) => {
+    const a = repo.getAssessment(db, String(req.params.id));
+    if (!a) throw new HttpError(404, 'Assessment not found.');
+    res.json({ assessment: a });
+  });
+
   admin.get('/leads/:id', (req, res) => {
     const lead = repo.getLead(db, String(req.params.id));
     if (!lead) throw new HttpError(404, 'Lead not found.');
@@ -362,6 +376,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
       appointments: repo.listAppointments(db, { leadId: lead.id }),
       notifications: listNotifications(db, lead.id),
       consents: repo.listConsents(db, lead.id),
+      assessment: lead.assessmentId ? repo.getAssessment(db, lead.assessmentId) : null,
     });
   });
 
@@ -405,12 +420,17 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     res.json({ areas: repo.listServiceAreas(db) });
   });
 
+  // Parent platform API — 404 unless PLATFORM_ENABLED (production default: off).
+  api.use('/platform', (_req, _res, next) => next(config.flags.platform ? undefined : new HttpError(404, 'Not found.')));
+  api.use('/platform', platformRouter(config, db, notifier));
+
   api.use('/admin', admin);
   api.use((_req, _res, next) => next(new HttpError(404, 'Not found.')));
   app.use('/api', api);
 
   // ----------------------------------------------------- SEO endpoints --
   app.get('/robots.txt', (_req, res) => {
+    if (config.flags.env !== 'production') return res.type('text/plain').send('User-agent: *\nDisallow: /\n');
     res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\n\nSitemap: ${config.siteUrl}/sitemap.xml\n`);
   });
   app.get('/sitemap.xml', (_req, res) => {
@@ -422,16 +442,25 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
 
   // ---------------------------------------------------- pages (production) --
   const dist = resolve('dist');
-  if (config.isProduction && existsSync(dist)) {
+  const serveBuild = config.isProduction && existsSync(dist);
+  if (serveBuild) {
     // Hashed build assets never change; media changes rarely.
     app.use('/assets', express.static(resolve(dist, 'assets'), { immutable: true, maxAge: '1y', index: false }));
     app.use('/media', express.static(resolve(dist, 'media'), { maxAge: '30d', index: false }));
     app.use(express.static(dist, { index: false, maxAge: '1d' }));
-    const template = readFileSync(resolve(dist, 'index.html'), 'utf8');
-
+  }
+  // Tests inject a template so page routing is covered without a production build.
+  const template = deps.htmlTemplate ?? (serveBuild ? readFileSync(resolve(dist, 'index.html'), 'utf8') : null);
+  const platformPreloads = platformPreloader(resolve(dist, '.vite', 'manifest.json'));
+  if (template) {
     app.get(/^(?!\/api).*/, (req, res) => {
       const def = repo.getDefaultMarket(db);
-      const boot = (market: Market): BootData => ({ market: publicMarket(market), markets: repo.marketSummaries(db), defaultSlug: def.slug });
+      const boot = (market: Market): BootData => ({
+        market: publicMarket(market),
+        markets: repo.marketSummaries(db),
+        defaultSlug: def.slug,
+        flags: config.flags,
+      });
       const send = (status: number, html: string) => res.status(status).set('Cache-Control', 'no-cache').type('html').send(html);
       const path = req.path.replace(/\/+$/, '') || '/';
       const base = { siteUrl: config.siteUrl };
@@ -439,6 +468,23 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
       if (path === '/') return send(200, renderHtml(template, { ...base, canonicalPath: '/', boot: boot(def) }));
       if (path === '/privacy') {
         return send(200, renderHtml(template, { ...base, canonicalPath: '/privacy', title: `Privacy Notice — ${BRAND.name}`, boot: boot(def) }));
+      }
+      if (path === '/savings' || path.startsWith('/savings/')) {
+        // Parent platform: invisible unless explicitly enabled (staging/dev).
+        if (!config.flags.platform) return send(404, renderHtml(template, { ...base, canonicalPath: '/', noindex: true, boot: boot(def) }));
+        return send(
+          200,
+          renderHtml(template, {
+            ...base,
+            canonicalPath: path === '/savings' ? '/savings' : path,
+            title: PLATFORM_META.title,
+            description: PLATFORM_META.description,
+            omitStructuredData: true,
+            noindex: path.startsWith('/savings/results') || path.startsWith('/savings/design'),
+            preload: platformPreloads(path),
+            boot: boot(def),
+          }),
+        );
       }
       if (path === '/admin' || path.startsWith('/admin/')) {
         return send(200, renderHtml(template, { ...base, canonicalPath: '/', noindex: true, title: `${BRAND.name} — Team`, boot: boot(def) }));
@@ -455,8 +501,8 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
 
   // -------------------------------------------------------------- errors --
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    if (err instanceof HttpError || err instanceof BookingError) {
-      res.status(err.status).json({ error: err.message, fields: err instanceof HttpError ? err.details : undefined });
+    if (err instanceof HttpError || err instanceof BookingError || err instanceof PlatformError) {
+      res.status(err.status).json({ error: err.message, fields: err instanceof BookingError ? undefined : err.details });
       return;
     }
     const status = (err as { status?: number }).status;

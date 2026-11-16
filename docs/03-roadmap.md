@@ -9,8 +9,8 @@ _Status legend: **Live** · **Built** (tested, not deployed) · **Next** · **Pl
 | 0 Audit & foundation | Audit, architecture, risks, ops docs; finance engine; offer model; security fixes | Docs merged; 94 tests green; security fixes built | **Built** (this session) |
 | 0.5 Production hardening | Deploy security fixes; Turnstile on lead form; backups; staging service; real client IP behind Cloudflare | No open High findings; daily restorable backup; staging live | **Next** ⚑ |
 | 1 Product shell | Parent brand, design tokens v2, homepage, `/how-it-works`, `/how-we-make-money`, SEO base | Lighthouse ≥ 95 all categories on mobile; content legal-reviewed | Planned ⚑ brand |
-| 2 Assessment | Internet + mobile assessment, consented draft persistence, completion tracking | Validated multi-step flow; a11y audit pass; abandonment events | Planned |
-| 3 Savings engine UI | Wire `shared/finance` to results dashboard; scenario controls; assumption display; stored immutable analyses | Snapshot tests; results reproducible by `assumptionsVersion` | Planned (engine **Built**) |
+| 2 Assessment | Internet, mobile, TV, electricity (spend only) and solar (screen only) assessment; consented draft; funnel events | Validated multi-step flow; a11y audit pass; abandonment events | **Built** (M1, staging) |
+| 3 Savings engine UI | Wire `shared/finance` to results dashboard; scenario controls; assumption display; stored immutable analyses | Snapshot tests; results reproducible by `assumptionsVersion` | **Built** (M1, staging) |
 | 4 Provider intelligence | Offer/provenance tables + admin, re-verification queue, Omni Fiber pilot seeded from `shared/offers/seed.ts` | Stale data auto-downgraded in UI; audit trail on edits | Planned (model **Built**) |
 | 5 Sales operations | Users/roles, revocable sessions + MFA, opportunities, configurable stages, orders/installs/activations, commissions, audit log; Postgres (ADR-002) | Reps see only assigned records (tests); commission forecast vs actual | Planned |
 | 6 AI enrichment | Grounded explanations, plan-detail extraction from user text, advisor assist, cost logging | Output numbers verified against snapshot; works with AI disabled | Planned |
@@ -19,7 +19,20 @@ _Status legend: **Live** · **Built** (tested, not deployed) · **Next** · **Pl
 
 Mobile, TV, electricity and solar categories follow the internet slice through Phases 2–4; **electricity and solar ship only after legal review** (risk register C4/C5).
 
-## 2. First independently deployable milestone (after approval)
+## 2. Milestones
+
+**M1: parent platform foundation and first household assessment.** **Built & tested on local staging, not deployed.** Details and results are in `10-milestone-m1.md`. It replaced the narrower internet-only plan below, which is kept for history.
+
+**Recommended next, M2: "Production hardening and a staging launch" (Phase 0.5):**
+1. Deploy the built security fixes and M1 code to production with **flags off**: no visible change, about 1 minute of downtime, pre-deploy backup.
+2. Create the Render staging service from `render.staging.yaml` and share the staging link for owner and legal review.
+3. Nightly off-site backups and a restore drill; error monitoring; Cloudflare Turnstile on both lead forms; real client IP behind Cloudflare (M1 finding).
+4. Performance: inline critical hero CSS (fiber mobile LCP is at 2.5 s), and split the landing page out of the main bundle so platform pages reach ≤ 2.5 s (currently 2.6–2.7 s).
+5. Move offers from code into DB tables with an admin verification queue (Phase 4 start), so prices can be updated without a deploy.
+
+Owner decisions that unblock M2 are listed in §4.
+
+### Original plan (superseded by M1)
 
 **"M1 — Hardened fiber funnel + internet savings preview (staging)"**
 

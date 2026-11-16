@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { LEAD_STATUSES, type Appointment, type Lead, type LeadNote, type LeadStatus } from '../../../shared/schemas';
 import { api, fmtDateTime, fmtPhone, STATUS_LABELS } from '../../lib/api';
 import { Spinner, StatusBadge } from '../../components/ui';
+import { formatCents } from '../../../shared/finance/money';
 
 interface EmailRow {
   id: string;
@@ -33,6 +34,24 @@ const EMAIL_STATUS: Record<EmailRow['status'], string> = {
   failed: 'text-rose-300',
 };
 
+interface AssessmentSummary {
+  id: string;
+  categories: string[];
+  currentMonthlyCents: number | null;
+  potentialSavingsCents: number;
+  projectionBasis: string;
+  includeSamples: boolean;
+  createdAt: string;
+  analysis: { categories: { label: string; provider: string; currentMonthly: number | null; selected: string; options: { offerId: string; planName: string; kind: string; monthlyPrice: number }[] }[] };
+}
+
+const BASIS_LABEL: Record<string, string> = {
+  pending_address: 'Real prices · address not yet confirmed',
+  verified: 'Verified options',
+  sample: 'Includes SAMPLE data (staging)',
+  current_only: 'Current spending only',
+};
+
 interface ConsentRow {
   id: string;
   consentText: string;
@@ -46,6 +65,7 @@ interface Detail {
   notes: LeadNote[];
   notifications?: EmailRow[];
   consents?: ConsentRow[];
+  assessment?: AssessmentSummary | null;
   appointments: Appointment[];
 }
 
@@ -158,6 +178,40 @@ export default function LeadDetail() {
               </ul>
             )}
           </div>
+          {d.assessment && (
+            <div className="glass p-5">
+              <h2 className="mb-3 font-semibold">Household assessment</h2>
+              <p className="text-sm text-slate-300">
+                {fmtDateTime(d.assessment.createdAt)} · {d.assessment.categories.join(', ')}
+              </p>
+              <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <dt className="text-slate-400">Pays now</dt>
+                  <dd className="font-semibold">{d.assessment.currentMonthlyCents === null ? 'Incomplete' : `${formatCents(d.assessment.currentMonthlyCents)}/mo`}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Potential savings</dt>
+                  <dd className="font-semibold">{formatCents(d.assessment.potentialSavingsCents)}/mo</dd>
+                </div>
+              </dl>
+              <p className={`mt-2 text-xs ${d.assessment.includeSamples ? 'text-amber-300' : 'text-slate-400'}`}>{BASIS_LABEL[d.assessment.projectionBasis] ?? d.assessment.projectionBasis}</p>
+              <ul className="mt-3 space-y-2 text-sm">
+                {d.assessment.analysis.categories.map((c) => {
+                  const sel = c.options.find((o) => o.offerId === c.selected);
+                  return (
+                    <li key={c.label} className="rounded-lg bg-white/[0.03] px-3 py-2">
+                      <span className="font-medium">{c.label}</span>
+                      <span className="text-slate-400">
+                        {' '}
+                        · {c.provider || '—'} · {c.currentMonthly === null ? 'amount unknown' : `${formatCents(c.currentMonthly)}/mo`}
+                        {sel ? ` → ${sel.planName} (${formatCents(sel.monthlyPrice)}/mo, ${sel.kind.replace('_', ' ')})` : ' → keep current'}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
           {lead.duplicateOf && (
             <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
               Repeat submission — same email and phone as an{' '}

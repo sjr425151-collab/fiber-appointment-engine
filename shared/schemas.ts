@@ -89,6 +89,12 @@ export const TRACKED_EVENTS = [
   'call_click',
   'sms_click',
   'outbound_click',
+  'assessment_start',
+  'assessment_step',
+  'results_view',
+  'results_adjust',
+  'assessment_complete',
+  'advisor_request',
 ] as const;
 export type TrackedEvent = (typeof TRACKED_EVENTS)[number];
 
@@ -171,6 +177,8 @@ export interface Lead {
   marketId: string;
   /** Earlier lead with the same email + phone, when this is a repeat submission. */
   duplicateOf: string | null;
+  /** Household assessment this lead came from (parent platform). */
+  assessmentId: string | null;
   consentAt: string;
   createdAt: string;
   updatedAt: string;

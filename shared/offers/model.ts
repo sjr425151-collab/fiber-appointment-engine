@@ -26,6 +26,7 @@ export const SOURCE_TYPES = [
   'staff_confirmation', // confirmed by our team with the provider (e.g. sales rep, partner manager)
   'customer_bill', // from the customer's own bill
   'third_party', // public datasets (e.g. FCC broadband map) — never address-level proof
+  'sample', // illustrative data for staging/demos — never a real offer
 ] as const;
 
 export const provenanceSchema = z.object({
@@ -98,7 +99,12 @@ export const offerSchema = z.object({
   pricing: costStreamSchema.omit({ id: true, label: true, category: true, firstBillProration: true, earlyTermination: true }),
   contractMonths: z.number().int().min(0).max(60).default(0),
   /** Where the offer applies. Availability at an address is a separate check. */
-  geography: z.object({ zips: z.array(z.string().regex(/^\d{5}$/)).default([]), marketIds: z.array(z.string()).default([]) }),
+  geography: z.object({
+    zips: z.array(z.string().regex(/^\d{5}$/)).default([]),
+    marketIds: z.array(z.string()).default([]),
+    /** Applies everywhere (sample data only). */
+    nationwide: z.boolean().default(false),
+  }),
   eligibility: z
     .object({
       newCustomersOnly: z.boolean().default(false),
@@ -115,7 +121,7 @@ export type Offer = z.input<typeof offerSchema>;
 type OfferOut = z.output<typeof offerSchema>;
 
 /** The five statuses consumers ever see (Section 1.2). */
-export type PublicStatus = 'verified' | 'manually_verified' | 'estimated' | 'pending_verification' | 'unavailable';
+export type PublicStatus = 'verified' | 'manually_verified' | 'estimated' | 'pending_verification' | 'unavailable' | 'sample';
 
 /** Maximum age of a verification before the offer is treated as pending again. */
 export const STALE_AFTER_DAYS: Record<(typeof SOURCE_TYPES)[number], number> = {
@@ -125,6 +131,7 @@ export const STALE_AFTER_DAYS: Record<(typeof SOURCE_TYPES)[number], number> = {
   staff_confirmation: 30,
   customer_bill: 90,
   third_party: 30,
+  sample: 36_500,
 };
 
 /**
@@ -134,6 +141,8 @@ export const STALE_AFTER_DAYS: Record<(typeof SOURCE_TYPES)[number], number> = {
 export function publicStatus(offer: Offer | OfferOut, now: Date): { status: PublicStatus; reasons: string[] } {
   const p = provenanceSchema.parse(offer.provenance);
   const reasons: string[] = [];
+  // Sample data is always and only "sample" — it can never present as verified.
+  if (p.sourceType === 'sample') return { status: p.review === 'withdrawn' ? 'unavailable' : 'sample', reasons: ['Illustrative sample — not a real offer'] };
   if (p.review === 'withdrawn') return { status: 'unavailable', reasons: ['Offer withdrawn'] };
   if (p.expiresAt && new Date(p.expiresAt) <= now) return { status: 'unavailable', reasons: ['Offer expired'] };
   if (p.effectiveFrom && new Date(p.effectiveFrom) > now) return { status: 'pending_verification', reasons: ['Offer not yet effective'] };
@@ -167,13 +176,16 @@ export interface EligibilityResult {
 export function checkEligibility(input: Offer, ctx: HouseholdContext): EligibilityResult {
   const offer = offerSchema.parse(input);
   const reasons: string[] = [];
-  const inArea = offer.geography.zips.includes(ctx.zip) || (!!ctx.marketId && offer.geography.marketIds.includes(ctx.marketId));
+  const inArea =
+    offer.geography.nationwide || offer.geography.zips.includes(ctx.zip) || (!!ctx.marketId && offer.geography.marketIds.includes(ctx.marketId));
   if (!inArea) return { eligible: false, reasons: ['Not offered in this area'] };
   if (offer.eligibility.newCustomersOnly && ctx.existingProviderIds?.includes(offer.providerId)) {
     return { eligible: false, reasons: ['New customers only'] };
   }
   const missing = offer.eligibility.requires.filter((r) => !ctx.facts?.has(r));
   if (missing.length) reasons.push(`Requires: ${missing.join(', ')}`);
+  // Illustrative samples have no real coverage to check.
+  if (offer.provenance.sourceType === 'sample') return { eligible: missing.length ? false : true, reasons };
   const level = ctx.coverage?.[offer.providerId] ?? 'unknown';
   if (level === 'none') return { eligible: false, reasons: ['Provider reports no service at this address'] };
   if (level !== 'address_confirmed') {

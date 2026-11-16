@@ -5,7 +5,8 @@
 | Environment | Where | Deploys from | Status |
 |---|---|---|---|
 | Local | `npm run dev` (web :5173, API :3001) | working tree | Live |
-| Staging | separate Render service + disk | `staging` branch | **Not created** — needs approval (ADR-008) |
+| Staging (local) | `npm run build`, then the server with the staging flags (below) | working tree | Used for M1 validation |
+| Staging (Render) | separate service + disk from `render.staging.yaml` | any commit, **manual deploy only** | **Not created** — needs approval (ADR-008, about $7.25/mo) |
 | Production | Render `fiber-connect`, livefiberconnect.com | `claude/busy-bohr-j8rie0` (auto-deploy on push) | Live |
 
 ## Deploying
@@ -15,10 +16,37 @@
 - Before any production deploy: `npm run check` (typecheck + lint + tests) and `npm run build` must pass; prefer off-peak hours; announce if leads are actively coming in.
 - After deploy: verify `GET /api/health` = 200, homepage renders, a test ZIP check works, admin loads.
 
+## Staging and feature flags
+
+| Flag | Default | Effect |
+|---|---|---|
+| `APP_ENV` | from `NODE_ENV` | `staging` or `development`: `noindex` on every page, robots.txt disallows all, staging banner |
+| `PLATFORM_ENABLED` | `false` | Serves `/savings/*` and `/api/platform/*`; otherwise both return 404 |
+| `SAMPLE_DATA_ENABLED` | `false` | Adds illustrative offers labelled "Sample"; **the server refuses to start** with this set when `APP_ENV=production` |
+
+Production sets none of these, so it behaves exactly as before (tested).
+
+**Run staging locally:**
+```bash
+npm run build
+NODE_ENV=production APP_ENV=staging PLATFORM_ENABLED=true SAMPLE_DATA_ENABLED=true \
+PORT=3200 SITE_URL=http://localhost:3200 DATABASE_PATH=./staging.db \
+SESSION_SECRET=$(openssl rand -hex 32) ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='a-staging-only-password' \
+npx tsx server/index.ts
+```
+
+**Create the Render staging service (after approval):**
+1. Render dashboard → *New* → *Blueprint* → this repository.
+2. Set the blueprint file to `render.staging.yaml`.
+3. Fill `SITE_URL`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` with values different from production.
+4. Leave `RESEND_API_KEY` unset so no email reaches real people.
+
+It never auto-deploys. Use *Manual Deploy* for any commit, including `[skip render]` ones. Production (`render.yaml`) is unaffected.
+
 ## Database migrations
 
 1. Add a new entry to `MIGRATIONS` (never edit shipped ones). Additive only; destructive changes use expand → migrate → contract across releases.
-2. **Rehearse on production-shaped data**: build a DB with the deployed commit (git worktree), then open it with the new code and check invariants. Migration 5 was rehearsed this way: migrations 1–5 applied, 6/6 leads with exactly matching consent rows, appointments and outbox untouched, re-open idempotent.
+2. **Rehearse on production-shaped data**: build a DB with the deployed commit (git worktree), then open it with the new code and check invariants. Migration 5 was rehearsed this way: migrations 1–5 applied, 6/6 leads with exactly matching consent rows, appointments and outbox untouched, re-open idempotent. Migrations 5–6 were rehearsed again on 2026-11-16 against a DB created and populated by the deployed commit `624aa58` (a real booking through the browser). Results: 1–6 applied; the lead, appointment and 6 outbox rows were preserved; exactly one consent row per lead; `leads.assessment_id` NULL; reopening was idempotent. The new code then served the fiber funnel on that DB end to end, with the platform returning 404.
 3. Take a backup immediately before the deploy (below).
 
 ## Backups (to implement — finding M6)

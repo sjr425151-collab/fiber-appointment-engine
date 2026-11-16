@@ -31,6 +31,7 @@ class FakeMailer implements Mailer {
 
 const config = (teamEmails: string[] = []): AppConfig => ({
   port: 0,
+  flags: { env: 'production' as const, platform: false, sampleData: false },
   databasePath: ':memory:',
   sessionSecret: 'x'.repeat(64),
   adminEmail: 'admin@example.com',

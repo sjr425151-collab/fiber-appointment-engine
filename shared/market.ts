@@ -23,7 +23,7 @@ const validTimeZone = (tz: string) => {
   }
 };
 
-const RESERVED_SLUGS = ['default', 'admin', 'api', 'privacy', 'assets', 'media', 'robots.txt', 'sitemap.xml', 'favicon.svg'];
+const RESERVED_SLUGS = ['default', 'savings', 'platform', 'admin', 'api', 'privacy', 'assets', 'media', 'robots.txt', 'sitemap.xml', 'favicon.svg'];
 
 export const planSchema = z.object({
   name: z.string().trim().min(1).max(40),

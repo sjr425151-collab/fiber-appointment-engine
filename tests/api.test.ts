@@ -13,6 +13,7 @@ process.env.NODE_ENV = 'test';
 const TZ = 'America/Detroit';
 const config: AppConfig = {
   port: 0,
+  flags: { env: 'production' as const, platform: false, sampleData: false },
   databasePath: ':memory:',
   sessionSecret: 'x'.repeat(64),
   adminEmail: 'admin@example.com',
@@ -354,7 +355,7 @@ describe('per-location page rendering', () => {
     const html = renderHtml(tpl, {
       siteUrl: 'https://x.test',
       canonicalPath: '/',
-      boot: { market: MONROE, markets: [{ slug: 'monroe', name: 'Monroe', state: 'MI' }], defaultSlug: 'monroe' },
+      boot: { market: MONROE, markets: [{ slug: 'monroe', name: 'Monroe', state: 'MI' }], defaultSlug: 'monroe', flags: { env: 'production' as const, platform: false, sampleData: false } },
     });
     expect(html).toContain('<title>Omni Fiber Internet in Monroe, MI');
     expect(html).toContain('500 Mbps for $50/mo, 1 Gig for $50/mo, or 2 Gig for $70/mo');
@@ -369,7 +370,7 @@ describe('per-location page rendering', () => {
   it('escapes hostile location text in attributes and embedded JSON', async () => {
     const { renderHtml } = await import('../server/html');
     const evil = { ...MONROE, name: '</script><script>alert(1)</script>"' };
-    const html = renderHtml(tpl, { siteUrl: 'https://x.test', canonicalPath: '/x', noindex: true, boot: { market: evil, markets: [], defaultSlug: 'monroe' } });
+    const html = renderHtml(tpl, { siteUrl: 'https://x.test', canonicalPath: '/x', noindex: true, boot: { market: evil, markets: [], defaultSlug: 'monroe', flags: { env: 'production' as const, platform: false, sampleData: false } } });
     expect(html).not.toContain('<script>alert(1)');
     expect(html).toContain('\\u003c/script>');
     expect(html).toContain('content="noindex, nofollow"');
@@ -449,7 +450,7 @@ describe('security hardening', () => {
     const html = renderHtml('<title>%%TITLE%%</title><!--%%HEAD_DATA%%-->', {
       siteUrl: 'https://x.test',
       canonicalPath: '/',
-      boot: { market: { ...MONROE, name: "Monroe $& $' $1" }, markets: [], defaultSlug: 'monroe' },
+      boot: { market: { ...MONROE, name: "Monroe $& $' $1" }, markets: [], defaultSlug: 'monroe', flags: { env: 'production' as const, platform: false, sampleData: false } },
     });
     expect(html).toContain("Monroe $&amp; $&#39;".replace('&#39;', "'"));
     expect(html).not.toContain('%%');

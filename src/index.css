@@ -1,4 +1,10 @@
 @import 'tailwindcss';
+/* The household platform ships its own stylesheet (src/platform/platform.css),
+   loaded only with its lazy chunk, so the fiber site's CSS stays unchanged. */
+@source not './platform';
+/* Docs and tests mention class names; don't let them add CSS to the site. */
+@source not '../docs';
+@source not '../tests';
 
 /* Headline font: preloaded, and `optional` so a late arrival never swaps (and
    never shifts layout) — slow connections keep the metric-matched fallback. */
