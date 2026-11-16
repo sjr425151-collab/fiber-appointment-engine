@@ -33,6 +33,8 @@ export interface NotificationRow {
 }
 
 const MAX_ATTEMPTS = 5;
+/** Abuse guard: the lead form emails whatever address is typed in. */
+export const PER_RECIPIENT_DAILY_LIMIT = 3;
 const BACKOFF_MIN = [1, 5, 15, 60]; // minutes before attempts 2..5
 /** "We got your request" waits this long, and is skipped if they book meanwhile. */
 export const LEAD_FOLLOWUP_DELAY_MIN = 20;
@@ -96,9 +98,18 @@ export function createNotifier(db: DB, config: AppConfig, mailer: Mailer = maile
 
     const forTeam = (r: t.Rendered): { email: OutgoingEmail } | { skip: string } =>
       team.length ? { email: { ...base, ...r, to: team, replyTo: [lead.email] } } : { skip: 'No team email configured for this location' };
-    const forCustomer = (r: t.Rendered, extra: Partial<OutgoingEmail> = {}): { email: OutgoingEmail } => ({
-      email: { ...base, ...r, to: [lead.email], ...(team.length ? { replyTo: [team[0]] } : {}), ...extra },
-    });
+    const forCustomer = (r: t.Rendered, extra: Partial<OutgoingEmail> = {}): { email: OutgoingEmail } | { skip: string } => {
+      const since = new Date(at.getTime() - 24 * 3600_000).toISOString();
+      const toThem = db
+        .prepare("SELECT COUNT(*) AS n FROM notifications WHERE to_addr = ? AND status IN ('sent','logged') AND sent_at >= ?")
+        .get(lead.email, since) as { n: number };
+      if (toThem.n >= PER_RECIPIENT_DAILY_LIMIT) return { skip: `Recipient limit reached (${PER_RECIPIENT_DAILY_LIMIT} emails per 24h)` };
+      const total = db
+        .prepare("SELECT COUNT(*) AS n FROM notifications WHERE kind LIKE 'customer_%' AND status = 'sent' AND sent_at >= ?")
+        .get(since) as { n: number };
+      if (total.n >= config.email.dailyCustomerLimit) return { skip: 'Daily customer email limit reached' };
+      return { email: { ...base, ...r, to: [lead.email], ...(team.length ? { replyTo: [team[0]] } : {}), ...extra } };
+    };
 
     switch (row.kind) {
       case 'team_new_lead':
@@ -173,7 +184,7 @@ export function createNotifier(db: DB, config: AppConfig, mailer: Mailer = maile
             db.prepare('UPDATE notifications SET status = ?, send_after = ?, to_addr = ?, subject = ?, error = ?, updated_at = ? WHERE id = ?').run(
               giveUp ? 'failed' : 'pending', giveUp ? row.sendAfter : next, email.to.join(', '), email.subject, message.slice(0, 500), now(), row.id,
             );
-            if (giveUp) console.error(`[email] gave up on ${row.kind} ${row.id}: ${message}`);
+            if (giveUp) console.error(`[email] gave up on ${row.kind} ${row.id} after ${row.attempts} attempt(s)`);
           }
         }
       }

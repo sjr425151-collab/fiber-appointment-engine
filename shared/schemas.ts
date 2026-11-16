@@ -96,7 +96,11 @@ export const eventInputSchema = z.object({
   name: z.enum(TRACKED_EVENTS),
   sessionId: z.string().trim().max(64).default(''),
   path: z.string().trim().max(300).default(''),
-  props: z.record(z.string().max(40), z.union([z.string().max(200), z.number(), z.boolean()])).default({}),
+  props: z
+    .record(z.string().max(40), z.union([z.string().max(200), z.number(), z.boolean()]))
+    .refine((o) => Object.keys(o).length <= 10, 'Too many event properties')
+    .refine((o) => JSON.stringify(o).length <= 1000, 'Event properties too large')
+    .default({}),
   utmSource: z.string().trim().max(100).default(''),
   utmCampaign: z.string().trim().max(100).default(''),
   market: z.string().trim().max(40).default(''),
@@ -165,6 +169,8 @@ export interface Lead {
   referrer: string;
   landingPage: string;
   marketId: string;
+  /** Earlier lead with the same email + phone, when this is a repeat submission. */
+  duplicateOf: string | null;
   consentAt: string;
   createdAt: string;
   updatedAt: string;

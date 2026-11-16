@@ -36,6 +36,7 @@ function toLead(r: Row): Lead {
     referrer: (r.referrer as string) ?? '',
     landingPage: (r.landing_page as string) ?? '',
     marketId: (r.market_id as string) ?? '',
+    duplicateOf: (r.duplicate_of as string) ?? null,
     consentAt: r.consent_at as string,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
@@ -187,44 +188,60 @@ export interface NewLead {
 }
 
 /**
- * Create a lead, or refresh an existing one when the same email + phone
- * resubmits (avoids duplicate leads from the same household).
+ * Record a lead submission. Every submission gets its own lead row, booking
+ * token and consent record. When the same email + phone already has an open
+ * lead, the new one is linked to it (`duplicate_of`) and a note is added to the
+ * original — the original's data, consent and appointment are never modified.
  */
-export function createOrRefreshLead(db: DB, l: NewLead): { lead: Lead; duplicate: boolean } {
+export function createLead(db: DB, l: NewLead): { lead: Lead; duplicate: boolean } {
   return transaction(db, () => {
     const ts = now();
     const existing = db
-      .prepare("SELECT id FROM leads WHERE email = ? AND phone = ? AND status <> 'lost' ORDER BY created_at DESC LIMIT 1")
+      .prepare("SELECT id FROM leads WHERE email = ? AND phone = ? AND status <> 'lost' AND duplicate_of IS NULL ORDER BY created_at LIMIT 1")
       .get(l.email, l.phone) as { id: string } | undefined;
-
-    if (existing) {
-      db.prepare(
-        `UPDATE leads SET first_name=?, last_name=?, street=?, unit=?, city=?, zip=?, preferred_contact=?,
-           current_provider=?, area_status=?, booking_token_hash=?, consent_text=?, consent_at=?,
-           consent_ip=?, consent_user_agent=?, market_id=?, updated_at=? WHERE id=?`,
-      ).run(
-        l.firstName, l.lastName, l.street, l.unit, l.city, l.zip, l.preferredContact, l.currentProvider,
-        l.areaStatus, l.bookingTokenHash, l.consentText, ts, l.consentIp, l.consentUserAgent, l.marketId, ts, existing.id,
-      );
-      addNote(db, existing.id, 'Lead resubmitted the availability form.', 'system');
-      return { lead: getLead(db, existing.id)!, duplicate: true };
-    }
 
     const id = randomUUID();
     db.prepare(
       `INSERT INTO leads (id, first_name, last_name, email, phone, street, unit, city, zip, preferred_contact,
          current_provider, status, area_status, source, utm_source, utm_medium, utm_campaign, booking_token_hash,
          consent_text, consent_at, consent_ip, consent_user_agent, created_at, updated_at,
-         utm_content, utm_term, click_id, referrer, landing_page, session_id, market_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         utm_content, utm_term, click_id, referrer, landing_page, session_id, market_id, duplicate_of)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id, l.firstName, l.lastName, l.email, l.phone, l.street, l.unit, l.city, l.zip, l.preferredContact,
       l.currentProvider, l.areaStatus, l.source, l.utmSource, l.utmMedium, l.utmCampaign, l.bookingTokenHash,
       l.consentText, ts, l.consentIp, l.consentUserAgent, ts, ts,
-      l.utmContent, l.utmTerm, l.clickId, l.referrer, l.landingPage, l.sessionId, l.marketId,
+      l.utmContent, l.utmTerm, l.clickId, l.referrer, l.landingPage, l.sessionId, l.marketId, existing?.id ?? null,
     );
-    return { lead: getLead(db, id)!, duplicate: false };
+    db.prepare('INSERT INTO consents (id, lead_id, consent_text, ip, user_agent, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+      randomUUID(), id, l.consentText, l.consentIp, l.consentUserAgent, 'lead_form', ts,
+    );
+    if (existing) {
+      addNote(db, existing.id, `Submitted the form again (new lead ${id}). This record was not changed.`, 'system');
+      addNote(db, id, `Repeat submission — same email and phone as lead ${existing.id}.`, 'system');
+    }
+    return { lead: getLead(db, id)!, duplicate: !!existing };
   });
+}
+
+export interface ConsentRecord {
+  id: string;
+  consentText: string;
+  ip: string;
+  userAgent: string;
+  source: string;
+  createdAt: string;
+}
+
+export function listConsents(db: DB, leadId: string): ConsentRecord[] {
+  return (db.prepare('SELECT * FROM consents WHERE lead_id = ? ORDER BY created_at').all(leadId) as Row[]).map((r) => ({
+    id: r.id as string,
+    consentText: r.consent_text as string,
+    ip: r.ip as string,
+    userAgent: r.user_agent as string,
+    source: r.source as string,
+    createdAt: r.created_at as string,
+  }));
 }
 
 export function getLead(db: DB, id: string): Lead | null {
@@ -248,6 +265,8 @@ export interface LeadFilter {
   q?: string;
   limit?: number;
   offset?: number;
+  /** Upper bound for `limit` (admin list: 200; CSV export: larger). */
+  maxLimit?: number;
 }
 
 export function listLeads(db: DB, f: LeadFilter = {}): { leads: Lead[]; total: number } {
@@ -270,7 +289,7 @@ export function listLeads(db: DB, f: LeadFilter = {}): { leads: Lead[]; total: n
   const { n } = db.prepare(`SELECT COUNT(*) AS n FROM leads ${clause}`).get(...params) as { n: number };
   const rows = db
     .prepare(`SELECT * FROM leads ${clause} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
-    .all(...params, Math.min(f.limit ?? 50, 200), f.offset ?? 0) as Row[];
+    .all(...params, Math.min(f.limit ?? 50, f.maxLimit ?? 200), f.offset ?? 0) as Row[];
   return { leads: rows.map(toLead), total: n };
 }
 
@@ -383,6 +402,19 @@ export function insertEvent(
   db.prepare(
     'INSERT INTO events (name, session_id, path, props, utm_source, utm_campaign, market_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   ).run(e.name, e.sessionId, e.path, JSON.stringify(e.props), e.utmSource, e.utmCampaign, e.marketId ?? '', now());
+}
+
+/**
+ * Keep the anonymous events table bounded: drop events older than `maxAgeDays`
+ * and, as a backstop, all but the newest `maxRows`. Returns rows deleted.
+ */
+export function pruneEvents(db: DB, maxAgeDays = 400, maxRows = 500_000): number {
+  const cutoff = new Date(Date.now() - maxAgeDays * 86_400_000).toISOString();
+  const byAge = db.prepare('DELETE FROM events WHERE created_at < ?').run(cutoff).changes;
+  const byCount = db
+    .prepare('DELETE FROM events WHERE id <= (SELECT id FROM events ORDER BY id DESC LIMIT 1 OFFSET ?)')
+    .run(maxRows).changes;
+  return Number(byAge) + Number(byCount);
 }
 
 /** Funnel + attribution summary for the admin dashboard. */

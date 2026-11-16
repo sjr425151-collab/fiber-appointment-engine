@@ -38,7 +38,7 @@ const config = (teamEmails: string[] = []): AppConfig => ({
   timezone: 'America/Detroit',
   siteUrl: 'https://livefiberconnect.com',
   isProduction: false,
-  email: { resendApiKey: '', from: 'Fiber Connect <hello@mail.livefiberconnect.com>', teamEmails },
+  email: { resendApiKey: '', from: 'Fiber Connect <hello@mail.livefiberconnect.com>', teamEmails, dailyCustomerLimit: 80 },
 });
 
 const lead = {
@@ -318,5 +318,29 @@ describe('helpers', () => {
     expect(ics).toContain('DTSTART:20261117T140000Z\r\n');
     expect(ics).toContain('DESCRIPTION:Line one\\; with\\, punctuation\\nLine two');
     for (const line of ics.split('\r\n')) expect(Buffer.byteLength(line)).toBeLessThanOrEqual(75);
+  });
+});
+
+describe('email abuse limits (H3)', () => {
+  it('caps emails to any one address per day', async () => {
+    for (let i = 0; i < 5; i++) await request(app).post('/api/leads').send({ ...lead, phone: `73455501${10 + i}` });
+    await notifier.processDue(minutes(30));
+    expect(mailer.sent.filter((e) => e.to[0] === 'jamie@example.com')).toHaveLength(3);
+    const skipped = db.prepare("SELECT error FROM notifications WHERE status = 'skipped' AND kind = 'customer_lead_received'").all() as { error: string }[];
+    expect(skipped.map((r) => r.error)).toEqual(['Recipient limit reached (3 emails per 24h)', 'Recipient limit reached (3 emails per 24h)']);
+    expect(mailer.bySubject(/^New lead/)).toHaveLength(5); // team alerts are never capped
+  });
+
+  it('enforces a global daily cap on customer emails only', async () => {
+    db = openDatabase(':memory:');
+    repo.saveMarket(db, { ...MONROE, notifyEmails: ['team@spotlight.example'] });
+    mailer = new FakeMailer();
+    const cfg = { ...config(), email: { ...config().email, dailyCustomerLimit: 2 } };
+    notifier = createNotifier(db, cfg, mailer);
+    app = createApp(cfg, db, { notifier });
+    for (let i = 0; i < 3; i++) await request(app).post('/api/leads').send({ ...lead, email: `p${i}@example.com`, phone: `73455502${10 + i}` });
+    await notifier.processDue(minutes(30));
+    expect(mailer.bySubject(/We got your request/)).toHaveLength(2);
+    expect(mailer.bySubject(/^New lead/)).toHaveLength(3);
   });
 });

@@ -83,7 +83,8 @@ export class LogMailer implements Mailer {
   readonly enabled = false;
   constructor(private quiet = false) {}
   async send(e: OutgoingEmail): Promise<SendResult> {
-    if (!this.quiet) console.log(`[email:not-configured] would send "${e.subject}" → ${e.to.join(', ')}`);
+    // No recipient or subject in logs — both can contain personal data.
+    if (!this.quiet) console.log(`[email:not-configured] would send ${e.tags?.[0]?.value ?? 'email'} (${e.to.length} recipient(s))`);
     return { status: 'logged', providerId: '' };
   }
 }

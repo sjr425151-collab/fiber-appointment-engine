@@ -50,8 +50,9 @@ export default function Privacy() {
             </li>
             <li>
               <strong className="text-white">Visit information:</strong> the campaign link or website that referred you (for example,
-              utm parameters or an ad click ID) and anonymous on-site events such as “checked a ZIP code” or “booked an appointment”. These use
-              a random per-tab identifier, not cookies, and are not linked to advertising profiles.
+              utm parameters or an ad click ID) and on-site events such as “checked a ZIP code” or “booked an appointment”. These use a random
+              per-tab identifier instead of cookies and are not shared with advertising networks. If you submit the form, that identifier is
+              saved with your request so we can see which page and campaign brought you to us.
             </li>
           </ul>
 
@@ -65,6 +66,10 @@ export default function Privacy() {
             We do not sell your personal information. We share it only as needed to confirm service and arrange installation with {m.provider}, or
             when required by law.
           </p>
+          <p>
+            We use service providers to run this site: Render (website hosting and data storage), Cloudflare (domain and network security) and
+            Resend (sending appointment emails). They process information only to provide those services to us.
+          </p>
 
           <h2>Calls and text messages</h2>
           <p>When you submit the form you agree to the following:</p>
@@ -76,8 +81,10 @@ export default function Privacy() {
 
           <h2>Security and retention</h2>
           <p>
-            Your information is stored on access-controlled systems and transmitted over encrypted connections. We keep it only as long as needed to
-            serve you and meet legal obligations.
+            Your information is stored on access-controlled systems and transmitted over encrypted connections. We keep your request and the
+            record of your contact consent while we’re helping you and as long as needed for legal and compliance purposes, and we delete or
+            de-identify information when you ask us to unless we’re required to keep it. Basic site-visit events are automatically deleted
+            after about 13 months.
           </p>
 
           <h2>Your choices</h2>

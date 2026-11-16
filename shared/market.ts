@@ -9,6 +9,20 @@ z.config({ jitless: true });
  * city can go live without a code change.
  */
 
+const httpUrl = z
+  .string()
+  .url()
+  .refine((u) => /^https?:\/\//i.test(u), 'Must start with http:// or https://');
+
+const validTimeZone = (tz: string) => {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const RESERVED_SLUGS = ['default', 'admin', 'api', 'privacy', 'assets', 'media', 'robots.txt', 'sitemap.xml', 'favicon.svg'];
 
 export const planSchema = z.object({
@@ -47,7 +61,7 @@ export const marketSchema = z.object({
   state: z.string().trim().length(2).toUpperCase(), // "MI"
   region: z.string().trim().max(80).default(''), // e.g. "Monroe County"
   provider: z.string().trim().min(2).max(60), // ISP, e.g. "Omni Fiber"
-  timezone: z.string().trim().min(3).max(60).default('America/Detroit'),
+  timezone: z.string().trim().min(3).max(60).refine(validTimeZone, 'Unknown timezone').default('America/Detroit'),
   phoneDisplay: z.string().trim().max(30).default(''),
   phoneE164: z
     .string()
@@ -61,8 +75,8 @@ export const marketSchema = z.object({
   plans: z.array(planSchema).max(6).default([]),
   plansVerifiedOn: z.string().trim().max(40).default(''),
   /** Official provider pages: exact-address checker and FCC Broadband Facts labels. */
-  availabilityUrl: z.union([z.literal(''), z.string().url()]).default(''),
-  broadbandLabelsUrl: z.union([z.literal(''), z.string().url()]).default(''),
+  availabilityUrl: z.union([z.literal(''), httpUrl]).default(''),
+  broadbandLabelsUrl: z.union([z.literal(''), httpUrl]).default(''),
   schedule: scheduleSchema.default(scheduleSchema.parse({})),
   /** Optional site-relative share image (1200×630), e.g. "/og-monroe.jpg". Falls back to /og-image.jpg. */
   ogImage: z

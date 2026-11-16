@@ -38,12 +38,16 @@ export function renderHtml(template: string, o: RenderOptions): string {
     `<script type="application/ld+json">${escJson(structuredData(o.siteUrl, m, pageUrl))}</script>`,
     `<script type="application/json" id="boot-data">${escJson(o.boot)}</script>`,
   ].join('\n    ');
-  return template
-    .replaceAll('%%TITLE%%', escAttr(title))
-    .replaceAll('%%DESCRIPTION%%', escAttr(meta.description))
-    .replaceAll('%%SITE_NAME%%', escAttr(BRAND.name))
-    .replaceAll('%%CANONICAL%%', escAttr(pageUrl))
-    .replaceAll('%%OG_IMAGE%%', escAttr(ogImage))
-    .replaceAll('%%ROBOTS%%', o.noindex ? 'noindex, nofollow' : 'index, follow')
-    .replace('<!--%%HEAD_DATA%%-->', head);
+  // Function-form replacements: admin-entered text containing "$&" or "$'" must
+  // be inserted literally, not interpreted as a replacement pattern.
+  const values: Record<string, string> = {
+    '%%TITLE%%': escAttr(title),
+    '%%DESCRIPTION%%': escAttr(meta.description),
+    '%%SITE_NAME%%': escAttr(BRAND.name),
+    '%%CANONICAL%%': escAttr(pageUrl),
+    '%%OG_IMAGE%%': escAttr(ogImage),
+    '%%ROBOTS%%': o.noindex ? 'noindex, nofollow' : 'index, follow',
+    '<!--%%HEAD_DATA%%-->': head,
+  };
+  return template.replace(/%%[A-Z_]+%%|<!--%%HEAD_DATA%%-->/g, (token) => values[token] ?? token);
 }

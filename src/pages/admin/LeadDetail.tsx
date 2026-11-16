@@ -33,10 +33,19 @@ const EMAIL_STATUS: Record<EmailRow['status'], string> = {
   failed: 'text-rose-300',
 };
 
+interface ConsentRow {
+  id: string;
+  consentText: string;
+  ip: string;
+  userAgent: string;
+  createdAt: string;
+}
+
 interface Detail {
   lead: Lead;
   notes: LeadNote[];
   notifications?: EmailRow[];
+  consents?: ConsentRow[];
   appointments: Appointment[];
 }
 
@@ -144,6 +153,34 @@ export default function LeadDetail() {
                   <li key={a.id} className="flex justify-between rounded-lg bg-white/[0.03] px-3 py-2">
                     <span>{fmtDateTime(a.startUtc)}</span>
                     <span className="capitalize text-slate-400">{a.status.replace('_', ' ')}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {lead.duplicateOf && (
+            <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+              Repeat submission — same email and phone as an{' '}
+              <Link to={`/admin/leads/${lead.duplicateOf}`} className="underline underline-offset-4">
+                earlier lead
+              </Link>
+              . Confirm who you’re speaking with before changing anything.
+            </p>
+          )}
+          <div className="glass p-5">
+            <h2 className="mb-3 font-semibold">Contact consent</h2>
+            {!d.consents?.length ? (
+              <p className="text-sm text-slate-500">No consent record.</p>
+            ) : (
+              <ul className="space-y-2 text-xs text-slate-400">
+                {d.consents.map((c) => (
+                  <li key={c.id} className="rounded-lg bg-white/[0.03] px-3 py-2">
+                    <p className="text-slate-300">{fmtDateTime(c.createdAt)} · IP {c.ip || '—'}</p>
+                    <details className="mt-1">
+                      <summary className="cursor-pointer">Consent wording & browser</summary>
+                      <p className="mt-1 whitespace-pre-wrap">{c.consentText}</p>
+                      <p className="mt-1 break-all">{c.userAgent}</p>
+                    </details>
                   </li>
                 ))}
               </ul>

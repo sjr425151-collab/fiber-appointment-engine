@@ -66,6 +66,8 @@ function parse<T extends z.ZodType>(schema: T, data: unknown): z.output<T> {
 }
 
 const summary = (m: Market) => ({ slug: m.slug, name: m.name, state: m.state });
+/** Market data safe to publish: internal team inboxes are removed. */
+const publicMarket = (m: Market): Market => ({ ...m, notifyEmails: [] });
 
 /** Visitor-facing availability message. `market` is the market the ZIP belongs to. */
 export function describeAvailability(zip: string, area: repo.ServiceArea | null, market: Market | null): AvailabilityResult {
@@ -143,7 +145,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
 
   api.get('/markets/:slug', (req, res) => {
     const slug = String(req.params.slug);
-    res.json({ market: resolveMarket(slug === 'default' ? undefined : slug) });
+    res.json({ market: publicMarket(resolveMarket(slug === 'default' ? undefined : slug)) });
   });
 
   api.get('/availability', (req, res) => {
@@ -168,7 +170,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     // provider the visitor consented to be contacted about; otherwise keep the page's market.
     const market = owner && owner.provider === page.provider ? owner : page;
     const bookingToken = newToken();
-    const { lead, duplicate } = repo.createOrRefreshLead(db, {
+    const { lead, duplicate } = repo.createLead(db, {
       firstName: input.firstName,
       lastName: input.lastName,
       email: input.email,
@@ -264,13 +266,15 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     res.json({ email });
   });
 
-  api.post('/admin/logout', (_req, res) => {
+  api.post('/admin/logout', (req, res) => {
+    if (req.headers['x-requested-with'] !== 'fetch') throw new HttpError(403, 'Missing request header.');
     res.clearCookie(SESSION_COOKIE, cookieOpts);
     res.json({ ok: true });
   });
 
   const admin = express.Router();
-  admin.use((req, _res, next) => {
+  admin.use((req, res, next) => {
+    res.set('Cache-Control', 'no-store'); // admin data must never be cached
     const session = readSessionToken(parseCookies(req.headers.cookie)[SESSION_COOKIE], config.sessionSecret);
     if (!session) throw new HttpError(401, 'Please sign in.');
     // CSRF defence in depth: state-changing requests must carry a custom header,
@@ -303,7 +307,10 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     try {
       return repo.saveMarket(db, m);
     } catch (err) {
-      throw new HttpError(400, err instanceof Error ? err.message : 'Could not save location.');
+      // Only our own validation messages are shown; anything else is logged, not echoed.
+      const msg = err instanceof Error && /default|active/.test(err.message) ? err.message : 'Could not save location.';
+      if (msg === 'Could not save location.') console.error('[markets] save failed', err);
+      throw new HttpError(400, msg);
     }
   };
 
@@ -336,7 +343,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
 
   admin.get('/leads.csv', (req, res) => {
     const { market } = parse(marketQuery, req.query);
-    const { leads } = repo.listLeads(db, { limit: 200, market: market || undefined });
+    const { leads } = repo.listLeads(db, { limit: 10_000, maxLimit: 10_000, market: market || undefined });
     const cols = ['createdAt', 'marketId', 'firstName', 'lastName', 'phone', 'email', 'street', 'unit', 'city', 'zip', 'status', 'areaStatus', 'source', 'utmSource', 'utmCampaign'] as const;
     const esc = (v: string) => {
       const s = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v; // block spreadsheet formula injection
@@ -354,6 +361,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
       notes: repo.listNotes(db, lead.id),
       appointments: repo.listAppointments(db, { leadId: lead.id }),
       notifications: listNotifications(db, lead.id),
+      consents: repo.listConsents(db, lead.id),
     });
   });
 
@@ -423,7 +431,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
 
     app.get(/^(?!\/api).*/, (req, res) => {
       const def = repo.getDefaultMarket(db);
-      const boot = (market: Market): BootData => ({ market, markets: repo.marketSummaries(db), defaultSlug: def.slug });
+      const boot = (market: Market): BootData => ({ market: publicMarket(market), markets: repo.marketSummaries(db), defaultSlug: def.slug });
       const send = (status: number, html: string) => res.status(status).set('Cache-Control', 'no-cache').type('html').send(html);
       const path = req.path.replace(/\/+$/, '') || '/';
       const base = { siteUrl: config.siteUrl };

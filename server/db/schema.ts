@@ -203,6 +203,37 @@ export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
       CREATE INDEX idx_notifications_lead ON notifications(lead_id);
     `,
   },
+  {
+    id: 5,
+    name: 'append_only_consents_and_duplicate_leads',
+    sql: `
+      -- TCPA evidence: one immutable row per form submission. Existing consent
+      -- data on leads is copied in so no history is lost.
+      CREATE TABLE consents (
+        id            TEXT PRIMARY KEY,
+        lead_id       TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        consent_text  TEXT NOT NULL,
+        ip            TEXT NOT NULL DEFAULT '',
+        user_agent    TEXT NOT NULL DEFAULT '',
+        source        TEXT NOT NULL DEFAULT 'lead_form',
+        created_at    TEXT NOT NULL
+      );
+      CREATE INDEX idx_consents_lead ON consents(lead_id, created_at);
+      INSERT INTO consents (id, lead_id, consent_text, ip, user_agent, source, created_at)
+        SELECT lower(hex(randomblob(16))), id, consent_text, consent_ip, consent_user_agent, 'lead_form', consent_at FROM leads;
+      CREATE TRIGGER consents_append_only BEFORE UPDATE ON consents
+        BEGIN SELECT RAISE(ABORT, 'consent records are append-only'); END;
+      -- The original consent captured on a lead can never be rewritten.
+      CREATE TRIGGER leads_consent_immutable BEFORE UPDATE OF consent_text, consent_at, consent_ip, consent_user_agent ON leads
+        BEGIN SELECT RAISE(ABORT, 'lead consent fields are immutable'); END;
+
+      -- A repeat submission becomes its own lead linked to the earlier one,
+      -- instead of overwriting it (which let anyone who knew a person's email +
+      -- phone take over their lead and appointment).
+      ALTER TABLE leads ADD COLUMN duplicate_of TEXT;
+      CREATE INDEX idx_leads_duplicate_of ON leads(duplicate_of);
+    `,
+  },
 ];
 
 /**

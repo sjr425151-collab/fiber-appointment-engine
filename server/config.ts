@@ -18,6 +18,8 @@ export interface AppConfig {
     from: string;
     /** Fallback team inboxes when a location has none configured. */
     teamEmails: string[];
+    /** Max customer-facing emails per rolling 24h (Resend free tier: 100/day). Team alerts are never capped. */
+    dailyCustomerLimit: number;
   };
 }
 
@@ -66,6 +68,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         .split(',')
         .map((e) => e.trim().toLowerCase())
         .filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)),
+      dailyCustomerLimit: Math.max(0, Number(env.EMAIL_DAILY_CUSTOMER_LIMIT ?? 80) || 0),
     },
     isProduction,
   };

@@ -20,7 +20,7 @@ const config: AppConfig = {
   timezone: TZ,
   siteUrl: 'https://fiber.example.com',
   isProduction: false,
-  email: { resendApiKey: '', from: 'Fiber Connect <test@example.com>', teamEmails: [] },
+  email: { resendApiKey: '', from: 'Fiber Connect <test@example.com>', teamEmails: [], dailyCustomerLimit: 80 },
 };
 
 const validLead = {
@@ -89,12 +89,36 @@ describe('lead capture', () => {
     expect(r.body.fields).toHaveProperty('consent');
     expect(r.body.fields).toHaveProperty('phone');
   });
-  it('dedupes resubmissions from the same email + phone', async () => {
+  it('links repeat submissions without touching the original lead, token or consent (H1)', async () => {
     const a = await request(app).post('/api/leads').send(validLead);
-    const b = await request(app).post('/api/leads').send(validLead);
-    expect(b.body.leadId).toBe(a.body.leadId);
-    expect(repo.listLeads(db).total).toBe(1);
+    const slot = await firstOpenSlot();
+    await request(app).post('/api/appointments').send({ leadId: a.body.leadId, token: a.body.bookingToken, startUtc: slot.startUtc }).expect(201);
+    const before = repo.getLead(db, a.body.leadId)!;
+
+    // Someone else submits with the same email + phone but a different name/address.
+    const b = await request(app).post('/api/leads').send({ ...validLead, firstName: 'Mallory', street: '1 Attacker Way' }).expect(201);
+    expect(b.body.leadId).not.toBe(a.body.leadId);
+    expect(repo.getLead(db, b.body.leadId)!.duplicateOf).toBe(a.body.leadId);
+
+    // Original lead, its consent and its appointment are untouched…
+    expect(repo.getLead(db, a.body.leadId)).toMatchObject({ firstName: before.firstName, street: before.street, consentAt: before.consentAt });
+    expect(repo.listAppointments(db, { leadId: a.body.leadId }).filter((x) => x.status === 'scheduled')).toHaveLength(1);
+    // …the new token can't act on the original lead…
+    await request(app).post('/api/appointments').send({ leadId: a.body.leadId, token: b.body.bookingToken, startUtc: slot.startUtc }).expect(403);
+    // …and the original token still works.
+    const later = (await request(app).get('/api/schedule/slots').query({ date: (await request(app).get('/api/schedule/dates')).body.dates.at(-1) })).body.slots[0];
+    await request(app).post('/api/appointments').send({ leadId: a.body.leadId, token: a.body.bookingToken, startUtc: later.startUtc }).expect(201);
+    expect(repo.listConsents(db, a.body.leadId)).toHaveLength(1);
+    expect(repo.listConsents(db, b.body.leadId)).toHaveLength(1);
   });
+
+  it('makes consent evidence immutable at the database level (H1)', async () => {
+    const r = await request(app).post('/api/leads').send(validLead);
+    expect(() => db.prepare("UPDATE consents SET consent_text = 'x' WHERE lead_id = ?").run(r.body.leadId)).toThrow(/append-only/);
+    expect(() => db.prepare("UPDATE leads SET consent_ip = '1.2.3.4' WHERE id = ?").run(r.body.leadId)).toThrow(/immutable/);
+    db.prepare("UPDATE leads SET status = 'contacted' WHERE id = ?").run(r.body.leadId); // other fields still editable
+  });
+
   it('silently drops honeypot submissions', async () => {
     await request(app).post('/api/leads').send({ ...validLead, website: 'spam.example' }).expect(201);
     expect(repo.listLeads(db).total).toBe(0);
@@ -388,5 +412,60 @@ describe('production config', () => {
     expect(() => loadConfig({ ...base, ADMIN_PASSWORD: 'short' })).toThrow(/12 characters/);
     expect(() => loadConfig(base)).toThrow(/ADMIN_PASSWORD/);
     expect(() => loadConfig({ ...base, SESSION_SECRET: 'short', ADMIN_PASSWORD: 'correct-horse-battery' })).toThrow(/SESSION_SECRET/);
+  });
+});
+
+describe('security hardening', () => {
+  it('rejects oversized analytics payloads and prunes old events (H2)', async () => {
+    const many = Object.fromEntries(Array.from({ length: 11 }, (_, i) => [`k${i}`, 1]));
+    await request(app).post('/api/events').send({ name: 'cta_click', props: many }).expect(400);
+    await request(app).post('/api/events').send({ name: 'cta_click', props: { a: 'x'.repeat(200), b: 'x'.repeat(200), c: 'x'.repeat(200), d: 'x'.repeat(200), e: 'x'.repeat(200) } }).expect(400);
+    await request(app).post('/api/events').send({ name: 'cta_click', props: { location: 'hero' } }).expect(204);
+    db.prepare("INSERT INTO events (name, created_at) VALUES ('page_view', '2020-01-01T00:00:00.000Z')").run();
+    expect(repo.pruneEvents(db, 400)).toBe(1);
+    for (let i = 0; i < 5; i++) await request(app).post('/api/events').send({ name: 'page_view' });
+    expect(repo.pruneEvents(db, 400, 3)).toBe(3); // backstop keeps only the newest 3
+    expect((db.prepare('SELECT COUNT(*) AS n FROM events').get() as { n: number }).n).toBe(3);
+  });
+
+  it('limits how often one lead can book or reschedule (H3/M4)', async () => {
+    const { body: l } = await request(app).post('/api/leads').send(validLead);
+    const date = (await request(app).get('/api/schedule/dates')).body.dates.at(-1);
+    const slots = (await request(app).get('/api/schedule/slots').query({ date })).body.slots;
+    for (let i = 0; i < 4; i++) await request(app).post('/api/appointments').send({ leadId: l.leadId, token: l.bookingToken, startUtc: slots[i].startUtc }).expect(201);
+    const r = await request(app).post('/api/appointments').send({ leadId: l.leadId, token: l.bookingToken, startUtc: slots[4].startUtc }).expect(429);
+    expect(r.body.error).toMatch(/call or text/);
+  });
+
+  it('never publishes internal team inboxes (M2)', async () => {
+    repo.saveMarket(db, { ...MONROE, notifyEmails: ['team@internal.example'] });
+    const r = await request(app).get('/api/markets/monroe').expect(200);
+    expect(r.body.market.notifyEmails).toEqual([]);
+    expect(JSON.stringify(r.body)).not.toContain('team@internal.example');
+  });
+
+  it('renders admin-entered "$" patterns literally in the page head', async () => {
+    const { renderHtml } = await import('../server/html');
+    const html = renderHtml('<title>%%TITLE%%</title><!--%%HEAD_DATA%%-->', {
+      siteUrl: 'https://x.test',
+      canonicalPath: '/',
+      boot: { market: { ...MONROE, name: "Monroe $& $' $1" }, markets: [], defaultSlug: 'monroe' },
+    });
+    expect(html).toContain("Monroe $&amp; $&#39;".replace('&#39;', "'"));
+    expect(html).not.toContain('%%');
+  });
+
+  it('validates URLs and timezones on locations', () => {
+    expect(marketSchema.safeParse({ ...MONROE, availabilityUrl: 'javascript:alert(1)' }).success).toBe(false);
+    expect(marketSchema.safeParse({ ...MONROE, timezone: 'Mars/Olympus' }).success).toBe(false);
+    expect(marketSchema.safeParse({ ...MONROE, timezone: 'America/Chicago' }).success).toBe(true);
+  });
+
+  it('marks admin responses no-store and requires the CSRF header to log out', async () => {
+    const agent = await adminAgent();
+    const r = await agent.get('/api/admin/me');
+    expect(r.headers['cache-control']).toBe('no-store');
+    await agent.post('/api/admin/logout').expect(403);
+    await agent.post('/api/admin/logout').set('X-Requested-With', 'fetch').expect(200);
   });
 });

@@ -1,6 +1,6 @@
 /** Minimal RFC 5545 calendar invite (one event) for "Add to calendar". */
 
-const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r\n|\r|\n/g, '\\n');
 const stamp = (iso: string) => iso.replace(/[-:]/g, '').replace(/\.\d{3}/, ''); // 2026-11-17T14:00:00.000Z → 20261117T140000Z
 
 /** Lines longer than 75 octets must be folded (CRLF + space). */

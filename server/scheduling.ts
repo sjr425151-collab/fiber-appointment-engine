@@ -57,6 +57,9 @@ export function availableSlots(db: DB, market: Market, date: string, now = new D
     .filter((s) => s.remaining > 0);
 }
 
+/** Bookings + reschedules allowed per lead per rolling 24h. */
+export const MAX_BOOKINGS_PER_DAY = 4;
+
 export class BookingError extends Error {
   constructor(
     public status: number,
@@ -93,6 +96,14 @@ export function bookAppointment(
 
     const existing = repo.getActiveAppointmentForLead(db, input.leadId);
     if (existing?.startUtc === startUtc) return existing;
+
+    // Abuse guard: each booking/reschedule sends emails and holds a slot.
+    const recent = db
+      .prepare('SELECT COUNT(*) AS n FROM appointments WHERE lead_id = ? AND created_at >= ?')
+      .get(input.leadId, new Date(now.getTime() - 24 * 3600_000).toISOString()) as { n: number };
+    if (recent.n >= MAX_BOOKINGS_PER_DAY) {
+      throw new BookingError(429, 'This appointment has been changed several times today. Please call or text us to reschedule.');
+    }
 
     if (repo.countBookedAt(db, market.slug, startUtc) >= rules.capacityPerSlot) {
       throw new BookingError(409, 'Someone just booked that time. Please pick another slot.');
