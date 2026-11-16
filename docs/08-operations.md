@@ -98,3 +98,9 @@ It never auto-deploys. Use *Manual Deploy* for any commit, including `[skip rend
 | `STAGING_EMAIL_ALLOWLIST` | staging | Comma-separated addresses or `@domains`; outside production, customer emails go only here |
 
 Secrets are never committed; `.env` is git-ignored.
+
+## Deploy log
+
+| Date (UTC) | Commit | What | Approved by | Pre-deploy checks | Rollback |
+|---|---|---|---|---|---|
+| 2026-11-16 | this commit (includes `c0a1388`, `904682e`, `a5808e7`) | Security fixes (H1, H2, H3 partial, M2, M3 notice, lows), household platform code (**off**: `PLATFORM_ENABLED` not set), solar model, opportunities, ops logging/health, backup script. Migrations 5–7 (additive) run on first start. | Owner, in chat | `npm run check` 153 passed; `npm run test:e2e` 17 passed; clean-clone `npm ci` + build like the Dockerfile; that build started in production mode on a DB created by the live release `624aa58`: migrations applied, fiber funnel booked, `/savings` 404, robots unchanged. A Render-shell backup wasn't possible from here (the `db:backup` script ships in this release); Render's own disk snapshots are the fallback. | Render → fiber-connect → Events → Rollback to the `624aa58` deploy (migrations are additive, so the old code runs on the new schema) |
