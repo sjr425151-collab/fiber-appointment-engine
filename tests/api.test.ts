@@ -21,7 +21,7 @@ const config: AppConfig = {
   timezone: TZ,
   siteUrl: 'https://fiber.example.com',
   isProduction: false,
-  email: { resendApiKey: '', from: 'Fiber Connect <test@example.com>', teamEmails: [], dailyCustomerLimit: 80 },
+  email: { resendApiKey: '', from: 'Fiber Connect <test@example.com>', teamEmails: [], dailyCustomerLimit: 80, nonProductionAllowlist: [] },
 };
 
 const validLead = {

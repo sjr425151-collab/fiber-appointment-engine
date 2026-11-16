@@ -3,6 +3,7 @@
  * can be swapped for Postgres/Supabase later without touching routes.
  */
 import { randomUUID } from 'node:crypto';
+import { OPPORTUNITY_STATUSES, OPPORTUNITY_STATUS_LABEL, type OpportunityDraft, type OpportunityKind, type OpportunityStatus } from '../shared/platform/opportunity';
 import type { Appointment, AreaStatus, Lead, LeadNote, LeadStatus } from '../shared/schemas';
 import { marketSchema, type Market, type MarketSummary } from '../shared/market';
 import { transaction, type DB } from './db';
@@ -557,4 +558,127 @@ export function assessmentStats(db: DB, days = 30) {
     )
     .get(since) as { completed: number; withLead: number | null; withOpportunity: number | null };
   return { days, completed: row.completed, withLead: row.withLead ?? 0, withOpportunity: row.withOpportunity ?? 0 };
+}
+
+// ------------------------------------------------------------ opportunities --
+export interface OpportunityRow {
+  id: string;
+  leadId: string;
+  assessmentId: string;
+  marketId: string;
+  category: string;
+  offerId: string;
+  planName: string;
+  kind: OpportunityKind;
+  estimate: boolean;
+  currentMonthlyCents: number | null;
+  proposedMonthlyCents: number | null;
+  monthlySavingsCents: number | null;
+  fiveYearSavingsCents: number | null;
+  status: OpportunityStatus;
+  createdAt: string;
+  updatedAt: string;
+  /** Joined for list views. */
+  leadName?: string;
+}
+
+const toOpportunity = (r: Row): OpportunityRow => ({
+  id: String(r.id),
+  leadId: String(r.lead_id),
+  assessmentId: String(r.assessment_id),
+  marketId: String(r.market_id),
+  category: String(r.category),
+  offerId: String(r.offer_id),
+  planName: String(r.plan_name),
+  kind: r.kind as OpportunityKind,
+  estimate: r.is_estimate === 1,
+  currentMonthlyCents: r.current_monthly_cents === null ? null : Number(r.current_monthly_cents),
+  proposedMonthlyCents: r.proposed_monthly_cents === null ? null : Number(r.proposed_monthly_cents),
+  monthlySavingsCents: r.monthly_savings_cents === null ? null : Number(r.monthly_savings_cents),
+  fiveYearSavingsCents: r.five_year_savings_cents === null ? null : Number(r.five_year_savings_cents),
+  status: r.status as OpportunityStatus,
+  createdAt: String(r.created_at),
+  updatedAt: String(r.updated_at),
+  ...(r.lead_name !== undefined ? { leadName: String(r.lead_name) } : {}),
+});
+
+/** Records a help request's opportunities atomically. */
+export function insertOpportunities(db: DB, o: { leadId: string; assessmentId: string; marketId: string; drafts: OpportunityDraft[] }): OpportunityRow[] {
+  const ts = now();
+  const stmt = db.prepare(
+    `INSERT INTO opportunities (id, lead_id, assessment_id, market_id, category, offer_id, plan_name, kind, is_estimate,
+       current_monthly_cents, proposed_monthly_cents, monthly_savings_cents, five_year_savings_cents, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)`,
+  );
+  const ids = transaction(db, () =>
+    o.drafts.map((d) => {
+      const id = randomUUID();
+      stmt.run(id, o.leadId, o.assessmentId, o.marketId, d.category, d.offerId, d.planName, d.kind, d.estimate ? 1 : 0,
+        d.currentMonthlyCents, d.proposedMonthlyCents, d.monthlySavingsCents, d.fiveYearSavingsCents, ts, ts);
+      return id;
+    }),
+  );
+  return ids.map((id) => getOpportunity(db, id)!);
+}
+
+export function getOpportunity(db: DB, id: string): OpportunityRow | null {
+  const r = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(id) as Row | undefined;
+  return r ? toOpportunity(r) : null;
+}
+
+export function opportunitiesForLead(db: DB, leadId: string): OpportunityRow[] {
+  return (db.prepare('SELECT * FROM opportunities WHERE lead_id = ? ORDER BY created_at, rowid').all(leadId) as Row[]).map(toOpportunity);
+}
+
+export interface OpportunityFilter {
+  status?: OpportunityStatus;
+  category?: string;
+  market?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export function listOpportunities(db: DB, f: OpportunityFilter = {}): { opportunities: OpportunityRow[]; total: number } {
+  const where: string[] = [];
+  const args: (string | number)[] = [];
+  const add = (clause: string, value: string) => {
+    where.push(clause);
+    args.push(value);
+  };
+  if (f.status) add('o.status = ?', f.status);
+  if (f.category) add('o.category = ?', f.category);
+  if (f.market) add('o.market_id = ?', f.market);
+  const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const total = Number((db.prepare(`SELECT COUNT(*) AS n FROM opportunities o ${w}`).get(...args) as Row).n);
+  const rows = db
+    .prepare(
+      `SELECT o.*, l.first_name || ' ' || l.last_name AS lead_name FROM opportunities o JOIN leads l ON l.id = o.lead_id ${w}
+       ORDER BY o.created_at DESC, o.rowid LIMIT ? OFFSET ?`,
+    )
+    .all(...args, Math.min(f.limit ?? 50, 200), f.offset ?? 0) as Row[];
+  return { opportunities: rows.map(toOpportunity), total };
+}
+
+/** Pipeline totals by status (count and estimated monthly savings of priced, non-sample rows). */
+export function opportunityStats(db: DB, market?: string) {
+  const rows = db
+    .prepare(
+      `SELECT status, COUNT(*) AS n,
+         COALESCE(SUM(CASE WHEN kind IN ('verified','pending_address') AND monthly_savings_cents > 0 THEN monthly_savings_cents END), 0) AS savings
+       FROM opportunities ${market ? 'WHERE market_id = ?' : ''} GROUP BY status`,
+    )
+    .all(...(market ? [market] : [])) as Row[];
+  const byStatus = Object.fromEntries(OPPORTUNITY_STATUSES.map((s) => [s, { count: 0, monthlySavingsCents: 0 }])) as Record<OpportunityStatus, { count: number; monthlySavingsCents: number }>;
+  for (const r of rows) byStatus[r.status as OpportunityStatus] = { count: Number(r.n), monthlySavingsCents: Number(r.savings) };
+  return byStatus;
+}
+
+/** Changes status and records who did it on the lead's timeline. Returns null if not found. */
+export function updateOpportunityStatus(db: DB, id: string, status: OpportunityStatus, author: string): OpportunityRow | null {
+  const before = getOpportunity(db, id);
+  if (!before) return null;
+  if (before.status === status) return before;
+  db.prepare('UPDATE opportunities SET status = ?, updated_at = ? WHERE id = ?').run(status, now(), id);
+  addNote(db, before.leadId, `Opportunity "${before.planName}" (${before.category}): ${OPPORTUNITY_STATUS_LABEL[before.status]} → ${OPPORTUNITY_STATUS_LABEL[status]}`, author);
+  return getOpportunity(db, id);
 }

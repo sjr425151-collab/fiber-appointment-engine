@@ -270,6 +270,37 @@ export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
       ALTER TABLE leads ADD COLUMN assessment_id TEXT;
     `,
   },
+  {
+    id: 7,
+    name: 'opportunities',
+    sql: `
+      -- One row per service a household asked for help with, as they selected
+      -- it on the results page. Figures are copied from the deterministic
+      -- analysis at request time (integer cents) so later catalog changes never
+      -- rewrite what the customer saw.
+      CREATE TABLE opportunities (
+        id                       TEXT PRIMARY KEY,
+        lead_id                  TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        assessment_id            TEXT NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+        market_id                TEXT NOT NULL DEFAULT '',
+        category                 TEXT NOT NULL,
+        offer_id                 TEXT NOT NULL DEFAULT '',
+        plan_name                TEXT NOT NULL,
+        kind                     TEXT NOT NULL CHECK (kind IN ('verified','pending_address','sample','advisor')),
+        is_estimate              INTEGER NOT NULL DEFAULT 0,
+        current_monthly_cents    INTEGER,
+        proposed_monthly_cents   INTEGER,
+        monthly_savings_cents    INTEGER,
+        five_year_savings_cents  INTEGER,
+        status                   TEXT NOT NULL DEFAULT 'new'
+                                 CHECK (status IN ('new','contacted','quoted','won','lost','not_eligible')),
+        created_at               TEXT NOT NULL,
+        updated_at               TEXT NOT NULL
+      );
+      CREATE INDEX idx_opportunities_lead ON opportunities(lead_id);
+      CREATE INDEX idx_opportunities_status ON opportunities(status, created_at);
+    `,
+  },
 ];
 
 /**

@@ -13,8 +13,13 @@
 
 - **Every push to the production branch deploys and causes ~1 minute of downtime** (persistent disk → no zero-downtime deploys).
 - **To push without deploying**, include `[skip render]` in the commit message (Render documented feature; the skipped deploy still appears on the service's Events page).
-- Before any production deploy: `npm run check` (typecheck + lint + tests) and `npm run build` must pass; prefer off-peak hours; announce if leads are actively coming in.
-- After deploy: verify `GET /api/health` = 200, homepage renders, a test ZIP check works, admin loads.
+- Before any production deploy:
+  1. `npm run check` (typecheck, lint, unit, API and DB tests) and `npm run test:e2e` (build plus browser suite) must pass.
+  2. Take a backup in the Render shell: `npm run db:backup`.
+  3. Deploy off-peak, and announce it if leads are actively coming in.
+- After deploy:
+  - `GET /api/health` should return `{"ok":true,"db":"ok","version":"<commit>"}`; check the version matches the commit you meant to deploy.
+  - The homepage renders, a test ZIP check works, and the admin loads.
 
 ## Staging and feature flags
 
@@ -46,14 +51,31 @@ It never auto-deploys. Use *Manual Deploy* for any commit, including `[skip rend
 ## Database migrations
 
 1. Add a new entry to `MIGRATIONS` (never edit shipped ones). Additive only; destructive changes use expand → migrate → contract across releases.
-2. **Rehearse on production-shaped data**: build a DB with the deployed commit (git worktree), then open it with the new code and check invariants. Migration 5 was rehearsed this way: migrations 1–5 applied, 6/6 leads with exactly matching consent rows, appointments and outbox untouched, re-open idempotent. Migrations 5–6 were rehearsed again on 2026-11-16 against a DB created and populated by the deployed commit `624aa58` (a real booking through the browser). Results: 1–6 applied; the lead, appointment and 6 outbox rows were preserved; exactly one consent row per lead; `leads.assessment_id` NULL; reopening was idempotent. The new code then served the fiber funnel on that DB end to end, with the platform returning 404.
+2. **Rehearse on production-shaped data**: build a DB with the deployed commit (git worktree), then open it with the new code and check invariants. Migration 5 was rehearsed this way: migrations 1–5 applied, 6/6 leads with exactly matching consent rows, appointments and outbox untouched, re-open idempotent. Migrations 5–7 were rehearsed on 2026-11-16 against a DB created and populated by the deployed commit `624aa58` (a real booking through the browser). Migration 7 (`opportunities`) passed the same checks: 1–7 applied, data unchanged, reopening idempotent. `tests/db-migrations.test.ts` now repeats this on every test run: a migration-1–4 database with leads, an appointment and a note is upgraded and checked for data, consent backfill, immutability triggers, idempotency and integrity constraints. For earlier rehearsals of 5–6: Results: 1–6 applied; the lead, appointment and 6 outbox rows were preserved; exactly one consent row per lead; `leads.assessment_id` NULL; reopening was idempotent. The new code then served the fiber funnel on that DB end to end, with the platform returning 404.
 3. Take a backup immediately before the deploy (below).
 
-## Backups (to implement — finding M6)
+## Backups (finding M6 — partly built)
 
-- Nightly: `VACUUM INTO '/data/backup-YYYYMMDD.db'` (consistent online snapshot), upload off-site, keep 30 daily + 12 monthly; delete local copy after upload.
-- Pre-deploy: same snapshot, triggered manually.
-- **Restore drill** (quarterly): download a snapshot, start the app locally with `DATABASE_PATH` pointing to it, run smoke checks.
+- **Built:** `npm run db:backup [-- --keep 14 --dir /data/backups]` writes a consistent online snapshot (`VACUUM INTO`), runs `PRAGMA integrity_check` on it, keeps the newest N and logs one JSON line. It's safe while the app runs. Tested in `tests/db-migrations.test.ts`.
+- **Pre-deploy (now):** run it in the Render shell before every production deploy.
+- **Still needs approval ⚑:**
+  - A nightly schedule. Render cron jobs are a paid service and can't mount the web service's disk, so the job would run inside the web process or be triggered externally.
+  - An off-site copy, e.g. Cloudflare R2 free tier: 10 GB.
+  - A same-disk snapshot doesn't survive losing the disk.
+- **Restore drill** (quarterly): download a snapshot, start the app locally with `DATABASE_PATH` pointing to it, and run the smoke checks.
+
+## Monitoring and logs
+
+- **Health:** `/api/health` runs a database query; it returns 503 if the database fails, so Render's health check stops routing to a broken instance. Point a free external uptime monitor at it (e.g. UptimeRobot or Better Stack free tier; account needs owner approval ⚑).
+- **Logs:** server errors are one JSON line each: `level`, `event`, `requestId`, `method`, `path` and the error. Query strings, request bodies, cookies and contact details are never logged. Every response carries `X-Request-Id`, and 500 responses include it, so a user report can be matched to the exact log line in Render's log search. Unhandled rejections and exceptions are logged before the process exits.
+- **Not yet:** error alerting such as the Sentry free tier (approval ⚑); a log drain for retention beyond Render's built-in window.
+
+## Testing
+
+| Command | What runs | Needs |
+|---|---|---|
+| `npm run check` | Typecheck, lint, and unit, API, DB and infrastructure tests (Vitest, in-memory and temp-file SQLite) | Nothing external |
+| `npm run test:e2e` | Production build, then a staging server (platform and samples on) and a production-mode server (flags off) on throwaway databases, then Chromium tests: the full customer journey, edge cases, responsive layouts (320/390/768/1280), axe-core WCAG 2.2 AA, keyboard and reduced motion, and the fiber site in production mode | Playwright Chromium (`npx playwright install chromium` outside this container); free ports 3290–3291 (`E2E_PORT_BASE` to change) |
 
 ## Rollback
 
@@ -73,5 +95,6 @@ It never auto-deploys. Use *Manual Deploy* for any commit, including `[skip rend
 | `RESEND_API_KEY`, `EMAIL_FROM`, `TEAM_NOTIFY_EMAIL` | optional | Without the key, emails are logged, not sent |
 | `EMAIL_DAILY_CUSTOMER_LIMIT` | optional | Default 80 (Resend free tier is 100/day) |
 | `APP_TIMEZONE` | optional | Legacy default; locations carry their own timezone |
+| `STAGING_EMAIL_ALLOWLIST` | staging | Comma-separated addresses or `@domains`; outside production, customer emails go only here |
 
 Secrets are never committed; `.env` is git-ignored.

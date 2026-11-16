@@ -9,7 +9,7 @@ import { leadInputSchema } from '../schemas';
 
 z.config({ jitless: true });
 
-export const PLATFORM_CATEGORIES = ['internet', 'mobile', 'tv', 'electricity', 'solar'] as const;
+export const PLATFORM_CATEGORIES = ['internet', 'mobile', 'tv', 'electricity'] as const;
 export type PlatformCategory = (typeof PLATFORM_CATEGORIES)[number];
 
 export const CATEGORY_LABEL: Record<PlatformCategory, string> = {
@@ -17,7 +17,6 @@ export const CATEGORY_LABEL: Record<PlatformCategory, string> = {
   mobile: 'Mobile phones',
   tv: 'TV & streaming',
   electricity: 'Electricity',
-  solar: 'Solar (interest)',
 };
 
 const cents = z.number().int().min(0).max(1_000_000); // ≤ $10,000/mo
@@ -63,30 +62,45 @@ export const tvSchema = z.object({
   mustHave: z.array(z.enum(['local_channels', 'sports', 'news', 'kids', 'premium_movies'])).max(5).default([]),
 });
 
+/** Electricity — the alternative we compare is rooftop solar, so it also asks what solar depends on. */
 export const electricitySchema = z.object({
   utility: name,
   monthlyCents: cents.nullable(),
   monthlyKwh: z.number().int().min(0).max(20_000).nullable().default(null),
   rateType: z.enum(['standard', 'time_of_use', 'unknown']).default('unknown'),
+  homeownership: z.enum(['own', 'rent', 'unknown']).default('unknown'),
+  roofSun: z.enum(['mostly_sunny', 'some_shade', 'heavy_shade', 'unknown']).default('unknown'),
 });
 
-export const solarSchema = z.object({
-  homeownership: z.enum(['own', 'rent']),
-  roofSun: z.enum(['mostly_sunny', 'some_shade', 'heavy_shade', 'unknown']).default('unknown'),
-  financing: z.enum(['cash', 'loan', 'lease', 'undecided']).default('undecided'),
-});
+/**
+ * Assessments saved before solar became the electricity alternative had a
+ * separate "solar" category. Fold it into electricity so old links still work.
+ */
+export function upgradeLegacy(input: unknown): unknown {
+  if (!input || typeof input !== 'object') return input;
+  const a = { ...(input as Record<string, unknown>) };
+  const cats = Array.isArray(a.categories) ? (a.categories as unknown[]) : null;
+  if (!cats?.includes('solar') && !('solar' in a)) return input;
+  const solar = (a.solar ?? {}) as Record<string, unknown>;
+  delete a.solar;
+  if (cats) a.categories = cats.filter((c) => c !== 'solar');
+  if (a.electricity && typeof a.electricity === 'object') {
+    const e = a.electricity as Record<string, unknown>;
+    a.electricity = { homeownership: solar.homeownership ?? e.homeownership, roofSun: solar.roofSun ?? e.roofSun, ...e };
+  }
+  return a;
+}
 
 export const PRIORITIES = ['lower_cost', 'faster_speed', 'no_contract', 'reliability', 'simple_switch'] as const;
 
-export const assessmentSchema = z
+const assessmentObject = z
   .object({
     zip: z.string().trim().regex(/^\d{5}$/, 'Enter a 5-digit ZIP code'),
-    categories: z.array(z.enum(PLATFORM_CATEGORIES)).min(1, 'Choose at least one service').max(5),
+    categories: z.array(z.enum(PLATFORM_CATEGORIES)).min(1, 'Choose at least one service').max(4),
     internet: internetSchema.optional(),
     mobile: mobileSchema.optional(),
     tv: tvSchema.optional(),
     electricity: electricitySchema.optional(),
-    solar: solarSchema.optional(),
     priorities: z.array(z.enum(PRIORITIES)).max(5).default([]),
   })
   .superRefine((a, ctx) => {
@@ -97,10 +111,13 @@ export const assessmentSchema = z
     for (const c of PLATFORM_CATEGORIES) {
       if (!a.categories.includes(c) && a[c]) ctx.addIssue({ code: 'custom', path: [c], message: 'Unexpected answers for an unselected category' });
     }
+    if (new Set(a.categories).size !== a.categories.length) ctx.addIssue({ code: 'custom', path: ['categories'], message: 'Each service can be chosen once' });
   });
 
-export type Assessment = z.output<typeof assessmentSchema>;
-export type AssessmentInput = z.input<typeof assessmentSchema>;
+export const assessmentSchema = z.preprocess(upgradeLegacy, assessmentObject);
+
+export type Assessment = z.output<typeof assessmentObject>;
+export type AssessmentInput = z.input<typeof assessmentObject>;
 
 /** Contact request from the results page. Address is optional (an advisor can confirm it). */
 export const contactSchema = leadInputSchema
@@ -111,6 +128,8 @@ export const contactSchema = leadInputSchema
     street: z.string().trim().max(120).optional().default(''),
     unit: z.string().trim().max(30).optional().default(''),
     city: z.string().trim().max(60).optional().default(''),
+    /** The options the customer selected on the results page (offer id or "keep"). The server re-derives all figures. */
+    selections: z.partialRecord(z.enum(PLATFORM_CATEGORIES), z.string().trim().max(80)).optional().default({}),
   });
 export type ContactInput = z.input<typeof contactSchema>;
 

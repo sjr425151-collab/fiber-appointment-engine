@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   assessmentSchema,
@@ -7,6 +7,7 @@ import {
   PRIORITIES,
   type AssessmentInput,
   type PlatformCategory,
+  upgradeLegacy,
 } from '../../../shared/platform/assessment';
 import { formatCents, type Cents } from '../../../shared/finance/money';
 import { api, ApiError } from '../../lib/api';
@@ -22,16 +23,14 @@ const DEFAULTS: Record<PlatformCategory, unknown> = {
   internet: { provider: '', monthlyCents: null, equipmentFeeCents: null, technology: 'unknown', downloadMbps: null, dataCap: 'unknown', promoEnds: 'unknown', promoRegularCents: null, contractMonthsRemaining: 0, earlyTerminationCents: null, reliabilityConcerns: false },
   mobile: { carrier: '', monthlyCents: null, lines: 2, deviceFinancingCents: null, dataNeed: 'unlimited', international: false },
   tv: { provider: '', serviceType: 'cable', monthlyCents: null, equipmentFeeCents: null, otherStreamingCents: null, mustHave: [] },
-  electricity: { utility: '', monthlyCents: null, monthlyKwh: null, rateType: 'unknown' },
-  solar: { homeownership: undefined, roofSun: 'unknown', financing: 'undecided' },
+  electricity: { utility: '', monthlyCents: null, monthlyKwh: null, rateType: 'unknown', homeownership: 'unknown', roofSun: 'unknown' },
 };
 
 const CAT_DESC: Record<PlatformCategory, string> = {
   internet: 'Home Wi-Fi / broadband',
   mobile: 'Cell phone plans',
   tv: 'Cable, satellite or live streaming',
-  electricity: 'Your electric bill',
-  solar: 'Curious whether solar could fit',
+  electricity: 'Your electric bill — and whether solar could lower it',
 };
 
 const PRIORITY_LABEL: Record<(typeof PRIORITIES)[number], string> = {
@@ -56,12 +55,14 @@ const int = (s: string) => (s.trim() === '' ? null : /^\d+$/.test(s.trim()) ? Nu
 
 export default function Assess() {
   const navigate = useNavigate();
-  const initial = useMemo(() => {
+  // Read once on mount (taking the edit hand-off consumes it).
+  const [initial] = useState(() => {
+    // Older answers may carry the retired "solar" category; fold it into electricity.
     const edit = editHandoff.take();
-    if (edit) return { answers: edit as Answers, step: 0, remember: false, edit: true };
+    if (edit) return { answers: upgradeLegacy(edit) as Answers, step: 0, remember: false, edit: true };
     const d = draftStore.load();
-    return d ? { answers: d.answers as Answers, step: d.step, remember: true, edit: false } : { answers: { zip: '', categories: [] } as Answers, step: 0, remember: false, edit: false };
-  }, []);
+    return d ? { answers: upgradeLegacy(d.answers) as Answers, step: Math.min(d.step, 1), remember: true, edit: false } : { answers: { zip: '', categories: [] } as Answers, step: 0, remember: false, edit: false };
+  });
   const [answers, setAnswers] = useState<Answers>(initial.answers);
   const [step, setStep] = useState(initial.step);
   const [remember, setRemember] = useState(initial.remember);
@@ -122,9 +123,10 @@ export default function Assess() {
     if (c) {
       const v = answers[c] as Record<string, unknown>;
       for (const [k, msg] of Object.entries(formatErrors)) if (k.startsWith(`${c}.`) && msg) e[k] = msg;
-      if (c !== 'solar' && v.monthlyCents === null && !unknown[c]) e[`${c}.monthlyCents`] = 'Enter your monthly bill, or choose “I don’t know”';
+      // Keep a format error ("Enter a dollar amount…") rather than replacing it with "Enter your bill".
+      if (v.monthlyCents === null && !unknown[c] && !e[`${c}.monthlyCents`]) e[`${c}.monthlyCents`] = 'Enter your monthly bill, or choose “I don’t know”';
       if (c === 'mobile' && !(Number(v.lines) >= 1 && Number(v.lines) <= 10)) e['mobile.lines'] = 'Choose how many lines';
-      if (c === 'solar' && !v.homeownership) e['solar.homeownership'] = 'Choose one';
+      if (c === 'electricity' && (v.homeownership === 'unknown' || !v.homeownership)) e['electricity.homeownership'] = 'Choose whether you own or rent';
       if (c === 'internet' && Number.isNaN(v.downloadMbps)) e['internet.downloadMbps'] = 'Enter a whole number, e.g. 300';
       if (c === 'electricity' && Number.isNaN(v.monthlyKwh)) e['electricity.monthlyKwh'] = 'Enter a whole number, e.g. 750';
     }
@@ -197,7 +199,7 @@ export default function Assess() {
               <li key={k}>
                 <a
                   href={`#${fid(k)}`}
-                  className="underline underline-offset-2"
+                  className="inline-block py-1 underline underline-offset-2"
                   onClick={(e) => {
                     e.preventDefault();
                     document.getElementById(fid(k))?.focus();
@@ -339,7 +341,6 @@ export default function Assess() {
 }
 
 function headingFor(step: string, cat: PlatformCategory | null) {
-  if (cat === 'solar') return 'A few questions about solar';
   if (cat) return `About your ${CATEGORY_LABEL[cat].toLowerCase()}`;
   return (
     {
@@ -549,11 +550,30 @@ function CategoryFields({
       return (
         <div className="space-y-5">
           {datalist}
-          <Callout tone="info">We include electricity in your household spending. We don’t compare electricity offers yet while we complete a regulatory review.</Callout>
           {text('utility', 'Electric utility', { list: 'electricity-providers' })}
           {monthly('Average monthly electric bill', 'A typical month — or your yearly total divided by 12.')}
+          <ChoiceCards
+            id={fid('electricity.homeownership')}
+            legend="Do you own or rent your home?"
+            hint="We compare rooftop solar as your electricity option. It usually needs you to own the home."
+            value={v.homeownership === 'own' || v.homeownership === 'rent' ? [v.homeownership] : []}
+            onChange={(x) => set({ homeownership: x[0] })}
+            error={errors['electricity.homeownership']}
+            columns="pair"
+            options={[
+              { value: 'own', label: 'Own' },
+              { value: 'rent', label: 'Rent' },
+            ]}
+          />
+          {v.homeownership === 'own' &&
+            select('roofSun', 'How much sun does your roof get?', [
+              ['unknown', 'Not sure'],
+              ['mostly_sunny', 'Mostly sunny'],
+              ['some_shade', 'Some shade'],
+              ['heavy_shade', 'Heavily shaded'],
+            ])}
           <Advanced>
-            {number('monthlyKwh', 'Average monthly usage (kWh)', 'Shown on your bill.')}
+            {number('monthlyKwh', 'Average monthly usage (kWh)', 'Shown on your bill. Makes the solar estimate more accurate.')}
             {select('rateType', 'Rate plan', [
               ['unknown', 'Not sure'],
               ['standard', 'Standard'],
@@ -562,37 +582,10 @@ function CategoryFields({
           </Advanced>
         </div>
       );
-    case 'solar':
-      return (
-        <div className="space-y-6">
-          <Callout tone="info">This is a quick screen only. We don’t estimate solar savings — a real estimate needs your usage history and a roof assessment.</Callout>
-          <ChoiceCards
-            id={fid('solar.homeownership')}
-            legend="Do you own or rent your home?"
-            value={v.homeownership ? [v.homeownership as 'own' | 'rent'] : []}
-            onChange={(x) => set({ homeownership: x[0] })}
-            error={errors['solar.homeownership']}
-            options={[
-              { value: 'own', label: 'Own' },
-              { value: 'rent', label: 'Rent' },
-            ]}
-          />
-          {select('roofSun', 'How much sun does your roof get?', [
-            ['unknown', 'Not sure'],
-            ['mostly_sunny', 'Mostly sunny'],
-            ['some_shade', 'Some shade'],
-            ['heavy_shade', 'Heavily shaded'],
-          ])}
-          {select('financing', 'How would you consider paying?', [
-            ['undecided', 'Not sure yet'],
-            ['cash', 'Pay upfront'],
-            ['loan', 'Loan'],
-            ['lease', 'Lease / agreement'],
-          ])}
-        </div>
-      );
   }
 }
+
+const ROOF_LABEL: Record<string, string> = { mostly_sunny: 'Mostly sunny', some_shade: 'Some shade', heavy_shade: 'Heavily shaded', unknown: 'Not sure' };
 
 function Review({ answers, onEdit }: { answers: Answers; onEdit: (step: number) => void }) {
   const fmt = (c: unknown) => (typeof c === 'number' ? formatCents(c) : 'Not sure');
@@ -611,17 +604,17 @@ function Review({ answers, onEdit }: { answers: Answers; onEdit: (step: number) 
       </Card>
       {answers.categories.map((c, i) => {
         const v = answers[c] as Record<string, unknown>;
-        const rows: [string, string][] =
-          c === 'solar'
-            ? [
-                ['Home', v.homeownership === 'own' ? 'Own' : 'Rent'],
-                ['Roof sun', String(v.roofSun).replace('_', ' ')],
-              ]
-            : [
-                ['Provider', String(v.provider ?? v.carrier ?? v.utility ?? '') || '—'],
-                ['Monthly', fmt(v.monthlyCents)],
-                ...(c === 'mobile' ? ([['Lines', String(v.lines)]] as [string, string][]) : []),
-              ];
+        const rows: [string, string][] = [
+          ['Provider', String(v.provider ?? v.carrier ?? v.utility ?? '') || '—'],
+          ['Monthly', fmt(v.monthlyCents)],
+          ...(c === 'mobile' ? ([['Lines', String(v.lines)]] as [string, string][]) : []),
+          ...(c === 'electricity'
+            ? ([
+                ['Home', v.homeownership === 'own' ? 'Own' : v.homeownership === 'rent' ? 'Rent' : 'Not answered'],
+                ...(v.homeownership === 'own' ? [['Roof sun', ROOF_LABEL[String(v.roofSun)] ?? 'Not sure']] : []),
+              ] as [string, string][])
+            : []),
+        ];
         return (
           <Card as="div" key={c}>
             <div className="flex items-start justify-between gap-4">

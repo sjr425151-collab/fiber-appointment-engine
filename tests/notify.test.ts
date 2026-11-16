@@ -39,7 +39,7 @@ const config = (teamEmails: string[] = []): AppConfig => ({
   timezone: 'America/Detroit',
   siteUrl: 'https://livefiberconnect.com',
   isProduction: false,
-  email: { resendApiKey: '', from: 'Fiber Connect <hello@mail.livefiberconnect.com>', teamEmails, dailyCustomerLimit: 80 },
+  email: { resendApiKey: '', from: 'Fiber Connect <hello@mail.livefiberconnect.com>', teamEmails, dailyCustomerLimit: 80, nonProductionAllowlist: [] },
 });
 
 const lead = {
@@ -343,5 +343,34 @@ describe('email abuse limits (H3)', () => {
     await notifier.processDue(minutes(30));
     expect(mailer.bySubject(/We got your request/)).toHaveLength(2);
     expect(mailer.bySubject(/^New lead/)).toHaveLength(3);
+  });
+});
+
+describe('staging email isolation', () => {
+  function stagingSetup(allowlist: string[]) {
+    db = openDatabase(':memory:');
+    repo.saveMarket(db, { ...MONROE, notifyEmails: ['team@spotlight.example'] });
+    mailer = new FakeMailer();
+    const c: AppConfig = { ...config(), flags: { env: 'staging', platform: true, sampleData: true }, email: { ...config().email, nonProductionAllowlist: allowlist } };
+    notifier = createNotifier(db, c, mailer);
+    app = createApp(c, db, { notifier });
+  }
+
+  it('never emails a real customer from staging, and labels every staging email', async () => {
+    stagingSetup(['@spotlight.example']);
+    const r = await request(app).post('/api/leads').send(lead).expect(201);
+    await notifier.processDue(minutes(30));
+    expect(mailer.sent.map((e) => e.to[0])).toEqual(['team@spotlight.example']);
+    expect(mailer.sent[0].subject).toMatch(/^\[STAGING\] New lead: Jamie Rivera/);
+    const skipped = listNotifications(db, r.body.leadId).find((n) => n.kind.startsWith('customer_'))!;
+    expect(skipped.status).toBe('skipped');
+    expect(skipped.error).toMatch(/STAGING_EMAIL_ALLOWLIST/);
+  });
+
+  it('delivers to allow-listed test addresses only', async () => {
+    stagingSetup(['@example.com']);
+    await request(app).post('/api/leads').send(lead).expect(201);
+    await notifier.processDue(minutes(30));
+    expect(mailer.sent.some((e) => e.to[0] === 'jamie@example.com' && /^\[STAGING\]/.test(e.subject))).toBe(true);
   });
 });

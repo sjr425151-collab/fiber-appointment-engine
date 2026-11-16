@@ -97,7 +97,7 @@ export const offerSchema = z.object({
     .default({}),
   /** Pricing in the finance engine's own format (integer cents). */
   pricing: costStreamSchema.omit({ id: true, label: true, category: true, firstBillProration: true, earlyTermination: true }),
-  contractMonths: z.number().int().min(0).max(60).default(0),
+  contractMonths: z.number().int().min(0).max(600).default(0),
   /** Where the offer applies. Availability at an address is a separate check. */
   geography: z.object({
     zips: z.array(z.string().regex(/^\d{5}$/)).default([]),

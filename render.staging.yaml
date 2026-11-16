@@ -8,6 +8,8 @@
 #  - APP_ENV=staging          → noindex everywhere, robots.txt disallows all,
 #                               staging banner shown.
 #  - No RESEND_API_KEY        → emails are logged, never sent to real people.
+#    Even with a key, customer emails only go to STAGING_EMAIL_ALLOWLIST
+#    addresses and every subject is prefixed [STAGING].
 #  - SAMPLE_DATA_ENABLED=true → illustrative offers, always labelled "Sample".
 # Schema: https://render.com/schema/render.yaml.json
 services:
@@ -44,3 +46,5 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false          # use a different password from production
+      - key: STAGING_EMAIL_ALLOWLIST
+        sync: false          # e.g. "@spotlightmarketing.example" or "qa@example.com" (comma-separated)

@@ -10,7 +10,12 @@ const NAV = [
   { to: '/admin/locations', label: 'Locations' },
   { to: '/admin/areas', label: 'Service areas' },
   // Parent-platform assessments (only when the platform is enabled).
-  ...(bootFlags().platform ? [{ to: '/admin/assessments', label: 'Assessments' }] : []),
+  ...(bootFlags().platform
+    ? [
+        { to: '/admin/opportunities', label: 'Opportunities' },
+        { to: '/admin/assessments', label: 'Assessments' },
+      ]
+    : []),
 ];
 
 export default function AdminLayout() {
@@ -47,13 +52,14 @@ export default function AdminLayout() {
       <header className="border-b border-white/10 bg-ink-900/60 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-8 gap-y-3 px-4 py-3 sm:px-6">
           <Logo />
-          <nav className="flex gap-1 text-sm">
+          {/* Phones: the nav gets its own full-width row and scrolls sideways instead of overlapping. */}
+          <nav aria-label="Admin" className="order-last -mx-4 flex w-[calc(100%+2rem)] gap-1 overflow-x-auto px-4 pb-1 text-sm lg:order-none lg:mx-0 lg:w-auto lg:overflow-visible lg:px-0 lg:pb-0">
             {NAV.map((n) => (
               <NavLink
                 key={n.to}
                 to={n.to}
                 end={n.end}
-                className={({ isActive }) => `rounded-lg px-3 py-1.5 transition ${isActive ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'}`}
+                className={({ isActive }) => `shrink-0 whitespace-nowrap rounded-lg px-3 py-2 transition ${isActive ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'}`}
               >
                 {n.label}
               </NavLink>

@@ -11,8 +11,9 @@ import { rankOffers, type Candidate, type LensResult } from '../offers/rank';
 import { offerSchema, type Offer } from '../offers/model';
 import { CATEGORY_LABEL, PROMO_MONTHS, type Assessment, type PlatformCategory } from './assessment';
 import { CATALOG_VERSION, offersFor } from './catalog';
+import { SAMPLE_SOLAR_PROGRAMS, SOLAR_FACTS, SOLAR_PROGRAMS, solarAssumptions, solarOffer } from './solar';
 
-export const ANALYSIS_VERSION = `analysis-1/${CATALOG_VERSION}`;
+export const ANALYSIS_VERSION = `analysis-2/${CATALOG_VERSION}`;
 export const HORIZONS = [12, 60, 120] as const;
 export type Horizon = (typeof HORIZONS)[number];
 export type ScenarioId = 'flat' | 'moderate' | 'high';
@@ -38,6 +39,10 @@ export interface CategoryOption {
   monthlyPrice: Cents;
   restrictions: string[];
   disclosureUrl?: string;
+  /** True when the price depends on assumptions about this household (e.g. solar). */
+  estimate: boolean;
+  /** Plain-language assumptions behind an estimate. */
+  assumptions: string[];
 }
 
 export interface CategoryResult {
@@ -53,14 +58,20 @@ export interface CategoryResult {
   /** Option used in the household projection, or 'keep'. */
   selected: string;
   notes: string[];
-  /** Electricity/solar: not compared (legal review pending). */
+  /** False when this service has no comparison at all (kept for snapshot compatibility). */
   comparisonAvailable: boolean;
+  /** Electricity only: why solar is or isn't shown, for the advisor call-to-action. */
+  solar?: SolarStatus;
 }
 
-export interface SolarScreening {
-  outcome: 'not_applicable' | 'unlikely' | 'worth_a_conversation';
-  reasons: string[];
-}
+/**
+ * Electricity's alternative is rooftop solar.
+ * - estimated: a program estimate is shown
+ * - advisor: solar may fit, but no program terms are on file for this area yet
+ * - needs_info: we need home ownership (or the bill) to say
+ * - not_suitable: renting or a heavily shaded roof
+ */
+export type SolarStatus = 'estimated' | 'advisor' | 'needs_info' | 'not_suitable';
 
 export interface PlatformAnalysis {
   version: string;
@@ -77,11 +88,12 @@ export interface PlatformAnalysis {
   projectionBasis: OptionKind | 'current_only';
   /** Categories ordered by steady-state monthly savings of the selected option. */
   opportunities: { category: PlatformCategory; label: string; monthlySavings: Cents; kind: OptionKind }[];
-  solar: SolarScreening | null;
   notes: string[];
 }
 
 const MAIN = (c: PlatformCategory) => `current-${c}`;
+/** Solar offers are only built for owners whose roof may suit solar, so these facts hold when ranking them. */
+const SOLAR_FACT_SET: ReadonlySet<string> = new Set(Object.values(SOLAR_FACTS));
 
 /** Map one category's answers to current cost streams (null baseMonthly = unknown). */
 export function currentStreamsFor(a: Assessment, c: PlatformCategory): { streams: HouseholdService['current'][]; notes: string[]; provider: string } {
@@ -141,30 +153,62 @@ export function currentStreamsFor(a: Assessment, c: PlatformCategory): { streams
     }
     case 'electricity': {
       const e = a.electricity!;
-      notes.push('Electricity is included in your spending, but we don’t compare electricity offers yet.');
       return {
         streams: [{ id: MAIN(c), label: e.utility ? `${e.utility} electricity` : 'Electricity', category: 'electricity', baseMonthly: e.monthlyCents, quality: 'user_reported', escalates: true }],
         notes,
         provider: e.utility,
       };
     }
-    case 'solar':
-      return { streams: [], notes, provider: '' };
   }
 }
 
-export function screenSolar(a: Assessment): SolarScreening | null {
-  if (!a.categories.includes('solar') || !a.solar) return null;
-  const s = a.solar;
-  if (s.homeownership === 'rent') return { outcome: 'not_applicable', reasons: ['Rooftop solar generally requires owning the home (or the owner’s permission).'] };
-  if (s.roofSun === 'heavy_shade') return { outcome: 'unlikely', reasons: ['Heavily shaded roofs usually produce too little energy for rooftop solar to make sense.'] };
-  return {
-    outcome: 'worth_a_conversation',
-    reasons: [
-      'You own your home and your roof may get enough sun.',
-      'We don’t estimate solar savings yet — a real estimate needs your usage history, roof details and current incentives.',
-    ],
-  };
+interface CategoryOffers {
+  real: Offer[];
+  samples: Offer[];
+  /** Assumptions per offer id (solar estimates). */
+  assumptions: Map<string, string[]>;
+  notes: string[];
+  solar?: SolarStatus;
+}
+
+/** Electricity → household-specific rooftop-solar alternatives. */
+function solarOffersFor(a: Assessment, includeSamples: boolean): CategoryOffers {
+  const e = a.electricity!;
+  const out: CategoryOffers = { real: [], samples: [], assumptions: new Map(), notes: [] };
+  if (e.homeownership === 'rent') {
+    out.notes.push('Rooftop solar usually requires owning your home, so we don’t compare solar for renters.');
+    return { ...out, solar: 'not_suitable' };
+  }
+  if (e.roofSun === 'heavy_shade') {
+    out.notes.push('Heavily shaded roofs usually produce too little power for rooftop solar to lower your bill.');
+    return { ...out, solar: 'not_suitable' };
+  }
+  if (e.homeownership === 'unknown' || e.monthlyCents === null) {
+    out.notes.push(e.monthlyCents === null ? 'Add your electric bill to see a solar estimate.' : 'Tell us whether you own your home to see a solar estimate.');
+    return { ...out, solar: 'needs_info' };
+  }
+  const household = { billCents: e.monthlyCents, monthlyKwh: e.monthlyKwh };
+  const build = (programs: typeof SOLAR_PROGRAMS) =>
+    programs
+      .filter((p) => p.geography.nationwide || (p.geography.zips ?? []).includes(a.zip))
+      .map((p) => {
+        const { offer, estimate } = solarOffer(p, household);
+        out.assumptions.set(p.id, solarAssumptions(p, estimate));
+        return offer;
+      });
+  out.real = build(SOLAR_PROGRAMS);
+  out.samples = includeSamples ? build(SAMPLE_SOLAR_PROGRAMS) : [];
+  if (e.roofSun === 'unknown') out.notes.push('We assumed your roof gets enough sun; a site assessment will confirm it.');
+  if (!out.real.length && !out.samples.length) {
+    out.notes.push('Solar could lower your electricity costs. We don’t have current solar pricing on file for your area yet — an advisor can prepare a free site-specific estimate.');
+  }
+  return { ...out, solar: out.real.length || out.samples.length ? 'estimated' : 'advisor' };
+}
+
+function offersForCategory(c: PlatformCategory, a: Assessment, includeSamples: boolean): CategoryOffers {
+  if (c === 'electricity') return solarOffersFor(a, includeSamples);
+  const cat = offersFor(c, { zip: a.zip, mobileLines: a.mobile?.lines, mobileDataNeed: a.mobile?.dataNeed, mobileInternational: a.mobile?.international, includeSamples });
+  return { ...cat, assumptions: new Map(), notes: [] };
 }
 
 const kindOf = (status: Candidate['status'], eligible: Candidate['eligible']): OptionKind | null =>
@@ -181,42 +225,39 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
   const services: HouseholdService[] = [];
 
   for (const c of a.categories) {
-    if (c === 'solar') continue;
     const { streams, notes, provider } = currentStreamsFor(a, c);
     const main = streams[0];
-    const comparisonAvailable = c !== 'electricity';
+    const comparisonAvailable = true;
     const known = main.baseMonthly !== null;
     if (!known) missing.push(`Your monthly ${CATEGORY_LABEL[c].toLowerCase()} bill`);
 
     let options: CategoryOption[] = [];
     let lenses: LensResult[] = [];
     let lensKind: OptionKind | null = null;
-    if (comparisonAvailable) {
-      const cat = offersFor(c, {
-        zip: a.zip,
-        mobileLines: a.mobile?.lines,
-        mobileDataNeed: a.mobile?.dataNeed,
-        mobileInternational: a.mobile?.international,
-        includeSamples: opts.includeSamples,
-      });
+    const cat = offersForCategory(c, a, opts.includeSamples);
+    notes.push(...cat.notes);
+    const offerById = new Map([...cat.real, ...cat.samples].map((o) => [o.id, offerSchema.parse(o)]));
+    {
       const current: CostStream[] = known ? streams.map((s) => ({ ...s, baseMonthly: s.baseMonthly as Cents })) : [];
       const rankOf = (offers: Offer[], usable?: Candidate['status'][]) =>
-        rankOffers({ current, offers, replaces: () => MAIN(c), ctx: { zip: a.zip }, now, horizonMonths: 60, scenario, usableStatuses: usable });
+        rankOffers({ current, offers, replaces: () => MAIN(c), ctx: { zip: a.zip, facts: c === 'electricity' ? SOLAR_FACT_SET : undefined }, now, horizonMonths: 60, scenario, usableStatuses: usable });
       const real = cat.real.length ? rankOf(cat.real) : null;
       const samples = cat.samples.length ? rankOf(cat.samples, ['sample']) : null;
-      const byId = new Map([...cat.real, ...cat.samples].map((o) => [o.id, offerSchema.parse(o)]));
       for (const cand of [...(real ? [...real.recommendable, ...real.needsVerification] : []), ...(samples ? samples.recommendable : [])]) {
         const kind = kindOf(cand.status, cand.eligible);
         if (!kind) continue;
-        const offer = byId.get(cand.offerId)!;
+        const offer = offerById.get(cand.offerId)!;
+        const assumptions = cat.assumptions.get(cand.offerId) ?? [];
         options.push({
           offerId: cand.offerId,
           planName: cand.planName,
           kind,
           candidate: cand,
-          monthlyPrice: offer.pricing.promotion?.monthlyRate ?? offer.pricing.baseMonthly,
+          monthlyPrice: firstMonthPrice(offer),
           restrictions: offer.restrictions,
           disclosureUrl: offer.disclosureUrl,
+          estimate: assumptions.length > 0,
+          assumptions,
         });
       }
       // Strongest evidence first, then cheapest; equal price → faster plan (same rule as the lenses).
@@ -230,7 +271,8 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
       if (real?.recommendable.length) [lenses, lensKind] = [real.lenses, 'verified'];
       else if (real?.provisionalLenses.some((l) => l.offerId)) [lenses, lensKind] = [real.provisionalLenses, 'pending_address'];
       else if (samples?.recommendable.length) [lenses, lensKind] = [samples.lenses, 'sample'];
-      if (!options.length) notes.push(opts.includeSamples ? 'No alternatives found for this service.' : 'We don’t have verified alternatives for this service in your area yet — an advisor can check for you.');
+      if (!options.length && c !== 'electricity')
+        notes.push(opts.includeSamples ? 'No alternatives found for this service.' : 'We don’t have verified alternatives for this service in your area yet — an advisor can check for you.');
     }
 
     // Default selection: the lowest-cost option, but only if it actually costs less.
@@ -240,19 +282,34 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
     const validRequest = requested === 'keep' || options.some((o) => o.offerId === requested);
     const selected = validRequest ? requested! : known && lowestCand && lowestCand.savingsTotal > 0 ? lowest! : 'keep';
 
-    categories.push({ category: c, label: CATEGORY_LABEL[c], currentMonthly: main.baseMonthly === null ? null : todayMonthly(streams), provider, options, lenses, lensKind, selected, notes, comparisonAvailable });
+    categories.push({
+      category: c,
+      label: CATEGORY_LABEL[c],
+      currentMonthly: main.baseMonthly === null ? null : todayMonthly(streams),
+      provider,
+      options,
+      lenses,
+      lensKind,
+      selected,
+      notes,
+      comparisonAvailable,
+      ...(cat.solar ? { solar: cat.solar } : {}),
+    });
 
     // Household services (for the projection).
     streams.forEach((s, i) => {
       if (i === 0 && selected !== 'keep') {
-        const offer = byIdFromOptions(options, selected, c, a, opts);
+        const offer = toStream(offerById.get(selected)!, options.find((o) => o.offerId === selected)!.kind);
         services.push({ current: s, action: { type: 'replace', with: offer } });
       } else services.push({ current: s, action: { type: 'keep' } });
     });
   }
 
-  const solar = screenSolar(a);
-  if (a.categories.includes('electricity')) globalNotes.push('Energy comparisons are not offered yet while we complete a regulatory review.');
+  if (categories.some((c) => c.options.some((o) => o.estimate))) {
+    globalNotes.push(
+      'Solar figures are estimates, not quotes. Real savings depend on a site assessment, your actual usage, future utility rates and the final contract. No tax credits or incentives are included.',
+    );
+  }
 
   const selectedKinds = categories.filter((c) => c.selected !== 'keep').map((c) => c.options.find((o) => o.offerId === c.selected)!.kind);
   const projectionBasis: PlatformAnalysis['projectionBasis'] = selectedKinds.length
@@ -272,7 +329,6 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
       household: null,
       projectionBasis,
       opportunities: [],
-      solar,
       notes: globalNotes,
     };
   }
@@ -301,9 +357,14 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
     household,
     projectionBasis,
     opportunities,
-    solar,
     notes: [...globalNotes, ...household.notes],
   };
+}
+
+/** What the plan costs in its first month: the (promotional) rate plus recurring charges that start right away. */
+function firstMonthPrice(offer: ReturnType<typeof offerSchema.parse>): Cents {
+  const base = offer.pricing.promotion?.monthlyRate ?? offer.pricing.baseMonthly;
+  return base + offer.pricing.recurring.filter((r) => r.startMonth === 0).reduce((sum, r) => sum + r.monthly, 0);
 }
 
 /** Today's monthly total for a category's streams (base + recurring, before promos end). */
@@ -311,16 +372,14 @@ function todayMonthly(streams: HouseholdService['current'][]): Cents {
   return streams.reduce((sum, s) => sum + (s.promotion?.monthlyRate ?? (s.baseMonthly ?? 0)) + (s.recurring ?? []).reduce((a, r) => a + r.monthly, 0), 0);
 }
 
-function byIdFromOptions(options: CategoryOption[], id: string, c: PlatformCategory, a: Assessment, opts: AnalysisOptions): CostStream {
-  const cat = offersFor(c, { zip: a.zip, mobileLines: a.mobile?.lines, mobileDataNeed: a.mobile?.dataNeed, mobileInternational: a.mobile?.international, includeSamples: opts.includeSamples });
-  const offer = offerSchema.parse([...cat.real, ...cat.samples].find((o) => o.id === id));
-  const kind = options.find((o) => o.offerId === id)!.kind;
+function toStream(offer: ReturnType<typeof offerSchema.parse>, kind: OptionKind): CostStream {
   return {
     ...offer.pricing,
     id: offer.id,
     label: offer.planName,
     category: offer.category as Category,
-    // Real prices are manually verified even when availability at the address isn't confirmed yet.
-    quality: kind === 'sample' ? 'estimated' : 'manually_verified',
+    // Real prices are manually verified even when availability at the address isn't confirmed yet;
+    // household-specific estimates (solar) stay estimates.
+    quality: kind === 'sample' || offer.pricing.quality === 'estimated' ? 'estimated' : 'manually_verified',
   };
 }

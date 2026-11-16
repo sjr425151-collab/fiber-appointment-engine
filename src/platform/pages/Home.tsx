@@ -8,8 +8,7 @@ const CATEGORIES = [
   { name: 'Home internet', body: 'Speed, equipment fees and what happens when a promotion ends.', status: 'Live comparisons in pilot areas' },
   { name: 'Mobile', body: 'Per-line costs, separated from phone payments.', status: 'Comparisons coming' },
   { name: 'TV & streaming', body: 'Cable, satellite and streaming, side by side.', status: 'Comparisons coming' },
-  { name: 'Electricity', body: 'Your spending, included in the household picture.', status: 'Spending only for now' },
-  { name: 'Solar', body: 'A quick screen to see if it’s worth a conversation.', status: 'Screening only' },
+  { name: 'Electricity & solar', body: 'Your electric bill compared with rooftop solar, when you own your home.', status: 'Estimates — confirmed by a site assessment' },
 ];
 
 const STEPS = [
@@ -67,7 +66,7 @@ export default function Home() {
         <h2 id="cats" className="font-display text-2xl font-bold text-pf-ink sm:text-3xl">
           What we analyze
         </h2>
-        <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {CATEGORIES.map((c) => (
             <li key={c.name} className="rounded-2xl border border-pf-line bg-pf-surface p-5">
               <h3 className="font-semibold text-pf-ink">{c.name}</h3>

@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { PLATFORM_CONSENT_VERSION, platformConsentText } from '../shared/content';
 import { assessmentSchema, contactSchema, submissionSchema } from '../shared/platform/assessment';
 import { buildAnalysis, type PlatformAnalysis } from '../shared/platform/analysis';
+import { opportunitiesFrom } from '../shared/platform/opportunity';
 import type { AppConfig } from './config';
 import type { DB } from './db';
 import { newToken, safeEqual, sha256 } from './lib/auth';
@@ -106,6 +107,12 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
     const area = repo.getServiceArea(db, assessment.zip);
     const areaMarket = area ? repo.getMarket(db, area.marketId) : null;
     const market = areaMarket?.active ? areaMarket : repo.getDefaultMarket(db);
+    // Re-run the deterministic analysis with the customer's selections, anchored to
+    // the snapshot's time and data scope. Prices are never taken from the request;
+    // unknown option ids fall back to the default selection.
+    const snapshot = a.analysis as PlatformAnalysis;
+    const chosen = buildAnalysis(assessment, { includeSamples: snapshot.includeSamples && config.flags.sampleData, computedAt: snapshot.computedAt, selections: input.selections });
+    const drafts = opportunitiesFrom(chosen);
     const bookingToken = newToken();
     const { lead, duplicate } = repo.createLead(db, {
       firstName: input.firstName,
@@ -136,7 +143,13 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
       consentUserAgent: String(req.headers['user-agent'] ?? '').slice(0, 300),
     });
     repo.linkAssessmentLead(db, a.id, lead.id);
-    repo.addNote(db, lead.id, `From household assessment (${input.intent}). Categories: ${assessment.categories.join(', ')}.`, 'system');
+    repo.insertOpportunities(db, { leadId: lead.id, assessmentId: a.id, marketId: market.slug, drafts });
+    repo.addNote(
+      db,
+      lead.id,
+      `From household assessment (${input.intent}). Asked about: ${drafts.map((d) => `${d.category} → ${d.planName}${d.kind === 'sample' ? ' [SAMPLE]' : ''}`).join('; ')}.`,
+      'system',
+    );
     repo.insertEvent(db, { name: 'advisor_request', sessionId: input.sessionId, path: '/savings', props: { intent: input.intent }, utmSource: a.utmSource, utmCampaign: a.utmCampaign, marketId: market.slug });
     notifier.onLead(repo.getLead(db, lead.id)!, duplicate);
     res.status(201).json({ leadId: lead.id, bookingToken, market: market.slug });

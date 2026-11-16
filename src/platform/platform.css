@@ -41,6 +41,12 @@
   color: var(--color-pf-ink);
   color-scheme: light;
 }
+/* Headings and containers that receive focus programmatically (after a step
+   change, a route change or an error) are announced by screen readers; a focus
+   box around non-interactive text only confuses mouse and touch users. */
+.pf [tabindex='-1']:focus {
+  outline: none;
+}
 .pf :focus-visible {
   outline: 3px solid var(--color-pf-brand);
   outline-offset: 2px;

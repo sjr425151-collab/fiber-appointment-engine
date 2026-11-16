@@ -174,7 +174,8 @@ export function ChoiceCards<T extends string>({
   onChange: (v: T[]) => void;
   multiple?: boolean;
   error?: string;
-  columns?: 1 | 2 | 3;
+  /** 2 = two columns from small screens up; 'pair' = always side by side (short answers like Own / Rent). */
+  columns?: 1 | 2 | 3 | 'pair';
 }) {
   const name = useId();
   const describedBy = [error && `${name}-err`, hint && `${name}-hint`].filter(Boolean).join(' ') || undefined;
@@ -186,7 +187,7 @@ export function ChoiceCards<T extends string>({
           {hint}
         </p>
       )}
-      <div className={cx('mt-3 grid gap-3', columns === 2 && 'sm:grid-cols-2', columns === 3 && 'sm:grid-cols-3')}>
+      <div className={cx('mt-3 grid gap-3', columns === 2 && 'sm:grid-cols-2', columns === 3 && 'sm:grid-cols-3', columns === 'pair' && 'grid-cols-2')}>
         {options.map((o, i) => {
           const checked = value.includes(o.value);
           return (
@@ -317,8 +318,8 @@ export function Money({ cents, kind = 'amount', className, perMonth }: { cents: 
 }
 
 // ------------------------------------------------------------- Card/Callout --
-export function Card({ children, className, as: As = 'section' }: { children: ReactNode; className?: string; as?: 'section' | 'div' | 'article' }) {
-  return <As className={cx('rounded-2xl border border-pf-line bg-pf-surface p-5 shadow-pf-card sm:p-6', className)}>{children}</As>;
+export function Card({ children, className, id, as: As = 'section' }: { children: ReactNode; className?: string; id?: string; as?: 'section' | 'div' | 'article' }) {
+  return <As id={id} className={cx('rounded-2xl border border-pf-line bg-pf-surface p-5 shadow-pf-card sm:p-6', className)}>{children}</As>;
 }
 
 export function Callout({ tone = 'info', title, children }: { tone?: 'info' | 'warn' | 'sample' | 'save'; title?: string; children: ReactNode }) {

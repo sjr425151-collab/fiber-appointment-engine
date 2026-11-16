@@ -53,6 +53,12 @@ export const recurringSchema = z.object({
   months: months.optional(),
   /** Whether this charge rises with the price-increase scenario. */
   escalates: z.boolean().default(false),
+  /**
+   * Contractual annual increase (e.g. a solar lease escalator), applied on each
+   * anniversary of `startMonth` regardless of the scenario or any price lock.
+   * When set, it replaces scenario escalation for this charge.
+   */
+  escalatorBps: z.number().int().min(0).max(2000).default(0),
 });
 export type RecurringCharge = z.input<typeof recurringSchema>;
 
@@ -204,7 +210,13 @@ export function projectStream(input: CostStream, horizon: number, scenario: Esca
     const base = promoActive ? s.promotion!.monthlyRate : escalate(s.baseMonthly, scenario.annualBps, steps);
     const extras = s.recurring
       .filter((r) => activeIn(m, r.startMonth, r.months))
-      .map((r) => (r.escalates ? escalate(r.monthly, scenario.annualBps, escalationSteps(m, s.priceLockMonths)) : r.monthly));
+      .map((r) =>
+        r.escalatorBps > 0
+          ? escalate(r.monthly, r.escalatorBps, Math.floor((m - r.startMonth) / 12))
+          : r.escalates
+            ? escalate(r.monthly, scenario.annualBps, escalationSteps(m, s.priceLockMonths))
+            : r.monthly,
+      );
     let recurring = sum([base, ...extras]);
     let disc = -sum(
       s.discounts

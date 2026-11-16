@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { assessmentSchema, type AssessmentInput } from '../shared/platform/assessment';
-import { buildAnalysis, currentStreamsFor, screenSolar } from '../shared/platform/analysis';
+import { buildAnalysis, currentStreamsFor } from '../shared/platform/analysis';
+import { estimateSolar, SAMPLE_SOLAR_PROGRAMS, SOLAR_PROGRAMS, solarOffer } from '../shared/platform/solar';
+import { projectStream, ASSUMPTIONS_V1 } from '../shared/finance/engine';
 
 const AT = '2026-11-16T12:00:00.000Z';
 const parse = (a: AssessmentInput) => assessmentSchema.parse(a);
@@ -110,24 +112,74 @@ describe('incomplete inputs, energy and solar', () => {
     expect(r.household).toBeNull();
   });
 
-  it('includes electricity spend but never compares it (legal hold)', () => {
-    const r = buildAnalysis(parse({ zip: '48161', categories: ['electricity'], electricity: { utility: 'DTE', monthlyCents: 14000 } }), { includeSamples: true, computedAt: AT });
+  const elec = (over: Record<string, unknown> = {}) => parse({ zip: '48161', categories: ['electricity'], electricity: { utility: 'DTE', monthlyCents: 16000, homeownership: 'own', roofSun: 'mostly_sunny', ...over } });
+
+  it('compares electricity with a labelled sample solar estimate on staging', () => {
+    const r = buildAnalysis(elec(), { includeSamples: true, computedAt: AT });
     const e = r.categories[0];
-    expect(e.comparisonAvailable).toBe(false);
-    expect(e.options).toEqual([]);
-    expect(r.household!.currentMonthly).toBe(14000);
-    expect(r.notes.join(' ')).toMatch(/regulatory review/);
+    expect(e.solar).toBe('estimated');
+    expect(e.options).toHaveLength(1);
+    const o = e.options[0];
+    expect(o.kind).toBe('sample');
+    expect(o.estimate).toBe(true);
+    // $160 bill, $9 fixed charge, 19¢/kWh → 795 kWh; 90% covered = 716 kWh × 12.5¢ = $89.50; remaining utility $9 + 10% of $151 = $24.10.
+    expect(o.monthlyPrice).toBe(2410 + 8950);
+    expect(o.assumptions.join(' ')).toMatch(/90% of your usage .*716 of 795 kWh.*estimated from your bill/);
+    expect(o.assumptions.join(' ')).toMatch(/No tax credits or incentives/);
+    expect(e.selected).toBe('sample-solar-ppa');
+    expect(r.projectionBasis).toBe('sample');
+    expect(r.notes.join(' ')).toMatch(/estimates, not quotes/);
+    expect(r.household!.scenarios[0].months[0].savings).toBe(16000 - 11360);
   });
 
-  it('screens solar interest without any savings estimate', () => {
-    const base = { zip: '48161', categories: ['solar' as const] };
-    expect(screenSolar(parse({ ...base, solar: { homeownership: 'rent' } }))!.outcome).toBe('not_applicable');
-    expect(screenSolar(parse({ ...base, solar: { homeownership: 'own', roofSun: 'heavy_shade' } }))!.outcome).toBe('unlikely');
-    const ok = screenSolar(parse({ ...base, solar: { homeownership: 'own', roofSun: 'mostly_sunny' } }))!;
-    expect(ok.outcome).toBe('worth_a_conversation');
-    expect(ok.reasons.join(' ')).toMatch(/don’t estimate solar savings/);
-    const r = buildAnalysis(parse({ ...base, solar: { homeownership: 'own' } }), { includeSamples: true, computedAt: AT });
-    expect(r.status).toBe('incomplete'); // nothing with a monthly cost to analyse
+  it('never shows a solar number in production without real program terms', () => {
+    expect(SOLAR_PROGRAMS).toEqual([]);
+    const r = buildAnalysis(elec(), { includeSamples: false, computedAt: AT });
+    const e = r.categories[0];
+    expect(e.options).toEqual([]);
+    expect(e.solar).toBe('advisor');
+    expect(e.selected).toBe('keep');
+    expect(r.opportunities).toEqual([]);
+    expect(e.notes.join(' ')).toMatch(/advisor can prepare a free site-specific estimate/);
+  });
+
+  it('explains when solar does not apply instead of estimating', () => {
+    expect(buildAnalysis(elec({ homeownership: 'rent' }), { includeSamples: true, computedAt: AT }).categories[0]).toMatchObject({ solar: 'not_suitable', options: [] });
+    expect(buildAnalysis(elec({ roofSun: 'heavy_shade' }), { includeSamples: true, computedAt: AT }).categories[0]).toMatchObject({ solar: 'not_suitable', options: [] });
+    expect(buildAnalysis(elec({ homeownership: 'unknown' }), { includeSamples: true, computedAt: AT }).categories[0]).toMatchObject({ solar: 'needs_info', options: [] });
+    const unknownBill = buildAnalysis(elec({ monthlyCents: null }), { includeSamples: true, computedAt: AT });
+    expect(unknownBill.status).toBe('incomplete');
+    expect(unknownBill.categories[0].solar).toBe('needs_info');
+  });
+
+  it('uses the household’s kWh when given, and shows when solar costs more', () => {
+    const p = SAMPLE_SOLAR_PROGRAMS[0];
+    const known = estimateSolar(p, { billCents: 16000, monthlyKwh: 1000 });
+    expect(known).toMatchObject({ monthlyKwh: 1000, kwhEstimated: false, coveredKwh: 900, solarPayment: 11250 });
+    // A small bill with high usage: solar is more expensive, and the analysis says so instead of selecting it.
+    const r = buildAnalysis(elec({ monthlyCents: 4000, monthlyKwh: 1200 }), { includeSamples: true, computedAt: AT });
+    const e = r.categories[0];
+    expect(e.options[0].candidate.savingsTotal).toBeLessThan(0);
+    expect(e.selected).toBe('keep');
+  });
+
+  it('applies the contract escalator to the solar payment yearly, independent of the scenario', () => {
+    const { offer } = solarOffer(SAMPLE_SOLAR_PROGRAMS[0], { billCents: 16000, monthlyKwh: null });
+    const flat = ASSUMPTIONS_V1.escalationScenarios[0];
+    const proj = projectStream({ ...offer.pricing, id: 's', label: 's', category: 'electricity' }, 25, flat);
+    expect(proj.months[0].total).toBe(2410 + 8950);
+    expect(proj.months[11].total).toBe(2410 + 8950);
+    expect(proj.months[12].total).toBe(2410 + 8950 + 260); // 8950 × 2.9% = 259.55 → 260
+    expect(proj.months[24].total).toBe(2410 + 9210 + 267); // compounding on 9210
+  });
+
+  it('folds the retired "solar" category into electricity for old assessments', () => {
+    const legacy = assessmentSchema.parse({ zip: '48161', categories: ['electricity', 'solar'], electricity: { utility: 'DTE', monthlyCents: 16000 }, solar: { homeownership: 'own', roofSun: 'some_shade' } });
+    expect(legacy.categories).toEqual(['electricity']);
+    expect(legacy.electricity).toMatchObject({ homeownership: 'own', roofSun: 'some_shade' });
+    expect('solar' in legacy).toBe(false);
+    // Solar-only legacy assessments become empty and are rejected rather than guessed.
+    expect(assessmentSchema.safeParse({ zip: '48161', categories: ['solar'], solar: { homeownership: 'own' } }).success).toBe(false);
   });
 
   it('models an expiring promotion when the regular price is known', () => {

@@ -4,6 +4,7 @@ import { loadConfig } from './config';
 import { openDatabase } from './db';
 import { createNotifier } from './notify';
 import { pruneEvents } from './repo';
+import { errorFields, log } from './lib/log';
 
 if (existsSync('.env')) process.loadEnvFile('.env');
 
@@ -32,6 +33,13 @@ setInterval(housekeeping, 24 * 3600_000).unref();
 
 const server = app.listen(config.port, () => {
   console.log(`[api] listening on http://localhost:${config.port} (db: ${config.databasePath})`);
+});
+
+// Last-resort logging: an unexpected crash must leave a searchable trace.
+process.on('unhandledRejection', (err) => log('error', 'unhandled_rejection', errorFields(err)));
+process.on('uncaughtException', (err) => {
+  log('error', 'uncaught_exception', errorFields(err));
+  process.exit(1); // let Render restart a clean process
 });
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {

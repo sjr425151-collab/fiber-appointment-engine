@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -25,6 +26,7 @@ import type { DB } from './db';
 import { renderHtml, type BootData } from './html';
 import { platformPreloader } from './preload';
 import { PLATFORM_META } from '../shared/platform/brand';
+import { OPPORTUNITY_STATUSES } from '../shared/platform/opportunity';
 import { createNotifier, listNotifications, type Notifier } from './notify';
 import { platformRouter, PlatformError } from './platform';
 import {
@@ -40,11 +42,14 @@ import {
   type Session,
 } from './lib/auth';
 import * as repo from './repo';
+import { errorFields, log } from './lib/log';
 import { availableSlots, bookableDates, bookAppointment, BookingError } from './scheduling';
 
 declare module 'express-serve-static-core' {
   interface Request {
     session?: Session;
+    /** Correlates a response with its log lines (also sent as X-Request-Id). */
+    requestId?: string;
   }
 }
 
@@ -100,6 +105,13 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
   const notifier = deps.notifier ?? createNotifier(db, config);
   const app = express();
   app.disable('x-powered-by');
+  // Request id: reuse a sane upstream id (Render sends rndr-id), else generate one.
+  app.use((req, res, next) => {
+    const upstream = String(req.headers['x-request-id'] ?? req.headers['rndr-id'] ?? '');
+    req.requestId = /^[\w-]{8,64}$/.test(upstream) ? upstream : randomUUID();
+    res.set('X-Request-Id', req.requestId);
+    next();
+  });
   if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || 1);
 
   app.use(
@@ -142,7 +154,18 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
   api.use(limiter(300, 15));
 
   // ------------------------------------------------------------- public --
-  api.get('/health', (_req, res) => res.json({ ok: true }));
+  // Liveness + readiness for Render's health check and uptime monitors: proves the
+  // database answers. No secrets; the commit id helps confirm what is deployed.
+  api.get('/health', (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      db.prepare('SELECT 1').get();
+      res.json({ ok: true, db: 'ok', env: config.flags.env, version: (process.env.RENDER_GIT_COMMIT ?? 'dev').slice(0, 7) });
+    } catch (err) {
+      log('error', 'health_db_failed', errorFields(err));
+      res.status(503).json({ ok: false, db: 'error' });
+    }
+  });
 
   api.get('/markets', (_req, res) => res.json({ markets: repo.marketSummaries(db), defaultSlug: repo.getDefaultMarket(db).slug }));
 
@@ -367,6 +390,25 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     res.json({ assessment: a });
   });
 
+  const opportunityQuery = z.object({
+    status: z.enum(OPPORTUNITY_STATUSES).optional(),
+    category: z.string().trim().regex(/^[a-z_]{1,30}$/).optional(),
+    market: z.string().trim().max(40).optional(),
+    limit: z.coerce.number().int().min(1).max(200).optional(),
+    offset: z.coerce.number().int().min(0).optional(),
+  });
+  admin.get('/opportunities', (req, res) => {
+    const q = parse(opportunityQuery, req.query);
+    res.json({ ...repo.listOpportunities(db, { ...q, market: q.market || undefined }), stats: repo.opportunityStats(db, q.market || undefined) });
+  });
+
+  admin.patch('/opportunities/:id', (req, res) => {
+    const { status } = parse(z.object({ status: z.enum(OPPORTUNITY_STATUSES) }).strict(), req.body);
+    const o = repo.updateOpportunityStatus(db, String(req.params.id), status, req.session!.email);
+    if (!o) throw new HttpError(404, 'Opportunity not found.');
+    res.json({ opportunity: o, notes: repo.listNotes(db, o.leadId) });
+  });
+
   admin.get('/leads/:id', (req, res) => {
     const lead = repo.getLead(db, String(req.params.id));
     if (!lead) throw new HttpError(404, 'Lead not found.');
@@ -377,6 +419,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
       notifications: listNotifications(db, lead.id),
       consents: repo.listConsents(db, lead.id),
       assessment: lead.assessmentId ? repo.getAssessment(db, lead.assessmentId) : null,
+      opportunities: repo.opportunitiesForLead(db, lead.id),
     });
   });
 
@@ -500,7 +543,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
   }
 
   // -------------------------------------------------------------- errors --
-  app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof HttpError || err instanceof BookingError || err instanceof PlatformError) {
       res.status(err.status).json({ error: err.message, fields: err instanceof BookingError ? undefined : err.details });
       return;
@@ -510,8 +553,9 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
       res.status(status).json({ error: 'Bad request.' });
       return;
     }
-    console.error(err);
-    res.status(500).json({ error: 'Something went wrong. Please try again.' });
+    // Path only (never the query string: results tokens live there), no body or cookies.
+    log('error', 'unhandled_error', { requestId: req.requestId, method: req.method, path: req.path, ...errorFields(err) });
+    res.status(500).json({ error: 'Something went wrong. Please try again.', requestId: req.requestId });
   });
 
   return app;

@@ -17,7 +17,9 @@
     "test": "vitest run",
     "admin:hash": "tsx server/scripts/hash-password.ts",
     "lint": "oxlint .",
-    "check": "npm run typecheck && npm run lint && npm test"
+    "check": "npm run typecheck && npm run lint && npm test",
+    "test:e2e": "npm run build && vitest run -c vitest.e2e.config.ts",
+    "db:backup": "tsx server/scripts/backup.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
@@ -40,8 +42,10 @@
     "@types/react-dom": "^19.3.0",
     "@types/supertest": "^7.2.1",
     "@vitejs/plugin-react": "^6.3.0",
+    "axe-core": "4.10.3",
     "concurrently": "^10.0.7",
     "oxlint": "^1.93.0",
+    "playwright": "1.63.0",
     "supertest": "^7.3.2",
     "tailwindcss": "^4.3.5",
     "tsx": "^4.23.15",

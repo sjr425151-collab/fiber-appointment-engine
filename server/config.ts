@@ -32,6 +32,11 @@ export interface AppConfig {
     teamEmails: string[];
     /** Max customer-facing emails per rolling 24h (Resend free tier: 100/day). Team alerts are never capped. */
     dailyCustomerLimit: number;
+    /**
+     * Outside production, customer emails go ONLY to these addresses (or @domains);
+     * everything else is skipped, so staging can never email real customers.
+     */
+    nonProductionAllowlist: string[];
   };
 }
 
@@ -92,6 +97,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         .map((e) => e.trim().toLowerCase())
         .filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)),
       dailyCustomerLimit: Math.max(0, Number(env.EMAIL_DAILY_CUSTOMER_LIMIT ?? 80) || 0),
+      nonProductionAllowlist: (env.STAGING_EMAIL_ALLOWLIST ?? '')
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean),
     },
     isProduction,
   };

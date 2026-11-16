@@ -23,7 +23,7 @@ const base = (flags: AppConfig['flags']): AppConfig => ({
   timezone: 'America/Detroit',
   siteUrl: 'https://livefiberconnect.com',
   isProduction: true,
-  email: { resendApiKey: '', from: 'x <x@example.com>', teamEmails: [], dailyCustomerLimit: 80 },
+  email: { resendApiKey: '', from: 'x <x@example.com>', teamEmails: [], dailyCustomerLimit: 80, nonProductionAllowlist: [] },
 });
 const PROD = base({ env: 'production', platform: false, sampleData: false });
 const STAGING = base({ env: 'staging', platform: true, sampleData: true });

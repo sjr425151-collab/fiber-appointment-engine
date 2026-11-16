@@ -40,7 +40,7 @@ Typography uses Sora (display) and Inter (body), the same self-hosted fonts as t
 - **Button**: primary, secondary or ghost; at least 44 px tall; `loading` sets `aria-busy`; the spinner animates only with `motion-safe`.
 - **Field**: label, hint and error wiring through a render prop: `aria-describedby` lists the error and then the hint, and `aria-invalid` is set on error. Pass `id` when an error summary must link to the field.
 - **CurrencyInput**: values are integer cents only (`parseDollars`); a wrong format reports an error but never stores a guess. An empty field means "unknown", stored as `null`.
-- **ChoiceCards**: a fieldset with a legend. The hint and the error are both in `aria-describedby`; the inputs get `aria-invalid` on error; `id` targets the first input.
+- **ChoiceCards**: a fieldset with a legend; `columns="pair"` keeps short answers (Own / Rent) side by side on phones. The hint and the error are both in `aria-describedby`; the inputs get `aria-invalid` on error; `id` targets the first input.
 - **SegmentedControl**: native radios (arrow-key navigation built in).
 - **Stepper**: a `role="group"` showing "Step N of M" text, with `aria-current="step"`.
 - **StatusChip**: the data-quality label, always an icon plus a word, never colour alone. Statuses come from provenance (`publicStatus`), never hand-set. `detail` is screen-reader-only, so show anything important as visible text too.

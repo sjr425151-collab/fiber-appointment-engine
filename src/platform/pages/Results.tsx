@@ -16,6 +16,29 @@ const LENS_LABEL = { lowest_cost: 'Lowest cost', best_value: 'Best value', highe
 const PRIORITY_LENS: Record<string, keyof typeof LENS_LABEL> = { lower_cost: 'lowest_cost', faster_speed: 'highest_performance', simple_switch: 'lowest_friction', no_contract: 'lowest_friction' };
 const KIND_CHIP: Record<CategoryOption['kind'], ChipStatus> = { verified: 'manually_verified', pending_address: 'pending_verification', sample: 'sample' };
 const HORIZON_LABEL: Record<Horizon, string> = { 12: '1 year', 60: '5 years', 120: '10 years' };
+const NOT_FOUND = 'We couldn’t find these results. The link may be incomplete or expired.';
+
+/** Placeholder shaped like the dashboard, so the page doesn't jump when results arrive. */
+function ResultsSkeleton() {
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12" aria-busy="true">
+      <p role="status" className="sr-only">
+        Loading your results…
+      </p>
+      <div className="h-4 w-48 rounded bg-pf-line motion-safe:animate-pulse" aria-hidden />
+      <div className="mt-3 h-9 w-72 max-w-full rounded bg-pf-line motion-safe:animate-pulse" aria-hidden />
+      <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4" aria-hidden>
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="h-28 rounded-2xl border border-pf-line bg-pf-surface p-4">
+            <div className="h-3 w-20 rounded bg-pf-line motion-safe:animate-pulse" />
+            <div className="mt-3 h-6 w-24 rounded bg-pf-line motion-safe:animate-pulse" />
+          </div>
+        ))}
+      </div>
+      <div className="mt-6 h-48 rounded-2xl border border-pf-line bg-pf-surface" aria-hidden />
+    </div>
+  );
+}
 
 export default function Results() {
   const { id = '' } = useParams();
@@ -28,6 +51,7 @@ export default function Results() {
   const [scenarioId, setScenarioId] = useState<ScenarioId>('flat');
   const [horizon, setHorizon] = useState<Horizon>(60);
 
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     document.title = 'Your household results';
     if (!token) return;
@@ -36,8 +60,8 @@ export default function Results() {
         setData(d);
         track('results_view', { status: d.analysis.status, basis: d.analysis.projectionBasis });
       })
-      .catch((e) => setError(e instanceof ApiError && e.status === 404 ? 'We couldn’t find these results. The link may be incomplete.' : 'We couldn’t load your results. Please try again.'));
-  }, [id, token]);
+      .catch((e) => setError(e instanceof ApiError && e.status === 404 ? NOT_FOUND : 'We couldn’t load your results. Check your connection and try again.'));
+  }, [id, token, attempt]);
 
   // Same deterministic engine as the server, anchored to the snapshot's time.
   const analysis: PlatformAnalysis | null = useMemo(() => {
@@ -80,17 +104,27 @@ export default function Results() {
         <p className="mt-2 text-pf-muted" role="alert">
           {error}
         </p>
-        <Link to="/savings/assess" className="mt-6 inline-flex min-h-11 items-center rounded-xl bg-pf-brand px-5 font-semibold text-white">
-          Start an assessment
-        </Link>
+        <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+          {token && error !== NOT_FOUND && (
+            <Button
+              onClick={() => {
+                setError('');
+                setAttempt((n) => n + 1);
+              }}
+            >
+              Try again
+            </Button>
+          )}
+          <Link
+            to="/savings/assess"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-pf-field px-5 font-semibold text-pf-ink hover:bg-pf-surface"
+          >
+            Start a new assessment
+          </Link>
+        </div>
       </div>
     );
-  if (!data || !analysis)
-    return (
-      <div className="grid min-h-[50vh] place-items-center text-pf-muted" role="status">
-        Loading your results…
-      </div>
-    );
+  if (!data || !analysis) return <ResultsSkeleton />;
 
   const editAnswers = () => {
     editHandoff.set(data.assessment as AssessmentInput);
@@ -159,8 +193,12 @@ export default function Results() {
             <h2 id="ov" className="sr-only">
               Overview
             </h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Stat label="You pay now" value={<Money cents={analysis.household!.currentMonthly} perMonth />} sub={<>{formatCents(analysis.household!.currentAnnual)} a year</>} chip="user_reported" />
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+              <Stat label="You pay now" value={<Money cents={analysis.household!.currentMonthly} perMonth />} sub={
+                  <>
+                    <Money cents={analysis.household!.currentAnnual} /> over the next 12 months
+                  </>
+                } chip="user_reported" />
               <Stat
                 label="Potential monthly savings"
                 value={monthlyPotential > 0 ? <Money cents={monthlyPotential} kind="savings" perMonth /> : <span className="text-pf-muted">None found yet</span>}
@@ -187,6 +225,19 @@ export default function Results() {
           </section>
 
           {/* --------------------------------------------------- opportunities */}
+          {analysis.opportunities.length === 0 && (
+            <Card className="mt-6">
+              <h2 className="font-display text-xl font-bold text-pf-ink">No savings found with the information we have</h2>
+              <p className="mt-1 text-pf-muted">
+                {analysis.categories.some((c) => c.solar === 'advisor')
+                  ? 'Solar may still lower your electric bill — an advisor can prepare a site-specific estimate.'
+                  : 'Your current services look competitive against the options we can verify for your area. An advisor can still double-check your bills.'}
+              </p>
+              <a href="#next-steps" className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-pf-brand px-5 font-semibold text-white hover:bg-pf-brand-strong">
+                Talk to an advisor
+              </a>
+            </Card>
+          )}
           {analysis.opportunities.length > 0 && (
             <Card className="mt-6">
               <h2 className="font-display text-xl font-bold text-pf-ink">Biggest opportunities</h2>
@@ -203,6 +254,12 @@ export default function Results() {
                   </li>
                 ))}
               </ol>
+              <div className="mt-4 flex flex-col gap-3 border-t border-pf-line pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-pf-muted">An advisor can confirm prices and availability at your address and handle the switch with you.</p>
+                <a href="#next-steps" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-pf-brand px-5 font-semibold text-white hover:bg-pf-brand-strong">
+                  Get help switching
+                </a>
+              </div>
             </Card>
           )}
 
@@ -298,30 +355,17 @@ export default function Results() {
               }}
             />
           ))}
-          {analysis.solar && (
-            <Card>
-              <h3 className="text-lg font-semibold text-pf-ink">Solar</h3>
-              <p className="mt-1 font-semibold text-pf-ink">
-                {{ not_applicable: 'Probably not a fit right now', unlikely: 'Probably not a strong fit', worth_a_conversation: 'Worth a conversation' }[analysis.solar.outcome]}
-              </p>
-              <ul className="mt-2 list-disc pl-5 text-sm text-pf-muted">
-                {analysis.solar.reasons.map((r) => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
-            </Card>
-          )}
         </div>
       </section>
 
       {/* ----------------------------------------------------- next steps */}
-      <ContactPanel id={id} token={token} contacted={data.contacted} />
+      <ContactPanel id={id} token={token} contacted={data.contacted} selections={Object.fromEntries(analysis.categories.map((c) => [c.category, c.selected]))} />
 
       {/* ----------------------------------------------------- methodology */}
       <Card className="mt-10">
         <h2 className="font-display text-xl font-bold text-pf-ink">How we calculated this</h2>
         <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm text-pf-muted">
-          {[...analysis.notes.filter((n) => !/regulatory/.test(n)), ...analysis.categories.flatMap((c) => c.notes)].map((n) => (
+          {[...analysis.notes.filter((n) => !/regulatory/.test(n)), ...analysis.categories.flatMap((c) => c.notes)].filter((n, i, all) => all.indexOf(n) === i).map((n) => (
             <li key={n}>{n}</li>
           ))}
           <li>Amounts are in exact cents; one-time costs (installation, equipment, early cancellation) are counted in the month they happen.</li>
@@ -337,9 +381,9 @@ export default function Results() {
 
 function Stat({ label, value, sub, chip }: { label: string; value: React.ReactNode; sub?: React.ReactNode; chip?: ChipStatus }) {
   return (
-    <Card as="div" className="!p-5">
+    <Card as="div" className="!p-4 sm:!p-5">
       <p className="text-sm text-pf-subtle">{label}</p>
-      <p className="mt-1 font-display text-2xl font-bold text-pf-ink">{value}</p>
+      <p className="mt-1 font-display text-lg font-bold leading-snug text-pf-ink sm:text-2xl">{value}</p>
       {sub && <p className="mt-1 text-xs text-pf-muted">{sub}</p>}
       {chip && (
         <p className="mt-2">
@@ -368,11 +412,26 @@ function CategoryCard({ c, priorities, canSelect, onSelect }: { c: CategoryResul
 
       {!c.comparisonAvailable ? (
         <p className="mt-4 text-sm text-pf-muted">Included in your spending. We don’t compare this service yet.</p>
+      ) : c.options.length === 0 && c.category === 'electricity' ? (
+        <div className="mt-5">
+          <Callout tone={c.solar === 'not_suitable' ? 'info' : 'save'} title={c.solar === 'not_suitable' ? 'Solar probably isn’t a fit' : c.solar === 'needs_info' ? 'We need a little more to check solar' : 'Solar could lower this bill'}>
+            <ul className="mt-1 space-y-1">
+              {c.notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          </Callout>
+          {c.solar === 'advisor' && (
+            <a href="#next-steps" className="mt-3 inline-flex min-h-11 items-center rounded-xl border border-pf-field px-4 text-sm font-semibold text-pf-ink hover:bg-pf-bg">
+              Ask for a free solar estimate
+            </a>
+          )}
+        </div>
       ) : c.options.length === 0 ? (
         <p className="mt-4 text-sm text-pf-muted">{c.notes.find((n) => /alternatives/.test(n)) ?? 'No alternatives found yet.'}</p>
       ) : (
         <fieldset className="mt-5" disabled={!canSelect}>
-          <legend className="text-sm font-semibold text-pf-ink">Compare {c.label.toLowerCase()} options{c.lensKind === 'pending_address' ? ' (if available at your address)' : ''}</legend>
+          <legend className="text-sm font-semibold text-pf-ink">Compare options for {c.label}{c.lensKind === 'pending_address' ? ' (if available at your address)' : ''}</legend>
           <div className="mt-3 space-y-3">
             <OptionRow
               id={`opt-${c.category}-keep`}
@@ -398,7 +457,9 @@ function CategoryCard({ c, priorities, canSelect, onSelect }: { c: CategoryResul
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusChip status={KIND_CHIP[o.kind]} />
-                  {lensFor(o.offerId).map((l) => (
+                  {o.estimate && <StatusChip status="estimated" />}
+                  {/* A "lowest cost" badge only means something when there is more than one option. */}
+                  {(c.options.length > 1 ? lensFor(o.offerId) : []).map((l) => (
                     <span key={l.lens} className="rounded-full bg-pf-ink px-2 py-0.5 text-xs font-semibold text-white">
                       {LENS_LABEL[l.lens]}
                       {priorities.has(l.lens) ? ' · your priority' : ''}
@@ -406,6 +467,14 @@ function CategoryCard({ c, priorities, canSelect, onSelect }: { c: CategoryResul
                   ))}
                 </div>
                 {o.candidate.statusReasons[0] && <p className="mt-1 text-xs text-pf-subtle">{o.candidate.statusReasons[0]}</p>}
+                {/* Snapshots made before estimates existed have no assumptions field. */}
+                {(o.assumptions ?? []).length > 0 && (
+                  <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-pf-muted">
+                    {(o.assumptions ?? []).map((x) => (
+                      <li key={x}>{x}</li>
+                    ))}
+                  </ul>
+                )}
                 <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-pf-muted">
                   {o.candidate.downloadMbps !== null && <span>{o.candidate.downloadMbps.toLocaleString()} Mbps</span>}
                   <span>
@@ -448,7 +517,7 @@ function CategoryCard({ c, priorities, canSelect, onSelect }: { c: CategoryResul
           )}
         </fieldset>
       )}
-      {c.notes.filter((n) => !/alternatives/.test(n) && !/don’t compare/.test(n)).length > 0 && (
+      {!(c.category === 'electricity' && c.options.length === 0) && c.notes.filter((n) => !/alternatives/.test(n) && !/don’t compare/.test(n)).length > 0 && (
         <ul className="mt-4 space-y-1 text-sm text-pf-muted">
           {c.notes
             .filter((n) => !/alternatives/.test(n) && !/don’t compare/.test(n))
@@ -497,7 +566,7 @@ function OptionRow({ id, name, checked, onChange, title, children }: { id: strin
 // ------------------------------------------------------------- conversion --
 type Intent = 'callback' | 'appointment' | 'advisor';
 
-function ContactPanel({ id, token, contacted }: { id: string; token: string; contacted: boolean }) {
+function ContactPanel({ id, token, contacted, selections }: { id: string; token: string; contacted: boolean; selections: Selections }) {
   const [intent, setIntent] = useState<Intent[]>(['appointment']);
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', preferredContact: 'phone' });
   const [consent, setConsent] = useState(false);
@@ -514,7 +583,7 @@ function ContactPanel({ id, token, contacted }: { id: string; token: string; con
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const body = { ...form, consent, token, intent: intent[0], sessionId: sessionId() };
+    const body = { ...form, consent, token, intent: intent[0], sessionId: sessionId(), selections };
     // Validate locally with the same schema the server uses, so errors appear instantly.
     const parsed = contactSchema.safeParse(body);
     if (!parsed.success) {
@@ -546,8 +615,9 @@ function ContactPanel({ id, token, contacted }: { id: string; token: string; con
   }
 
   return (
-    <Card className="mt-10 border-pf-brand">
+    <Card className="mt-10 scroll-mt-4 border-pf-brand" id="next-steps">
       <h2 className="font-display text-2xl font-bold text-pf-ink">Next steps</h2>
+      <p className="mt-1 text-pf-muted">Free, no obligation. We’ll use the options you selected above.</p>
       {done ? (
         <p ref={doneRef} tabIndex={-1} className="mt-3 text-pf-ink outline-none" role="status">
           {done === 'contacted' ? 'You’ve already asked us to reach out about these results — an advisor will be in touch.' : done === 'booked' ? 'You’re booked. We’ll be in touch beforehand to confirm.' : 'Thanks — an advisor will reach out shortly using your preferred method.'}
@@ -689,6 +759,8 @@ function SlotPicker({ lead, onBooked }: { lead: { leadId: string; bookingToken: 
             type="button"
             aria-pressed={d === date}
             onClick={() => {
+              // Re-selecting the current date would clear the times without refetching them.
+              if (d === date) return;
               setSlots(null);
               setSelected('');
               setDate(d);

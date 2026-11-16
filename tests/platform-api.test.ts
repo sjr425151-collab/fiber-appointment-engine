@@ -19,7 +19,7 @@ const cfg = (sampleData: boolean): AppConfig => ({
   timezone: 'America/Detroit',
   siteUrl: 'https://staging.example',
   isProduction: false,
-  email: { resendApiKey: '', from: 'x <x@example.com>', teamEmails: [], dailyCustomerLimit: 80 },
+  email: { resendApiKey: '', from: 'x <x@example.com>', teamEmails: [], dailyCustomerLimit: 80, nonProductionAllowlist: [] },
 });
 
 const ASSESSMENT = {

@@ -96,9 +96,17 @@ export function createNotifier(db: DB, config: AppConfig, mailer: Mailer = maile
     const base = { from: config.email.from, idempotencyKey: row.id, tags: [{ name: 'kind', value: row.kind }] };
     const team = teamTo(market);
 
-    const forTeam = (r: t.Rendered): { email: OutgoingEmail } | { skip: string } =>
-      team.length ? { email: { ...base, ...r, to: team, replyTo: [lead.email] } } : { skip: 'No team email configured for this location' };
-    const forCustomer = (r: t.Rendered, extra: Partial<OutgoingEmail> = {}): { email: OutgoingEmail } | { skip: string } => {
+    // Non-production emails are labelled so nobody mistakes a staging alert for a real lead.
+    const label = (r: t.Rendered): t.Rendered => (config.flags.env === 'production' ? r : { ...r, subject: `[${config.flags.env.toUpperCase()}] ${r.subject}` });
+    const forTeam = (raw: t.Rendered): { email: OutgoingEmail } | { skip: string } => {
+      const r = label(raw);
+      return team.length ? { email: { ...base, ...r, to: team, replyTo: [lead.email] } } : { skip: 'No team email configured for this location' };
+    };
+    const forCustomer = (raw: t.Rendered, extra: Partial<OutgoingEmail> = {}): { email: OutgoingEmail } | { skip: string } => {
+      const r = label(raw);
+      if (config.flags.env !== 'production' && !allowedOutsideProduction(lead.email, config.email.nonProductionAllowlist)) {
+        return { skip: `${config.flags.env}: customer emails only go to STAGING_EMAIL_ALLOWLIST addresses` };
+      }
       const since = new Date(at.getTime() - 24 * 3600_000).toISOString();
       const toThem = db
         .prepare("SELECT COUNT(*) AS n FROM notifications WHERE to_addr = ? AND status IN ('sent','logged') AND sent_at >= ?")
@@ -235,4 +243,10 @@ export function createNotifier(db: DB, config: AppConfig, mailer: Mailer = maile
       return () => clearInterval(timer);
     },
   };
+}
+
+/** Outside production, a customer address must match an allow-list entry: an exact address or "@domain". */
+export function allowedOutsideProduction(email: string, allowlist: string[]): boolean {
+  const e = email.trim().toLowerCase();
+  return allowlist.some((a) => (a.startsWith('@') ? e.endsWith(a) : e === a));
 }

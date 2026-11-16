@@ -4,6 +4,7 @@ import { LEAD_STATUSES, type Appointment, type Lead, type LeadNote, type LeadSta
 import { api, fmtDateTime, fmtPhone, STATUS_LABELS } from '../../lib/api';
 import { Spinner, StatusBadge } from '../../components/ui';
 import { formatCents } from '../../../shared/finance/money';
+import { OpportunityPanel, type OpportunityRow } from './Opportunities';
 
 interface EmailRow {
   id: string;
@@ -66,6 +67,7 @@ interface Detail {
   notifications?: EmailRow[];
   consents?: ConsentRow[];
   assessment?: AssessmentSummary | null;
+  opportunities?: OpportunityRow[];
   appointments: Appointment[];
 }
 
@@ -178,6 +180,16 @@ export default function LeadDetail() {
               </ul>
             )}
           </div>
+          {!!d.opportunities?.length && (
+            <OpportunityPanel
+              items={d.opportunities}
+              onChange={(o) => {
+                setD((prev) => prev && { ...prev, opportunities: prev.opportunities?.map((x) => (x.id === o.id ? o : x)) });
+                // The status change is also written to the timeline; refresh notes.
+                api<Detail>(`/admin/leads/${id}`).then((r) => setD((prev) => prev && { ...prev, notes: r.notes }));
+              }}
+            />
+          )}
           {d.assessment && (
             <div className="glass p-5">
               <h2 className="mb-3 font-semibold">Household assessment</h2>
@@ -195,21 +207,7 @@ export default function LeadDetail() {
                 </div>
               </dl>
               <p className={`mt-2 text-xs ${d.assessment.includeSamples ? 'text-amber-300' : 'text-slate-400'}`}>{BASIS_LABEL[d.assessment.projectionBasis] ?? d.assessment.projectionBasis}</p>
-              <ul className="mt-3 space-y-2 text-sm">
-                {d.assessment.analysis.categories.map((c) => {
-                  const sel = c.options.find((o) => o.offerId === c.selected);
-                  return (
-                    <li key={c.label} className="rounded-lg bg-white/[0.03] px-3 py-2">
-                      <span className="font-medium">{c.label}</span>
-                      <span className="text-slate-400">
-                        {' '}
-                        · {c.provider || '—'} · {c.currentMonthly === null ? 'amount unknown' : `${formatCents(c.currentMonthly)}/mo`}
-                        {sel ? ` → ${sel.planName} (${formatCents(sel.monthlyPrice)}/mo, ${sel.kind.replace('_', ' ')})` : ' → keep current'}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+              <p className="mt-2 text-xs text-slate-400">Snapshot figures use our default picks; what the customer chose is listed under “What they asked about”.</p>
             </div>
           )}
           {lead.duplicateOf && (

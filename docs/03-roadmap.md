@@ -23,7 +23,9 @@ Mobile, TV, electricity and solar categories follow the internet slice through P
 
 **M1: parent platform foundation and first household assessment.** **Built & tested on local staging, not deployed.** Details and results are in `10-milestone-m1.md`. It replaced the narrower internet-only plan below, which is kept for history.
 
-**Recommended next, M2: "Production hardening and a staging launch" (Phase 0.5):**
+**Phase 3: integration, QA and product readiness.** Built & tested, not deployed (`12-phase3-readiness.md`): solar as the electricity alternative, persisted opportunities with an admin pipeline, committed E2E suite, UX fixes, ops readiness. **Recommended next: "M3: Pilot launch readiness"** (§10 of that doc), which absorbs the M2 items below.
+
+**Earlier recommendation, M2: "Production hardening and a staging launch" (Phase 0.5):**
 1. Deploy the built security fixes and M1 code to production with **flags off**: no visible change, about 1 minute of downtime, pre-deploy backup.
 2. Create the Render staging service from `render.staging.yaml` and share the staging link for owner and legal review.
 3. Nightly off-site backups and a restore drill; error monitoring; Cloudflare Turnstile on both lead forms; real client IP behind Cloudflare (M1 finding).
