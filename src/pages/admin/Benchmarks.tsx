@@ -109,7 +109,15 @@ export default function Benchmarks() {
                 <span className="text-slate-400" aria-hidden>
                   $
                 </span>
-                <input id={`bm-${k}`} inputMode="decimal" className="input" value={draft[k]} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })} aria-invalid={parsed[k] === null || undefined} aria-describedby={`bm-${k}-u`} />
+                <input
+                  id={`bm-${k}`}
+                  inputMode="decimal"
+                  className="input"
+                  value={draft[k]}
+                  onChange={(e) => setDraft({ ...draft, [k]: e.target.value })}
+                  aria-invalid={parsed[k] === null || undefined}
+                  aria-describedby={`bm-${k}-u`}
+                />
               </div>
               <p id={`bm-${k}-u`} className="mt-1 text-xs text-slate-400">
                 {unit}

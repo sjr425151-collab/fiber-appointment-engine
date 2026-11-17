@@ -13,6 +13,8 @@ declare module 'vitest' {
     productionUrl: string;
     /** Production settings (what trytucker.com runs). Same server as productionUrl. */
     liveUrl: string;
+    /** Production settings, used only by the Agent Workspace test (its own representatives and leads). */
+    workspaceUrl: string;
   }
 }
 
@@ -69,6 +71,7 @@ export default async function setup(project: TestProject) {
   project.provide('stagingUrl', stagingUrl);
   project.provide('productionUrl', productionUrl);
   project.provide('liveUrl', productionUrl); // production settings: real data and benchmarks, no samples
+  project.provide('workspaceUrl', await start(base + 2, { APP_ENV: 'production' }));
 
   return async () => {
     await Promise.all(

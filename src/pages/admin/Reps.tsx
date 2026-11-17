@@ -29,8 +29,9 @@ interface Draft {
   categories: Category[];
   maxOpenLeads: string;
   password: string;
+  role: 'rep' | 'manager';
 }
-const blank: Draft = { id: null, name: '', email: '', phone: '', active: true, accepting: false, allMarkets: true, markets: [], categories: [], maxOpenLeads: '0', password: '' };
+const blank: Draft = { id: null, name: '', email: '', phone: '', active: true, accepting: false, allMarkets: true, markets: [], categories: [], maxOpenLeads: '0', password: '', role: 'rep' };
 const toDraft = (r: Representative): Draft => ({
   id: r.id,
   name: r.name,
@@ -43,6 +44,7 @@ const toDraft = (r: Representative): Draft => ({
   categories: r.categories,
   maxOpenLeads: String(r.maxOpenLeads),
   password: '',
+  role: r.role === 'manager' ? 'manager' : 'rep',
 });
 const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
@@ -71,6 +73,7 @@ export default function Reps() {
       markets: ['*'],
       categories: draft.categories,
       maxOpenLeads: Number(draft.maxOpenLeads) || 0,
+      role: draft.role,
       ...(draft.password ? { password: draft.password } : {}),
     };
     try {
@@ -102,8 +105,8 @@ export default function Reps() {
         </button>
       </div>
       <p className="max-w-3xl text-sm text-slate-400">
-        New pricing-review requests go to an active representative who is accepting leads, handles the service the customer asked about, and has the fewest open leads. A returning household stays with the person already helping
-        it. If nobody matches, the request waits in the follow-up queue (Leads → Unassigned).
+        New pricing-review requests go to an active representative who is accepting leads, handles the service the customer asked about, and has the fewest open leads. A returning household stays with the person already
+        helping it. If nobody matches, the request waits in the follow-up queue (Leads → Unassigned).
       </p>
       {accepting === 0 && (
         <p role="status" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
@@ -142,6 +145,15 @@ export default function Reps() {
               ))}
             </fieldset>
           </div>
+          <div>
+            <label className="label" htmlFor="rep-role">
+              Role
+            </label>
+            <select id="rep-role" className="input" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value as Draft['role'] })}>
+              <option value="rep">Representative: works their own leads</option>
+              <option value="manager">Sales manager: sees and reassigns every lead, confirms verified wins</option>
+            </select>
+          </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <label className="label" htmlFor="rep-max">
@@ -153,7 +165,15 @@ export default function Reps() {
               <label className="label" htmlFor="rep-password">
                 {draft.id ? 'New password (blank keeps the current one)' : 'Password (12+ characters)'}
               </label>
-              <input id="rep-password" type="password" autoComplete="new-password" className="input" value={draft.password} onChange={(e) => setDraft({ ...draft, password: e.target.value })} aria-invalid={!!errors.password || undefined} />
+              <input
+                id="rep-password"
+                type="password"
+                autoComplete="new-password"
+                className="input"
+                value={draft.password}
+                onChange={(e) => setDraft({ ...draft, password: e.target.value })}
+                aria-invalid={!!errors.password || undefined}
+              />
               {errors.password && <p className="field-error">{errors.password}</p>}
             </div>
             <div className="space-y-2 self-end text-sm text-slate-200">
@@ -205,7 +225,10 @@ export default function Reps() {
                   <tr key={r.id}>
                     <td className="px-4 py-3">
                       <div className="font-medium">{r.name}</div>
-                      <div className="text-xs text-slate-400">{r.email}</div>
+                      <div className="text-xs text-slate-400">
+                        {r.email}
+                        {r.role === 'manager' ? ' · Sales manager' : ''}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {!r.active ? <span className="text-slate-400">Inactive</span> : r.accepting ? <span className="text-emerald-300">Accepting leads</span> : <span className="text-amber-300">Not accepting</span>}

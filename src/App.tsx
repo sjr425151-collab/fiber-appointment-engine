@@ -11,7 +11,9 @@ const LeadDetail = lazy(() => import('./pages/admin/LeadDetail'));
 const Appointments = lazy(() => import('./pages/admin/Appointments'));
 const AdminBenchmarks = lazy(() => import('./pages/admin/Benchmarks'));
 const AdminSettings = lazy(() => import('./pages/admin/Settings'));
-const AdminLeads = lazy(() => import('./pages/admin/Dashboard').then((m) => ({ default: m.Leads })));
+const AdminLeads = lazy(() => import('./pages/admin/WorkLeads'));
+const WorkOverview = lazy(() => import('./pages/admin/WorkOverview'));
+const FollowUps = lazy(() => import('./pages/admin/FollowUps'));
 const PlatformApp = lazy(() => import('./platform/PlatformApp'));
 const AdminAssessments = lazy(() => import('./pages/admin/Assessments'));
 const AdminOpportunities = lazy(() => import('./pages/admin/Opportunities'));
@@ -51,6 +53,8 @@ export default function App() {
           <Route path="leads/:id" element={<LeadDetail />} />
           <Route path="appointments" element={<Appointments />} />
           <Route path="leads" element={<AdminLeads />} />
+          <Route path="work" element={<WorkOverview />} />
+          <Route path="follow-ups" element={<FollowUps />} />
           <Route path="benchmarks" element={<AdminBenchmarks />} />
           <Route path="settings" element={<AdminSettings />} />
           <Route path="assessments" element={<AdminAssessments />} />

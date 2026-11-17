@@ -108,7 +108,9 @@ export default function Chats() {
                 <th className="py-2 pr-3">Messages</th>
                 <th className="py-2 pr-3">Started on</th>
                 <th className="py-2 pr-3">Lead</th>
-                <th className="py-2"><span className="sr-only">Transcript</span></th>
+                <th className="py-2">
+                  <span className="sr-only">Transcript</span>
+                </th>
               </tr>
             </thead>
             <tbody>

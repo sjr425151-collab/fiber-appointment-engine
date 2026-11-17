@@ -14,6 +14,7 @@
 | [10-milestone-m1.md](10-milestone-m1.md) | Milestone M1 stages, acceptance criteria and validation results |
 | [11-creative-production.md](11-creative-production.md) | Higgsfield production package: art direction, storyboard, prompts, delivery, performance and accessibility limits, budget gates (proposed) |
 | [../brand/README.md](../brand/README.md) | **TUCKER brand system**: decision log, Phase 0 audit, brand strategy, three creative territories, mascot production plan (proposed; awaiting founder approval) |
+| [19-workspace.md](19-workspace.md) | Agent Workspace: lead profiles, dispositions, notes, follow-ups, timeline, queues, KPIs, manager role |
 | [18-chat.md](18-chat.md) | Website chat: AI disclosure, bill intake, savings cards, handoff to a person, admin Chats page, costs |
 | [17-v2-national.md](17-v2-national.md) | **Current.** National benchmarks (versioned, Admin → Benchmarks), locations removed, new homepage and hero video, central lead alerts, no commission data |
 | [16-handoff.md](16-handoff.md) | Representative handoff: the pricing-review request, routing, lead lifecycle, representative sign-in, consent |
@@ -38,6 +39,7 @@
 | V2: national benchmarks, locations removed, new homepage and video, representative handoff, central alerts | **Live** as `1e6a422` (deployed and verified 2026-11-17; `16-handoff.md`, `17-v2-national.md`) |
 | Representative handoff: short "Get My Exact Pricing" request, routing to representatives, representative sign-in, lead lifecycle and history, funnel | **Built & tested, not deployed** (`16-handoff.md`). Adds migration 8 (additive, rehearsed on the live commit's database) |
 | Website chat ("Chat with an Agent"): AI assistant with rule-based fallback, savings cards, handoff to a representative, Admin → Chats | **Live** as `c91d2b3` (deployed and smoke-checked 2026-11-17) with the white homepage, example amounts, home security and step 3 wording (`18-chat.md`). Adds migrations 11–12 (additive, rehearsed on the live commit's database). AI wording needs `ANTHROPIC_API_KEY` (owner) |
+| Agent Workspace (lead profiles, dispositions, notes, follow-ups, timeline, queues, overview KPIs, sales manager role, notifications) | **Built & tested, not deployed** (`19-workspace.md`). Adds migration 13 (additive, rehearsed on the live commit's database) |
 | Real solar, mobile and TV offer terms | **Missing**: those categories show labelled benchmarks ($200 solar for homeowners, $45 per mobile line, $75 TV), never a quoted price |
 | Staging service, monitoring/alerting, off-site backups | Proposed — need approval |
 

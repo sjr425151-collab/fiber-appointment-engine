@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate, useOutletContext } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { api, ApiError } from '../../lib/api';
 import { Logo, Spinner } from '../../components/ui';
 
 const ADMIN_NAV: { to: string; label: string; end?: boolean }[] = [
   { to: '/admin', label: 'Overview', end: true },
+  { to: '/admin/work', label: 'Workspace' },
   { to: '/admin/leads', label: 'Leads' },
+  { to: '/admin/follow-ups', label: 'Follow-ups' },
   { to: '/admin/appointments', label: 'Appointments' },
   { to: '/admin/opportunities', label: 'Opportunities' },
   { to: '/admin/assessments', label: 'Assessments' },
@@ -14,14 +16,26 @@ const ADMIN_NAV: { to: string; label: string; end?: boolean }[] = [
   { to: '/admin/benchmarks', label: 'Benchmarks' },
   { to: '/admin/settings', label: 'Settings' },
 ];
-/** A representative sees only their own leads. */
-const REP_NAV: { to: string; label: string; end?: boolean }[] = [{ to: '/admin/leads', label: 'My leads' }];
+/** A representative sees only their own leads; a manager sees every lead. */
+const REP_NAV: { to: string; label: string; end?: boolean }[] = [
+  { to: '/admin/work', label: 'Overview' },
+  { to: '/admin/leads', label: 'My leads' },
+  { to: '/admin/follow-ups', label: 'Follow-ups' },
+];
+const MANAGER_NAV: { to: string; label: string; end?: boolean }[] = [
+  { to: '/admin/work', label: 'Overview' },
+  { to: '/admin/leads', label: 'Leads' },
+  { to: '/admin/follow-ups', label: 'Follow-ups' },
+];
 
 export interface TeamContext {
   role: 'admin' | 'rep';
+  /** What the Agent Workspace allows: rep (own leads), manager (all leads) or admin. */
+  workRole: 'admin' | 'manager' | 'rep';
   rep: { id: string; name: string; accepting: boolean; openLeads: number } | null;
 }
-interface Me extends TeamContext {
+interface Me extends Omit<TeamContext, 'workRole'> {
+  workRole?: TeamContext['workRole'];
   email: string;
   emailEnabled: boolean;
   locationsWithoutTeamEmail: string[];
@@ -36,13 +50,16 @@ export default function AdminLayout() {
   const [email, setEmail] = useState<string | null>(null);
   const [emailStatus, setEmailStatus] = useState<{ enabled: boolean; missing: string[] }>({ enabled: true, missing: [] });
   const [pricing, setPricing] = useState<{ name: string; state: 'expiring' | 'hidden'; daysLeft: number | null }[]>([]);
-  const [team, setTeam] = useState<TeamContext>({ role: 'admin', rep: null });
+  const [team, setTeam] = useState<TeamContext>({ role: 'admin', workRole: 'admin', rep: null });
+  const loc = useLocation();
+  const [notes, setNotes] = useState<{ items: { id: string; title: string; leadId: string | null; readAt: string | null; createdAt: string }[]; unread: number }>({ items: [], unread: 0 });
+  const [bell, setBell] = useState(false);
   const [noReps, setNoReps] = useState(false);
 
   useEffect(() => {
     api<Me>('/admin/me')
       .then((r) => {
-        setTeam({ role: r.role ?? 'admin', rep: r.rep ?? null });
+        setTeam({ role: r.role ?? 'admin', workRole: r.workRole ?? (r.role === 'rep' ? 'rep' : 'admin'), rep: r.rep ?? null });
         setNoReps(r.role !== 'rep' && r.representatives === 0);
         setEmail(r.email);
         setEmailStatus({ enabled: r.emailEnabled, missing: r.locationsWithoutTeamEmail ?? [] });
@@ -52,6 +69,29 @@ export default function AdminLayout() {
         if (err instanceof ApiError && err.status === 401) nav('/admin/login', { replace: true });
       });
   }, [nav]);
+
+  // Representatives and managers start on their workspace.
+  useEffect(() => {
+    if (email && team.role === 'rep' && (loc.pathname === '/admin' || loc.pathname === '/admin/')) nav('/admin/work', { replace: true });
+  }, [email, team.role, loc.pathname, nav]);
+  // In-app notifications (new leads assigned), checked every minute.
+  useEffect(() => {
+    if (team.role !== 'rep') return;
+    const load = () =>
+      api<typeof notes>('/admin/work/notifications')
+        .then(setNotes)
+        .catch(() => undefined);
+    void load();
+    const t = setInterval(load, 60_000);
+    return () => clearInterval(t);
+  }, [team.role]);
+  async function openBell() {
+    setBell(!bell);
+    if (!bell && notes.unread) {
+      await api('/admin/work/notifications/read', { method: 'POST' }).catch(() => undefined);
+      setNotes((n) => ({ ...n, unread: 0 }));
+    }
+  }
 
   async function setAccepting(accepting: boolean) {
     // Show the change at once; put it back if the server refuses.
@@ -85,7 +125,7 @@ export default function AdminLayout() {
           <Logo />
           {/* Phones: the nav gets its own full-width row and scrolls sideways instead of overlapping. */}
           <nav aria-label="Admin" className="order-last -mx-4 flex w-[calc(100%+2rem)] gap-1 overflow-x-auto px-4 pb-1 text-sm lg:order-none lg:mx-0 lg:w-auto lg:overflow-visible lg:px-0 lg:pb-0">
-            {(team.role === 'rep' ? REP_NAV : ADMIN_NAV).map((n) => (
+            {(team.workRole === 'rep' ? REP_NAV : team.workRole === 'manager' ? MANAGER_NAV : ADMIN_NAV).map((n) => (
               <NavLink
                 key={n.to}
                 to={n.to}
@@ -97,6 +137,46 @@ export default function AdminLayout() {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm text-slate-400">
+            {team.rep && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={openBell}
+                  aria-expanded={bell}
+                  aria-label={`Notifications${notes.unread ? `, ${notes.unread} new` : ''}`}
+                  className="relative grid h-10 w-10 place-items-center rounded-lg hover:bg-white/10"
+                >
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                  </svg>
+                  {notes.unread > 0 && <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">{notes.unread}</span>}
+                </button>
+                {bell && (
+                  <div className="absolute right-0 z-50 mt-2 w-72 rounded-xl border border-white/10 bg-ink-900 p-2 shadow-2xl">
+                    {notes.items.length === 0 ? (
+                      <p className="p-3 text-sm text-slate-400">No notifications.</p>
+                    ) : (
+                      <ul>
+                        {notes.items.slice(0, 10).map((n) => (
+                          <li key={n.id}>
+                            <button
+                              type="button"
+                              className="w-full rounded-lg px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5"
+                              onClick={() => {
+                                setBell(false);
+                                if (n.leadId) nav(`/admin/leads/${n.leadId}`);
+                              }}
+                            >
+                              {n.title}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             {team.rep && (
               <label className="flex cursor-pointer items-center gap-2 text-slate-200">
                 <input type="checkbox" checked={team.rep.accepting} onChange={(e) => setAccepting(e.target.checked)} />

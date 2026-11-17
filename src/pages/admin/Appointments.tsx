@@ -80,9 +80,15 @@ export default function Appointments() {
                 <span className={`text-sm capitalize ${STATUS_STYLE[a.status]}`}>{a.status.replace('_', ' ')}</span>
                 {a.status === 'scheduled' && (
                   <div className="flex gap-2">
-                    <button className="btn-ghost px-3 py-1.5 text-xs" onClick={() => setStatus(a.id, 'completed')}>Completed</button>
-                    <button className="btn-ghost px-3 py-1.5 text-xs" onClick={() => setStatus(a.id, 'no_show')}>No-show</button>
-                    <button className="btn-ghost px-3 py-1.5 text-xs" onClick={() => setStatus(a.id, 'cancelled')}>Cancel</button>
+                    <button className="btn-ghost px-3 py-1.5 text-xs" onClick={() => setStatus(a.id, 'completed')}>
+                      Completed
+                    </button>
+                    <button className="btn-ghost px-3 py-1.5 text-xs" onClick={() => setStatus(a.id, 'no_show')}>
+                      No-show
+                    </button>
+                    <button className="btn-ghost px-3 py-1.5 text-xs" onClick={() => setStatus(a.id, 'cancelled')}>
+                      Cancel
+                    </button>
                   </div>
                 )}
               </div>

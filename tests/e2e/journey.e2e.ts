@@ -99,7 +99,12 @@ describe('household journey (staging, phone)', () => {
     expect(await electricity.textContent()).toMatch(/covers 90% of your usage/);
 
     // The customer picks a different internet option from our default.
-    const choiceId = await internet.getByRole('radio', { checked: false }).filter({ hasNotText: /Keep|review/i }).and(internet.locator('input[id^="opt-internet-sample"]')).first().getAttribute('id');
+    const choiceId = await internet
+      .getByRole('radio', { checked: false })
+      .filter({ hasNotText: /Keep|review/i })
+      .and(internet.locator('input[id^="opt-internet-sample"]'))
+      .first()
+      .getAttribute('id');
     const choice = internet.locator(`#${choiceId}`);
     const chosen = ((await choice.getAttribute('aria-label')) ?? (await internet.locator(`label[for="${await choice.getAttribute('id')}"]`).innerText())).split(',')[0].trim();
     await choice.check();
@@ -132,6 +137,8 @@ describe('household journey (staging, phone)', () => {
     await row.getByLabel(`Status for ${chosen}`).selectOption('contacted');
     await a.waitForResponse((r) => r.url().includes('/api/admin/opportunities/') && r.request().method() === 'PATCH');
     await row.getByRole('link', { name: 'Ana Lopez' }).click();
+    // On a phone, opportunities sit under the profile's "More" tab.
+    await a.getByRole('tab', { name: 'More' }).click();
     await a.getByRole('heading', { name: 'What they asked about' }).waitFor();
     expect(await a.getByLabel(`Status for ${chosen}`).inputValue()).toBe('contacted');
     expect(await a.locator('body').textContent()).toMatch(/New → Contacted/);

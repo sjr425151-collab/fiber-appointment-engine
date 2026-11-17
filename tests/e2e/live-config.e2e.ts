@@ -179,10 +179,10 @@ describe('representative handoff', () => {
     const a = await adminLogin(ctx, LIVE);
     await a.setViewportSize({ width: 1280, height: 900 });
     await a.goto(`${LIVE}/admin/leads`);
-    await a.getByLabel('Assigned to').selectOption('unassigned');
+    await a.getByRole('button', { name: 'Unassigned', exact: true }).click();
     const row = a.locator('tr', { hasText: 'Jordan' });
     await row.waitFor();
-    expect(await row.innerText()).toMatch(/Unassigned[\s\S]*e2e \/ handoff/);
+    expect(await row.innerText()).toMatch(/Unassigned/);
     expect(await a.locator('tbody tr', { hasText: 'Jordan' }).count()).toBe(1); // sent twice, saved once
     await row.getByRole('link', { name: 'Jordan' }).click();
     await a.getByRole('heading', { name: 'What they previewed' }).waitFor();
@@ -190,8 +190,9 @@ describe('representative handoff', () => {
     expect(body).toMatch(/Not verified pricing, not a quote/);
     expect(body).toMatch(/Mobile \(3 lines\)\s+\$190\.00\/mo\s+\$135\.00\/mo\s+Tucker benchmark\s+\$55\.00\/mo less/);
     expect(body).toMatch(/illustrative difference \$95\.00\/mo \(\$1,140\.00\/yr\)/);
-    expect(body).toMatch(/Marketing consent\s+No/);
-    expect(body).toMatch(/Waiting in the follow-up queue/);
+    expect(body).toMatch(/Marketing consent: no/);
+    expect(body).toMatch(/Owner\s+Unassigned/);
+    expect(body).toMatch(/e2e \/ handoff/);
     expect(await axe(a)).toEqual([]);
 
     // Add a representative and hand the lead over.
@@ -208,21 +209,27 @@ describe('representative handoff', () => {
     await a.getByRole('heading', { name: /^Leads/ }).waitFor();
     await a.getByRole('link', { name: 'Jordan' }).click();
     await a.getByLabel('Assign this lead').selectOption({ label: 'Alex Rivera · 0 open' });
-    await a.getByText('Assigned to Alex Rivera (Assigned by hand).').waitFor();
-    expect(await a.locator('h1 + span').innerText()).toBe('Assigned');
+    await a.getByText('Lead reassigned. Open follow-ups moved with it.').waitFor();
+    await a.locator('header').getByText('Assigned', { exact: true }).first().waitFor();
+    await a.getByText('Stage: new → assigned').first().waitFor();
     await a.getByRole('button', { name: 'Sign out' }).click();
 
     // The representative signs in and sees only their own lead, with none of the admin screens.
     await a.fill('#email', 'alex.e2e@example.com');
     await a.fill('#pw', 'alex-e2e-password-1');
     await a.click('button:has-text("Sign in")');
-    await a.getByRole('heading', { name: /My leads/ }).waitFor();
-    expect(await a.getByRole('navigation', { name: 'Admin' }).innerText()).toBe('My leads');
+    // Representatives land on their own workspace; the lead is their next action.
+    await a.getByRole('heading', { name: 'Your next best actions' }).waitFor();
+    expect(await a.getByRole('navigation', { name: 'Admin' }).innerText()).toMatch(/^Overview\s+My leads\s+Follow-ups$/);
+    await a.getByRole('navigation', { name: 'Admin' }).getByRole('link', { name: 'My leads' }).click();
+    await a.getByRole('heading', { name: /^My leads/ }).waitFor();
     await a.getByRole('link', { name: 'Jordan' }).waitFor();
     expect(await a.locator('tbody tr').count()).toBe(1);
     await a.getByRole('link', { name: 'Jordan' }).click();
-    await a.getByRole('button', { name: 'Contact attempted' }).click();
-    await a.getByText('Status changed: assigned → contact_attempted').waitFor();
+    await a.getByRole('button', { name: 'Update status' }).first().click();
+    await a.getByRole('dialog').getByRole('button', { name: 'Attempted contact' }).click();
+    await a.getByText('Saved: Attempted contact').waitFor();
+    await a.getByText('Stage: assigned → contact_attempted').first().waitFor();
     expect(await a.locator('#lead-assign').count()).toBe(0); // only an admin can reassign
     const refused = await a.evaluate(() => fetch('/api/admin/reps', { credentials: 'same-origin' }).then((r) => r.status));
     expect(refused).toBe(403);

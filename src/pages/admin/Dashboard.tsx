@@ -33,7 +33,9 @@ function ConversionPanel({ market }: { market: string }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
       <div className="glass p-5">
-        <h2 className="font-semibold">Conversion funnel <span className="text-sm font-normal text-slate-400">· last {c.days} days</span></h2>
+        <h2 className="font-semibold">
+          Conversion funnel <span className="text-sm font-normal text-slate-400">· last {c.days} days</span>
+        </h2>
         <ol className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {FUNNEL.map(([k, label]) => {
             const v = value(k);
@@ -140,7 +142,7 @@ function Dashboard({ view }: { view: 'overview' | 'leads' }) {
   const { data: md, bySlug } = useAdminMarkets(!isRep);
   const markets = md?.markets ?? [];
   const multi = markets.length > 1;
-  const repName = (id: string | null) => (id ? (isRep ? team.rep?.name : reps.find((r) => r.id === id)?.name) ?? 'Former representative' : null);
+  const repName = (id: string | null) => (id ? ((isRep ? team.rep?.name : reps.find((r) => r.id === id)?.name) ?? 'Former representative') : null);
 
   useEffect(() => {
     if (isRep) return;
