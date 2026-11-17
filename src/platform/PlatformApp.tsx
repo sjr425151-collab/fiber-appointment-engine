@@ -62,9 +62,13 @@ function Shell({ children }: { children: ReactNode }) {
             <strong className="text-pf-ink">{PLATFORM.name}</strong> is operated by {PLATFORM.operator}. Tucker may receive compensation from providers. Every price shows where it came from and when it was checked.
           </p>
           <p>Savings shown are estimates based on what you tell us and the prices on file. Future price increases are hypothetical scenarios, not predictions.</p>
-          <p>
+          <p className="flex flex-wrap gap-x-6 gap-y-2">
             <Link to="/privacy" className="underline underline-offset-4">
               Privacy notice
+            </Link>
+            {/* Sign-in for Tucker representatives and staff (the same page as the team area; never indexed). */}
+            <Link to="/admin/login" rel="nofollow" className="underline underline-offset-4">
+              Rep Login
             </Link>
           </p>
         </div>
