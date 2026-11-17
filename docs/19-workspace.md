@@ -1,6 +1,6 @@
 # 19 · Agent Workspace
 
-Status: **Built & tested, not deployed** (pushed with `[skip render]`; migration 13 rehearsed on a database created by the live commit `c91d2b3`).
+Status: **Deployed 2026-11-17** (owner said "deploy"; migration 13 rehearsed on a database created by the live commit `c91d2b3`).
 
 The representative experience inside the existing team area (`/admin`). It uses the same sign-in, lead records, routing, consent and chat transcripts as before; nothing is a second CRM.
 

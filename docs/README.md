@@ -39,7 +39,7 @@
 | V2: national benchmarks, locations removed, new homepage and video, representative handoff, central alerts | **Live** as `1e6a422` (deployed and verified 2026-11-17; `16-handoff.md`, `17-v2-national.md`) |
 | Representative handoff: short "Get My Exact Pricing" request, routing to representatives, representative sign-in, lead lifecycle and history, funnel | **Built & tested, not deployed** (`16-handoff.md`). Adds migration 8 (additive, rehearsed on the live commit's database) |
 | Website chat ("Chat with an Agent"): AI assistant with rule-based fallback, savings cards, handoff to a representative, Admin → Chats | **Live** as `c91d2b3` (deployed and smoke-checked 2026-11-17) with the white homepage, example amounts, home security and step 3 wording (`18-chat.md`). Adds migrations 11–12 (additive, rehearsed on the live commit's database). AI wording needs `ANTHROPIC_API_KEY` (owner) |
-| Agent Workspace (lead profiles, dispositions, notes, follow-ups, timeline, queues, overview KPIs, sales manager role, notifications) | **Built & tested, not deployed** (`19-workspace.md`). Adds migration 13 (additive, rehearsed on the live commit's database) |
+| Agent Workspace (lead profiles, dispositions, notes, follow-ups, timeline, queues, overview KPIs, sales manager role, notifications) | **Deployed 2026-11-17** (`19-workspace.md`). Adds migration 13 (additive, rehearsed on the live commit's database) |
 | Real solar, mobile and TV offer terms | **Missing**: those categories show labelled benchmarks ($200 solar for homeowners, $45 per mobile line, $75 TV), never a quoted price |
 | Staging service, monitoring/alerting, off-site backups | Proposed — need approval |
 
