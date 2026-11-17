@@ -34,7 +34,7 @@
 | Site name **Tucker** everywhere (titles, wordmark with the nose period, emails, calendar files, share images) | **Live** as `b8b6c50` (found live on 2026-11-17, deployed from Render) |
 | Domain migration to **trytucker.com** (canonical URLs, sitemap, `www` handling, switchable 301s from the old domain) | **Live** as `b8b6c50` with `SITE_URL=https://trytucker.com`; checked read-only on 2026-11-17: canonical links, robots and sitemap use trytucker.com, `www` redirects. Old-domain redirects are still **off** (`LEGACY_REDIRECTS`) |
 | Consolidation under Tucker (national home, retired URLs) | **Live** as `13882f8` |
-| V2: national benchmarks, locations removed, new homepage and video, representative handoff, central alerts | **Built & tested, not deployed** (`16-handoff.md`, `17-v2-national.md`). Migrations 8–10, additive, rehearsed |
+| V2: national benchmarks, locations removed, new homepage and video, representative handoff, central alerts | **Live** as `1e6a422` (deployed and verified 2026-11-17; `16-handoff.md`, `17-v2-national.md`) |
 | Representative handoff: short "Get My Exact Pricing" request, routing to representatives, representative sign-in, lead lifecycle and history, funnel | **Built & tested, not deployed** (`16-handoff.md`). Adds migration 8 (additive, rehearsed on the live commit's database) |
 | Real solar, mobile and TV offer terms | **Missing**: those categories show labelled benchmarks ($200 solar for homeowners, $45 per mobile line, $75 TV), never a quoted price |
 | Staging service, monitoring/alerting, off-site backups | Proposed — need approval |
