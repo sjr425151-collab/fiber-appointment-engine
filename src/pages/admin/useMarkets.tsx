@@ -7,13 +7,13 @@ export interface AdminMarkets {
   leadCounts: Record<string, number>;
 }
 
-/** All locations (including inactive) for admin screens. */
-export function useAdminMarkets() {
+/** All locations (including inactive) for admin screens. Pass false for a representative, who cannot list locations. */
+export function useAdminMarkets(enabled = true) {
   const [data, setData] = useState<AdminMarkets | null>(null);
   const reload = useCallback(() => api<AdminMarkets>('/admin/markets').then(setData), []);
   useEffect(() => {
-    reload();
-  }, [reload]);
+    if (enabled) reload();
+  }, [reload, enabled]);
   const bySlug = Object.fromEntries((data?.markets ?? []).map((m) => [m.slug, m]));
   return { data, reload, bySlug, setData };
 }

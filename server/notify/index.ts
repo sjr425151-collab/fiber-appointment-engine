@@ -99,12 +99,16 @@ export function createNotifier(db: DB, config: AppConfig, mailer: Mailer = maile
 
     // Non-production emails are labelled so nobody mistakes a staging alert for a real lead.
     const label = (r: t.Rendered): t.Rendered => (config.flags.env === 'production' ? r : { ...r, subject: `[${config.flags.env.toUpperCase()}] ${r.subject}` });
+    // The assigned representative is alerted too (if they are still active).
+    const rep = lead.assignedRepId ? repo.getRep(db, lead.assignedRepId) : null;
+    const alertTo = [...new Set([...team, ...(rep?.active ? [rep.email] : [])])];
     const forTeam = (raw: t.Rendered): { email: OutgoingEmail } | { skip: string } => {
       const r = label(raw);
-      return team.length ? { email: { ...base, ...r, to: team, replyTo: [lead.email] } } : { skip: 'No team email configured for this location' };
+      return alertTo.length ? { email: { ...base, ...r, to: alertTo, ...(lead.email ? { replyTo: [lead.email] } : {}) } } : { skip: 'No team email configured for this location' };
     };
     const forCustomer = (raw: t.Rendered, extra: Partial<OutgoingEmail> = {}): { email: OutgoingEmail } | { skip: string } => {
       const r = label(raw);
+      if (!lead.email) return { skip: 'No email address on this lead' };
       if (config.flags.env !== 'production' && !allowedOutsideProduction(lead.email, config.email.nonProductionAllowlist)) {
         return { skip: `${config.flags.env}: customer emails only go to STAGING_EMAIL_ALLOWLIST addresses` };
       }
@@ -123,7 +127,7 @@ export function createNotifier(db: DB, config: AppConfig, mailer: Mailer = maile
     switch (row.kind) {
       case 'team_new_lead':
       case 'team_returning_lead':
-        return forTeam(t.teamNewLead(lead, market, adminUrl(lead), row.kind === 'team_returning_lead'));
+        return forTeam(t.teamNewLead(lead, market, adminUrl(lead), row.kind === 'team_returning_lead', rep?.name ?? null));
       case 'team_booking':
         if (!appt) return { skip: 'Appointment not found' };
         return forTeam(t.teamBooking(lead, appt, market, adminUrl(lead)));
@@ -133,12 +137,12 @@ export function createNotifier(db: DB, config: AppConfig, mailer: Mailer = maile
           uid: `${appt.id}@fiber-connect`,
           startUtc: appt.startUtc,
           endUtc: appt.endUtc,
-          summary: lead.source === 'platform_assessment' ? `Savings review with ${BRAND.name}` : `Free fiber consultation (${market.provider})`,
-          description: `Your free ${lead.source === 'platform_assessment' ? 'savings review' : 'consultation'} with ${BRAND.name}${lead.source === 'platform_assessment' ? '' : ` (${market.name})`}.${market.phoneDisplay ? ` Questions? Call or text ${market.phoneDisplay}.` : ''}`,
+          summary: t.isSavings(lead) ? `Savings review with ${BRAND.name}` : `Free fiber consultation (${market.provider})`,
+          description: `Your free ${t.isSavings(lead) ? 'savings review' : 'consultation'} with ${BRAND.name}${t.isSavings(lead) ? '' : ` (${market.name})`}.${market.phoneDisplay ? ` Questions? Call or text ${market.phoneDisplay}.` : ''}`,
           location: [lead.street, lead.unit, `${lead.city}, ${market.state} ${lead.zip}`].filter(Boolean).join(', '),
         });
         return forCustomer(t.customerConfirmation(lead, appt, market), {
-          attachments: [{ filename: lead.source === 'platform_assessment' ? 'tucker-savings-review.ics' : 'fiber-consultation.ics', content: Buffer.from(ics).toString('base64') }],
+          attachments: [{ filename: t.isSavings(lead) ? 'tucker-savings-review.ics' : 'fiber-consultation.ics', content: Buffer.from(ics).toString('base64') }],
         });
       }
       case 'customer_reminder':

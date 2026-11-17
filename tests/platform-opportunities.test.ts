@@ -73,7 +73,7 @@ describe('opportunities from an advisor request', () => {
     // 2 Gig is $70 against $105 now (bill + equipment): figures come from the engine.
     expect(net).toMatchObject({ currentMonthlyCents: 10500, proposedMonthlyCents: 7000, monthlySavingsCents: 3500, estimate: false });
     expect(opps[1]).toMatchObject({ estimate: true, proposedMonthlyCents: 11360 });
-    expect(repo.listNotes(db, c.body.leadId)[0].body).toMatch(/internet → 2 Gig; electricity → Sample Solar Agreement \(25 years\) \[SAMPLE\]/);
+    expect(repo.listNotes(db, c.body.leadId).map((n) => n.body).join(" | ")).toMatch(/internet → 2 Gig; electricity → Sample Solar Agreement \(25 years\) \[SAMPLE\]/);
   });
 
   it('ignores forged or unknown selections and never takes prices from the request', async () => {

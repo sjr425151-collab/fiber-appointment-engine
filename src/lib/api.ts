@@ -1,3 +1,5 @@
+import { LEAD_STATUS_LABEL } from '../../shared/lead-status';
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -50,22 +52,20 @@ export function fmtPhone(p: string) {
   return p.length === 10 ? `(${p.slice(0, 3)}) ${p.slice(3, 6)}-${p.slice(6)}` : p;
 }
 
-export const STATUS_LABELS: Record<string, string> = {
-  new: 'New',
-  contacted: 'Contacted',
-  appointment_set: 'Appointment set',
-  sold: 'Sold',
-  install_scheduled: 'Install scheduled',
-  installed: 'Installed',
-  lost: 'Lost',
-};
+/** Labels come from the shared lifecycle so the team area and emails never disagree. */
+export const STATUS_LABELS: Record<string, string> = LEAD_STATUS_LABEL;
 
 export const STATUS_COLORS: Record<string, string> = {
   new: 'bg-sky-500/15 text-sky-300 ring-sky-400/30',
+  assigned: 'bg-indigo-500/15 text-indigo-300 ring-indigo-400/30',
+  contact_attempted: 'bg-orange-500/15 text-orange-300 ring-orange-400/30',
   contacted: 'bg-amber-500/15 text-amber-300 ring-amber-400/30',
   appointment_set: 'bg-violet-500/15 text-violet-300 ring-violet-400/30',
+  qualified: 'bg-teal-500/15 text-teal-300 ring-teal-400/30',
   sold: 'bg-emerald-500/15 text-emerald-300 ring-emerald-400/30',
   install_scheduled: 'bg-cyan-500/15 text-cyan-300 ring-cyan-400/30',
   installed: 'bg-green-500/20 text-green-300 ring-green-400/30',
+  not_interested: 'bg-slate-500/15 text-slate-300 ring-slate-400/30',
+  unserviceable: 'bg-rose-500/15 text-rose-300 ring-rose-400/30',
   lost: 'bg-slate-500/15 text-slate-400 ring-slate-400/30',
 };

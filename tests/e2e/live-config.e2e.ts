@@ -47,7 +47,7 @@ describe('national home', () => {
     expect(await axe(p)).toEqual([]);
 
     // The numbers carry into the full preview.
-    await p.getByRole('button', { name: 'Preview My Savings' }).click();
+    await p.getByRole('button', { name: 'See my full preview' }).click();
     await p.getByRole('heading', { level: 1, name: 'Where is your home?' }).waitFor();
     await p.fill('#pf-f-zip', '60601');
     await p.getByRole('button', { name: 'Continue' }).click();
@@ -85,17 +85,17 @@ describe('results in production settings', () => {
     expect(await overflow(p)).toBe(0);
     expect(await axe(p)).toEqual([]);
 
-    await p.getByRole('link', { name: 'Get help switching' }).click();
+    await p.getByRole('link', { name: 'Get My Exact Pricing' }).click();
     await p.getByRole('radio', { name: /Request a callback/ }).check();
     await p.getByLabel('First name').fill('Dana');
     await p.getByLabel('Last name').fill('Reyes');
     await p.getByLabel('Mobile phone', { exact: true }).fill('7345550177');
-    await p.getByLabel('Email', { exact: true }).fill('dana.e2e@example.com');
+    await p.fill('#pf-contact-email', 'dana.e2e@example.com');
     await p.fill('#pf-contact-street', '12 W Front St');
     await p.fill('#pf-contact-city', 'Monroe');
     await p.getByRole('checkbox', { name: /By checking this box/ }).check();
-    await p.getByRole('button', { name: 'Send my request' }).click();
-    await p.getByText(/an advisor will reach out shortly/).waitFor();
+    await p.getByRole('button', { name: 'Request my pricing review' }).click();
+    await p.getByRole('heading', { name: 'Your Pricing Review Has Been Requested' }).waitFor();
 
     const a = await adminLogin(ctx, LIVE);
     await a.goto(`${LIVE}/admin/opportunities`);
@@ -107,6 +107,122 @@ describe('results in production settings', () => {
     await a.getByRole('link', { name: 'Dana Reyes' }).first().click();
     await a.getByText('12 W Front St').first().waitFor();
     expect(errors).toEqual([]);
+    await ctx.close();
+  });
+});
+
+describe('representative handoff', () => {
+  it('turns a preview into a saved request with four fields, then an admin assigns it and the representative sees only that lead', async () => {
+    const { ctx, errors } = await context(b, { viewport: { width: 320, height: 700 } });
+    const p = await ctx.newPage();
+    const posted: string[] = [];
+    p.on('request', (r) => r.method() === 'POST' && !r.url().includes('/api/events') && posted.push(new URL(r.url()).pathname));
+    await p.goto(`${LIVE}/?utm_source=e2e&utm_campaign=handoff`);
+    await p.fill('#qp-internet', '95');
+    await p.fill('#qp-mobile', '190');
+    await p.selectOption('#qp-lines', '3');
+
+    // The call to action appears with the preview; the form opens in place and takes focus.
+    await p.getByRole('button', { name: 'Get My Exact Pricing' }).click();
+    await p.waitForFunction(() => document.activeElement?.id === 'ho-firstName');
+    expect(await p.locator('form[aria-labelledby=ho-title]').innerText()).toMatch(/No obligation to switch[\s\S]*Personalized pricing verification[\s\S]*No purchase required/);
+    expect(await p.locator('#ho-more').isHidden()).toBe(true); // optional details stay out of the way
+    expect(await axe(p)).toEqual([]);
+    expect(await overflow(p)).toBe(0);
+
+    // Nothing is sent, and nothing is lost, when details are missing.
+    await p.getByRole('button', { name: 'Request my pricing review' }).click();
+    await p.waitForFunction(() => document.activeElement?.id === 'ho-firstName');
+    expect(await p.locator('#ho-firstName').getAttribute('aria-invalid')).toBe('true');
+    expect(await p.getByText(/check the box so a representative can contact you/).count()).toBe(1);
+    expect(posted).toEqual([]);
+    expect(await axe(p)).toEqual([]);
+
+    // Keyboard only from here: type, tab, space to consent, enter to send.
+    await p.keyboard.type('Jordan');
+    await p.keyboard.press('Tab');
+    await p.keyboard.type('734 555 0166');
+    await p.keyboard.press('Tab');
+    await p.keyboard.type('48161');
+    await p.focus('#ho-consent');
+    await p.keyboard.press('Space');
+    // A failed send keeps every field and can be retried safely.
+    await p.route('**/api/platform/handoff', (route) => route.abort(), { times: 1 });
+    await p.keyboard.press('Enter');
+    await p.getByText(/Nothing you typed was lost/).waitFor();
+    expect(await p.inputValue('#ho-firstName')).toBe('Jordan');
+    expect(await p.getByRole('heading', { name: 'Your Pricing Review Has Been Requested' }).count()).toBe(0);
+    await p.getByRole('button', { name: 'Request my pricing review' }).click();
+
+    const done = p.getByRole('status').filter({ hasText: 'Your Pricing Review Has Been Requested' });
+    await done.waitFor();
+    expect(await p.evaluate(() => document.activeElement?.getAttribute('role'))).toBe('status');
+    const text = await done.innerText();
+    expect(text).toMatch(/With:\s*The Tucker team/); // nobody is assigned yet, so no name is invented
+    expect(text).toMatch(/Contact by:\s*Phone call, \(734\) 555-0166/);
+    expect(text).not.toMatch(/within|minutes|hours|today|shortly|guarantee/i);
+    expect(posted.filter((u) => u === '/api/platform/handoff')).toHaveLength(2); // the failed try and the retry
+    expect(await axe(p)).toEqual([]);
+    expect(await overflow(p)).toBe(0);
+    // The full preview built from the same bills is one tap away, with nothing retyped.
+    await done.getByRole('link', { name: 'See my full preview' }).click();
+    await p.getByRole('heading', { level: 1, name: 'Your household snapshot' }).waitFor();
+    await p.getByText(/already asked us to review these results/).waitFor();
+
+    // Admin: the request waits in the queue, marked as a preliminary comparison.
+    const a = await adminLogin(ctx, LIVE);
+    await a.setViewportSize({ width: 1280, height: 900 });
+    await a.getByLabel('Assigned to').selectOption('unassigned');
+    const row = a.locator('tr', { hasText: 'Jordan' });
+    await row.waitFor();
+    expect(await row.innerText()).toMatch(/Unassigned[\s\S]*e2e \/ handoff/);
+    expect(await a.locator('tbody tr', { hasText: 'Jordan' }).count()).toBe(1); // sent twice, saved once
+    await row.getByRole('link', { name: 'Jordan' }).click();
+    await a.getByRole('heading', { name: 'What they previewed' }).waitFor();
+    const body = await a.locator('main').innerText();
+    expect(body).toMatch(/Not verified pricing, not a quote/);
+    expect(body).toMatch(/Mobile \(3 lines\)\s+\$190\.00\/mo\s+\$135\.00\/mo\s+Tucker benchmark\s+\$55\.00\/mo less/);
+    expect(body).toMatch(/illustrative difference \$95\.00\/mo \(\$1,140\.00\/yr\)/);
+    expect(body).toMatch(/Marketing consent\s+No/);
+    expect(body).toMatch(/Waiting in the follow-up queue/);
+    expect(await axe(a)).toEqual([]);
+
+    // Add a representative and hand the lead over.
+    await a.getByRole('link', { name: 'Representatives' }).click();
+    await a.getByRole('button', { name: 'Add representative' }).click();
+    await a.fill('#rep-name', 'Alex Rivera');
+    await a.fill('#rep-email', 'alex.e2e@example.com');
+    await a.fill('#rep-password', 'alex-e2e-password-1');
+    await a.getByLabel('Accepting new leads now').check();
+    await a.getByRole('button', { name: 'Save' }).click();
+    await a.locator('tr', { hasText: 'Alex Rivera' }).getByText('Accepting leads').waitFor();
+    expect(await axe(a)).toEqual([]);
+    await a.getByRole('link', { name: 'Leads', exact: true }).click();
+    await a.getByRole('link', { name: 'Jordan' }).click();
+    await a.getByLabel('Assign this lead').selectOption({ label: 'Alex Rivera · 0 open' });
+    await a.getByText('Assigned to Alex Rivera (Assigned by hand).').waitFor();
+    expect(await a.locator('h1 + span').innerText()).toBe('Assigned');
+    await a.getByRole('button', { name: 'Sign out' }).click();
+
+    // The representative signs in and sees only their own lead, with none of the admin screens.
+    await a.fill('#email', 'alex.e2e@example.com');
+    await a.fill('#pw', 'alex-e2e-password-1');
+    await a.click('button:has-text("Sign in")');
+    await a.getByRole('heading', { name: /My leads/ }).waitFor();
+    expect(await a.getByRole('navigation', { name: 'Admin' }).innerText()).toBe('My leads');
+    await a.getByRole('link', { name: 'Jordan' }).waitFor();
+    expect(await a.locator('tbody tr').count()).toBe(1);
+    await a.getByRole('link', { name: 'Jordan' }).click();
+    await a.getByRole('button', { name: 'Contact attempted' }).click();
+    await a.getByText('Status changed: assigned → contact_attempted').waitFor();
+    expect(await a.locator('#lead-assign').count()).toBe(0); // only an admin can reassign
+    const refused = await a.evaluate(() => fetch('/api/admin/reps', { credentials: 'same-origin' }).then((r) => r.status));
+    expect(refused).toBe(403);
+    await a.goto(`${LIVE}/admin`);
+    const saved = a.waitForResponse((r) => r.url().endsWith('/api/admin/reps/me') && r.status() === 200);
+    await a.getByLabel('Accepting new leads').uncheck();
+    await saved;
+    expect(errors.filter((e) => !/403|ERR_FAILED/.test(e))).toEqual([]); // the refused admin call and the simulated outage above
     await ctx.close();
   });
 });

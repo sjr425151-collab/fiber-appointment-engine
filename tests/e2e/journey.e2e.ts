@@ -104,13 +104,13 @@ describe('household journey (staging, phone)', () => {
     expect(await overflow(p)).toBe(0);
 
     // 7. Ask for help (consent is enforced first).
-    await p.getByRole('link', { name: 'Get help switching' }).click();
+    await p.getByRole('link', { name: 'Get My Exact Pricing' }).click();
     await p.getByLabel('First name').fill('Ana');
     await p.getByLabel('Last name').fill('Lopez');
     await p.getByLabel('Mobile phone', { exact: true }).fill('7345550190');
-    await p.getByLabel('Email', { exact: true }).fill('ana.e2e@example.com');
+    await p.fill('#pf-contact-email', 'ana.e2e@example.com');
     await p.getByRole('button', { name: 'Continue to pick a time' }).click();
-    expect(await p.getByText(/Consent is required/).count()).toBe(1);
+    expect(await p.getByText(/check the box so a representative can contact you/).count()).toBe(1);
     await p.getByRole('checkbox', { name: /By checking this box/ }).check();
     await p.getByRole('button', { name: 'Continue to pick a time' }).click();
     await pickFirstSlot(p);

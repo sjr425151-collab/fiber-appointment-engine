@@ -4,12 +4,22 @@
  */
 import { randomUUID } from 'node:crypto';
 import { OPPORTUNITY_STATUSES, OPPORTUNITY_STATUS_LABEL, type OpportunityDraft, type OpportunityKind, type OpportunityStatus } from '../shared/platform/opportunity';
-import type { Appointment, AreaStatus, Lead, LeadNote, LeadStatus } from '../shared/schemas';
+import { CLOSED_LEAD_STATUSES, OPEN_LEAD_STATUSES, type Appointment, type AreaStatus, type Lead, type LeadNote, type LeadStatus, type Representative } from '../shared/schemas';
 import { marketSchema, type Market, type MarketSummary } from '../shared/market';
 import { transaction, type DB } from './db';
 
 type Row = Record<string, unknown>;
 const now = () => new Date().toISOString();
+
+const parseJson = (v: unknown): unknown => {
+  if (typeof v !== 'string' || v === '') return null;
+  try {
+    return JSON.parse(v);
+  } catch {
+    return null;
+  }
+};
+const marks = (n: number) => Array.from({ length: n }, () => '?').join(',');
 
 // ---------------------------------------------------------------- mapping --
 function toLead(r: Row): Lead {
@@ -39,6 +49,14 @@ function toLead(r: Row): Lead {
     marketId: (r.market_id as string) ?? '',
     duplicateOf: (r.duplicate_of as string) ?? null,
     assessmentId: (r.assessment_id as string) ?? null,
+    assignedRepId: (r.assigned_rep_id as string) ?? null,
+    assignedAt: (r.assigned_at as string) ?? null,
+    routingOutcome: (r.routing_outcome as string) ?? '',
+    routingReason: (r.routing_reason as string) ?? '',
+    preview: parseJson(r.preview),
+    bestTime: (r.best_time as string) ?? '',
+    marketingConsent: !!r.marketing_consent,
+    firstContactAt: (r.first_contact_at as string) ?? null,
     consentAt: r.consent_at as string,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
@@ -187,42 +205,65 @@ export interface NewLead {
   consentText: string;
   consentIp: string;
   consentUserAgent: string;
+  /** What the customer was shown when they asked for help (stored as JSON). */
+  preview?: unknown;
+  bestTime?: string;
+  /** Wording of the optional marketing permission, when the customer ticked it. */
+  marketingConsentText?: string;
+  /** One lead per submitted form: a retry with the same key returns the first lead. */
+  requestKey?: string | null;
 }
 
 /**
  * Record a lead submission. Every submission gets its own lead row, booking
- * token and consent record. When the same email + phone already has an open
- * lead, the new one is linked to it (`duplicate_of`) and a note is added to the
- * original — the original's data, consent and appointment are never modified.
+ * token and consent record. When the same phone (and the same email, when both
+ * gave one) already has an open lead, the new one is linked to it
+ * (`duplicate_of`) and a note is added to the original — the original's data,
+ * consent and appointment are never modified. A retry of the very same form
+ * (`requestKey`) returns the lead it already created.
  */
-export function createLead(db: DB, l: NewLead): { lead: Lead; duplicate: boolean } {
+export function createLead(db: DB, l: NewLead): { lead: Lead; duplicate: boolean; retried: boolean; existingId: string | null } {
   return transaction(db, () => {
     const ts = now();
+    if (l.requestKey) {
+      const same = db.prepare('SELECT id, duplicate_of FROM leads WHERE request_key = ?').get(l.requestKey) as { id: string; duplicate_of: string | null } | undefined;
+      if (same) return { lead: getLead(db, same.id)!, duplicate: !!same.duplicate_of, retried: true, existingId: same.duplicate_of };
+    }
     const existing = db
-      .prepare("SELECT id FROM leads WHERE email = ? AND phone = ? AND status <> 'lost' AND duplicate_of IS NULL ORDER BY created_at LIMIT 1")
-      .get(l.email, l.phone) as { id: string } | undefined;
+      .prepare(
+        `SELECT id FROM leads WHERE phone = ? AND (email = ? OR email = '' OR ? = '')
+           AND status NOT IN (${marks(CLOSED_LEAD_STATUSES.length)}) AND duplicate_of IS NULL ORDER BY created_at LIMIT 1`,
+      )
+      .get(l.phone, l.email, l.email, ...CLOSED_LEAD_STATUSES) as { id: string } | undefined;
 
     const id = randomUUID();
     db.prepare(
       `INSERT INTO leads (id, first_name, last_name, email, phone, street, unit, city, zip, preferred_contact,
          current_provider, status, area_status, source, utm_source, utm_medium, utm_campaign, booking_token_hash,
          consent_text, consent_at, consent_ip, consent_user_agent, created_at, updated_at,
-         utm_content, utm_term, click_id, referrer, landing_page, session_id, market_id, duplicate_of)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         utm_content, utm_term, click_id, referrer, landing_page, session_id, market_id, duplicate_of,
+         preview, best_time, marketing_consent, request_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id, l.firstName, l.lastName, l.email, l.phone, l.street, l.unit, l.city, l.zip, l.preferredContact,
       l.currentProvider, l.areaStatus, l.source, l.utmSource, l.utmMedium, l.utmCampaign, l.bookingTokenHash,
       l.consentText, ts, l.consentIp, l.consentUserAgent, ts, ts,
       l.utmContent, l.utmTerm, l.clickId, l.referrer, l.landingPage, l.sessionId, l.marketId, existing?.id ?? null,
+      l.preview === undefined ? '' : JSON.stringify(l.preview), l.bestTime ?? '', l.marketingConsentText ? 1 : 0, l.requestKey ?? null,
     );
     db.prepare('INSERT INTO consents (id, lead_id, consent_text, ip, user_agent, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
       randomUUID(), id, l.consentText, l.consentIp, l.consentUserAgent, 'lead_form', ts,
     );
+    if (l.marketingConsentText) {
+      db.prepare('INSERT INTO consents (id, lead_id, consent_text, ip, user_agent, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+        randomUUID(), id, l.marketingConsentText, l.consentIp, l.consentUserAgent, 'marketing_optin', ts,
+      );
+    }
     if (existing) {
       addNote(db, existing.id, `Submitted the form again (new lead ${id}). This record was not changed.`, 'system');
-      addNote(db, id, `Repeat submission — same email and phone as lead ${existing.id}.`, 'system');
+      addNote(db, id, `Repeat submission — same contact details as lead ${existing.id}.`, 'system');
     }
-    return { lead: getLead(db, id)!, duplicate: !!existing };
+    return { lead: getLead(db, id)!, duplicate: !!existing, retried: false, existingId: existing?.id ?? null };
   });
 }
 
@@ -269,6 +310,10 @@ export interface LeadFilter {
   offset?: number;
   /** Upper bound for `limit` (admin list: 200; CSV export: larger). */
   maxLimit?: number;
+  /** Only leads assigned to this representative. */
+  rep?: string;
+  /** Only open leads nobody is assigned to (the follow-up queue). */
+  unassigned?: boolean;
 }
 
 export function listLeads(db: DB, f: LeadFilter = {}): { leads: Lead[]; total: number } {
@@ -281,6 +326,14 @@ export function listLeads(db: DB, f: LeadFilter = {}): { leads: Lead[]; total: n
   if (f.market) {
     where.push('market_id = ?');
     params.push(f.market);
+  }
+  if (f.rep) {
+    where.push('assigned_rep_id = ?');
+    params.push(f.rep);
+  }
+  if (f.unassigned) {
+    where.push(`assigned_rep_id IS NULL AND status IN (${marks(OPEN_LEAD_STATUSES.length)})`);
+    params.push(...OPEN_LEAD_STATUSES);
   }
   if (f.q) {
     where.push("(first_name || ' ' || last_name LIKE ? OR email LIKE ? OR phone LIKE ? OR street LIKE ? OR zip = ?)");
@@ -298,8 +351,192 @@ export function listLeads(db: DB, f: LeadFilter = {}): { leads: Lead[]; total: n
 export function updateLeadStatus(db: DB, id: string, status: LeadStatus, author: string) {
   const lead = getLead(db, id);
   if (!lead || lead.status === status) return;
-  db.prepare('UPDATE leads SET status = ?, updated_at = ? WHERE id = ?').run(status, now(), id);
+  const ts = now();
+  db.prepare('UPDATE leads SET status = ?, updated_at = ? WHERE id = ?').run(status, ts, id);
+  // The first confirmed conversation is kept, for "time to first contact".
+  if (status === 'contacted' && !lead.firstContactAt) db.prepare('UPDATE leads SET first_contact_at = ? WHERE id = ?').run(ts, id);
+  addHistory(db, id, 'status', lead.status, status, '', author);
   addNote(db, id, `Status changed: ${lead.status} → ${status}`, author);
+}
+
+export interface LeadHistoryRow {
+  id: string;
+  kind: 'status' | 'assignment';
+  from: string;
+  to: string;
+  detail: string;
+  actor: string;
+  createdAt: string;
+}
+
+function addHistory(db: DB, leadId: string, kind: LeadHistoryRow['kind'], from: string, to: string, detail: string, actor: string) {
+  db.prepare('INSERT INTO lead_history (id, lead_id, kind, from_value, to_value, detail, actor, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+    randomUUID(), leadId, kind, from, to, detail, actor, now(),
+  );
+}
+
+export function listLeadHistory(db: DB, leadId: string): LeadHistoryRow[] {
+  return (db.prepare('SELECT * FROM lead_history WHERE lead_id = ? ORDER BY created_at, rowid').all(leadId) as Row[]).map((r) => ({
+    id: r.id as string,
+    kind: r.kind as LeadHistoryRow['kind'],
+    from: r.from_value as string,
+    to: r.to_value as string,
+    detail: r.detail as string,
+    actor: r.actor as string,
+    createdAt: r.created_at as string,
+  }));
+}
+
+// --------------------------------------------------------- representatives --
+const REP_SELECT = `SELECT r.*,
+    (SELECT COUNT(*) FROM leads l WHERE l.assigned_rep_id = r.id AND l.status IN (${marks(OPEN_LEAD_STATUSES.length)})) AS open_leads,
+    (SELECT MAX(l.assigned_at) FROM leads l WHERE l.assigned_rep_id = r.id) AS last_assigned_at
+  FROM representatives r`;
+
+const toRep = (r: Row): Representative => ({
+  id: r.id as string,
+  name: r.name as string,
+  email: r.email as string,
+  phone: r.phone as string,
+  active: !!r.active,
+  accepting: !!r.accepting,
+  markets: (parseJson(r.markets) as string[] | null) ?? ['*'],
+  categories: (parseJson(r.categories) as Representative['categories'] | null) ?? [],
+  maxOpenLeads: r.max_open_leads as number,
+  canSignIn: (r.password_hash as string) !== '',
+  openLeads: (r.open_leads as number) ?? 0,
+  lastAssignedAt: (r.last_assigned_at as string) ?? null,
+  createdAt: r.created_at as string,
+  updatedAt: r.updated_at as string,
+});
+
+export function listReps(db: DB): Representative[] {
+  return (db.prepare(`${REP_SELECT} ORDER BY r.name, r.id`).all(...OPEN_LEAD_STATUSES) as Row[]).map(toRep);
+}
+
+export function getRep(db: DB, id: string): Representative | null {
+  const r = db.prepare(`${REP_SELECT} WHERE r.id = ?`).get(...OPEN_LEAD_STATUSES, id) as Row | undefined;
+  return r ? toRep(r) : null;
+}
+
+/** For sign-in only: the stored password hash is never returned anywhere else. */
+export function getRepCredentials(db: DB, email: string): { id: string; passwordHash: string; active: boolean } | null {
+  const r = db.prepare('SELECT id, password_hash, active FROM representatives WHERE email = ?').get(email) as Row | undefined;
+  return r ? { id: r.id as string, passwordHash: r.password_hash as string, active: !!r.active } : null;
+}
+
+export interface RepInput {
+  name: string;
+  email: string;
+  phone: string;
+  active: boolean;
+  accepting: boolean;
+  markets: string[];
+  categories: string[];
+  maxOpenLeads: number;
+  /** Already hashed; undefined keeps the current one. */
+  passwordHash?: string;
+}
+
+export function createRep(db: DB, i: RepInput): Representative {
+  const id = randomUUID();
+  const ts = now();
+  db.prepare(
+    `INSERT INTO representatives (id, name, email, phone, password_hash, active, accepting, markets, categories, max_open_leads, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, i.name, i.email, i.phone, i.passwordHash ?? '', i.active ? 1 : 0, i.accepting ? 1 : 0, JSON.stringify(i.markets), JSON.stringify(i.categories), i.maxOpenLeads, ts, ts);
+  return getRep(db, id)!;
+}
+
+export function updateRep(db: DB, id: string, i: RepInput): Representative | null {
+  if (!getRep(db, id)) return null;
+  db.prepare(
+    `UPDATE representatives SET name = ?, email = ?, phone = ?, active = ?, accepting = ?, markets = ?, categories = ?, max_open_leads = ?, updated_at = ? WHERE id = ?`,
+  ).run(i.name, i.email, i.phone, i.active ? 1 : 0, i.accepting ? 1 : 0, JSON.stringify(i.markets), JSON.stringify(i.categories), i.maxOpenLeads, now(), id);
+  if (i.passwordHash !== undefined) db.prepare('UPDATE representatives SET password_hash = ? WHERE id = ?').run(i.passwordHash, id);
+  return getRep(db, id);
+}
+
+/** A representative switching their own "accepting new leads" on or off. */
+export function setRepAccepting(db: DB, id: string, accepting: boolean): Representative | null {
+  db.prepare('UPDATE representatives SET accepting = ?, updated_at = ? WHERE id = ?').run(accepting ? 1 : 0, now(), id);
+  return getRep(db, id);
+}
+
+/** Who already owns an open lead for this phone number (so a repeat request goes to the same person). */
+export function openLeadOwner(db: DB, phone: string, exceptLeadId: string): string | null {
+  const r = db
+    .prepare(
+      `SELECT assigned_rep_id FROM leads WHERE phone = ? AND id <> ? AND assigned_rep_id IS NOT NULL
+         AND status IN (${marks(OPEN_LEAD_STATUSES.length)}) ORDER BY created_at DESC LIMIT 1`,
+    )
+    .get(phone, exceptLeadId, ...OPEN_LEAD_STATUSES) as { assigned_rep_id: string } | undefined;
+  return r?.assigned_rep_id ?? null;
+}
+
+/**
+ * Record a routing result on a lead: assign it to a representative, or leave
+ * it unassigned (queued / unsupported). Every change is written to the lead's
+ * history with who did it and why. `new` becomes `assigned` and back; no other
+ * status is ever changed here.
+ */
+export function assignLead(db: DB, leadId: string, repId: string | null, o: { outcome: string; reason: string; actor: string }): Lead | null {
+  const lead = getLead(db, leadId);
+  if (!lead) return null;
+  const rep = repId ? getRep(db, repId) : null;
+  if (repId && !rep) return null;
+  return transaction(db, () => {
+    const ts = now();
+    db.prepare('UPDATE leads SET assigned_rep_id = ?, assigned_at = ?, routing_outcome = ?, routing_reason = ?, updated_at = ? WHERE id = ?').run(
+      repId, repId ? ts : null, o.outcome, o.reason, ts, leadId,
+    );
+    if (lead.assignedRepId !== repId || !lead.routingOutcome) {
+      addHistory(db, leadId, 'assignment', lead.assignedRepId ?? '', repId ?? '', `${o.outcome}: ${o.reason}`, o.actor);
+      addNote(db, leadId, rep ? `Assigned to ${rep.name} (${o.reason}).` : `Not assigned — ${o.outcome === 'unsupported' ? 'needs review' : 'in the follow-up queue'} (${o.reason}).`, o.actor);
+    }
+    if (repId && lead.status === 'new') updateLeadStatus(db, leadId, 'assigned', o.actor);
+    if (!repId && lead.status === 'assigned') updateLeadStatus(db, leadId, 'new', o.actor);
+    return getLead(db, leadId);
+  });
+}
+
+/** Funnel for pricing-review requests: site events plus what happened to the leads afterwards. */
+export function handoffFunnel(db: DB, days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const names = ['preview_view', 'handoff_cta_view', 'handoff_cta_click', 'handoff_start', 'handoff_submit', 'handoff_error'];
+  const events = db
+    .prepare(`SELECT name, COUNT(*) AS events, COUNT(DISTINCT NULLIF(session_id, '')) AS sessions FROM events WHERE created_at >= ? AND name IN (${marks(names.length)}) GROUP BY name`)
+    .all(since, ...names) as { name: string; events: number; sessions: number }[];
+  const l = db
+    .prepare(
+      `SELECT COUNT(*) AS total,
+              SUM(CASE WHEN assigned_rep_id IS NOT NULL THEN 1 ELSE 0 END) AS assigned,
+              SUM(CASE WHEN assigned_rep_id IS NULL AND status IN (${marks(OPEN_LEAD_STATUSES.length)}) THEN 1 ELSE 0 END) AS queued,
+              SUM(CASE WHEN routing_outcome = 'unsupported' THEN 1 ELSE 0 END) AS unsupported,
+              SUM(CASE WHEN first_contact_at IS NOT NULL THEN 1 ELSE 0 END) AS contacted,
+              SUM(CASE WHEN EXISTS (SELECT 1 FROM appointments a WHERE a.lead_id = leads.id AND a.status <> 'cancelled') THEN 1 ELSE 0 END) AS appointments,
+              SUM(CASE WHEN status IN ('qualified','sold','install_scheduled','installed')
+                         OR EXISTS (SELECT 1 FROM lead_history h WHERE h.lead_id = leads.id AND h.kind = 'status' AND h.to_value = 'qualified') THEN 1 ELSE 0 END) AS qualified,
+              SUM(CASE WHEN status IN ('sold','install_scheduled','installed') THEN 1 ELSE 0 END) AS converted,
+              AVG(CASE WHEN first_contact_at IS NOT NULL THEN (julianday(first_contact_at) - julianday(created_at)) * 1440 END) AS avg_minutes_to_contact
+       FROM leads WHERE created_at >= ? AND source LIKE 'platform_%'`,
+    )
+    .get(...OPEN_LEAD_STATUSES, since) as Record<string, number | null>;
+  return {
+    days,
+    events: Object.fromEntries(events.map((e) => [e.name, { events: e.events, sessions: e.sessions }])),
+    leads: {
+      total: l.total ?? 0,
+      assigned: l.assigned ?? 0,
+      queued: l.queued ?? 0,
+      unsupported: l.unsupported ?? 0,
+      contacted: l.contacted ?? 0,
+      appointments: l.appointments ?? 0,
+      qualified: l.qualified ?? 0,
+      converted: l.converted ?? 0,
+      avgMinutesToFirstContact: l.avg_minutes_to_contact === null ? null : Math.round(l.avg_minutes_to_contact as number),
+    },
+  };
 }
 
 export function addNote(db: DB, leadId: string, body: string, author: string): LeadNote {

@@ -32,7 +32,7 @@ describe('responsive layout', () => {
       await ready(p, results);
       expect({ path: 'results', overflow: await overflow(p) }).toEqual({ path: 'results', overflow: 0 });
       // Primary action inside the first two screens on every width.
-      const cta = p.getByRole('link', { name: 'Get help switching' });
+      const cta = p.getByRole('link', { name: 'Get My Exact Pricing' });
       const box = await cta.boundingBox();
       expect(box).not.toBeNull();
       expect(box!.y).toBeLessThan(800 * 2.5);

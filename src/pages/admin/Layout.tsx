@@ -1,32 +1,47 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useOutletContext } from 'react-router-dom';
 import { api, ApiError } from '../../lib/api';
 import { Logo, Spinner } from '../../components/ui';
-import { bootFlags } from '../../lib/market';
 
-const NAV = [
+const ADMIN_NAV = [
   { to: '/admin', label: 'Leads', end: true },
   { to: '/admin/appointments', label: 'Appointments' },
+  { to: '/admin/opportunities', label: 'Opportunities' },
+  { to: '/admin/assessments', label: 'Assessments' },
+  { to: '/admin/reps', label: 'Representatives' },
   { to: '/admin/locations', label: 'Locations' },
   { to: '/admin/areas', label: 'Service areas' },
-  // Parent-platform assessments (only when the platform is enabled).
-  ...(bootFlags().platform
-    ? [
-        { to: '/admin/opportunities', label: 'Opportunities' },
-        { to: '/admin/assessments', label: 'Assessments' },
-      ]
-    : []),
 ];
+/** A representative sees only their own leads. */
+const REP_NAV = [{ to: '/admin', label: 'My leads', end: true }];
+
+export interface TeamContext {
+  role: 'admin' | 'rep';
+  rep: { id: string; name: string; accepting: boolean; openLeads: number } | null;
+}
+interface Me extends TeamContext {
+  email: string;
+  emailEnabled: boolean;
+  locationsWithoutTeamEmail: string[];
+  pricingWarnings?: { name: string; state: 'expiring' | 'hidden'; daysLeft: number | null }[];
+  crm?: { name: string; configured: boolean };
+  representatives?: number;
+}
+export const useTeam = () => useOutletContext<TeamContext>();
 
 export default function AdminLayout() {
   const nav = useNavigate();
   const [email, setEmail] = useState<string | null>(null);
   const [emailStatus, setEmailStatus] = useState<{ enabled: boolean; missing: string[] }>({ enabled: true, missing: [] });
   const [pricing, setPricing] = useState<{ name: string; state: 'expiring' | 'hidden'; daysLeft: number | null }[]>([]);
+  const [team, setTeam] = useState<TeamContext>({ role: 'admin', rep: null });
+  const [noReps, setNoReps] = useState(false);
 
   useEffect(() => {
-    api<{ email: string; emailEnabled: boolean; locationsWithoutTeamEmail: string[]; pricingWarnings?: typeof pricing }>('/admin/me')
+    api<Me>('/admin/me')
       .then((r) => {
+        setTeam({ role: r.role ?? 'admin', rep: r.rep ?? null });
+        setNoReps(r.role !== 'rep' && r.representatives === 0);
         setEmail(r.email);
         setEmailStatus({ enabled: r.emailEnabled, missing: r.locationsWithoutTeamEmail ?? [] });
         setPricing(r.pricingWarnings ?? []);
@@ -35,6 +50,18 @@ export default function AdminLayout() {
         if (err instanceof ApiError && err.status === 401) nav('/admin/login', { replace: true });
       });
   }, [nav]);
+
+  async function setAccepting(accepting: boolean) {
+    // Show the change at once; put it back if the server refuses.
+    const apply = (v: boolean) => setTeam((t) => (t.rep ? { ...t, rep: { ...t.rep, accepting: v } } : t));
+    apply(accepting);
+    try {
+      const r = await api<{ representative: { accepting: boolean } }>('/admin/reps/me', { method: 'PATCH', body: { accepting } });
+      apply(r.representative.accepting);
+    } catch {
+      apply(!accepting);
+    }
+  }
 
   async function logout() {
     await api('/admin/logout', { method: 'POST' });
@@ -56,7 +83,7 @@ export default function AdminLayout() {
           <Logo />
           {/* Phones: the nav gets its own full-width row and scrolls sideways instead of overlapping. */}
           <nav aria-label="Admin" className="order-last -mx-4 flex w-[calc(100%+2rem)] gap-1 overflow-x-auto px-4 pb-1 text-sm lg:order-none lg:mx-0 lg:w-auto lg:overflow-visible lg:px-0 lg:pb-0">
-            {NAV.map((n) => (
+            {(team.role === 'rep' ? REP_NAV : ADMIN_NAV).map((n) => (
               <NavLink
                 key={n.to}
                 to={n.to}
@@ -68,6 +95,12 @@ export default function AdminLayout() {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm text-slate-400">
+            {team.rep && (
+              <label className="flex cursor-pointer items-center gap-2 text-slate-200">
+                <input type="checkbox" checked={team.rep.accepting} onChange={(e) => setAccepting(e.target.checked)} />
+                Accepting new leads
+              </label>
+            )}
             <span className="hidden sm:inline">{email}</span>
             <button className="btn-ghost px-3 py-1.5 text-sm" onClick={logout}>
               Sign out
@@ -75,6 +108,11 @@ export default function AdminLayout() {
           </div>
         </div>
       </header>
+      {noReps && (
+        <div role="status" className="border-b border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-center text-sm text-amber-100 sm:px-6">
+          No representatives are set up, so every pricing-review request waits in the follow-up queue (Leads → Unassigned). Add one under Representatives.
+        </div>
+      )}
       {(!emailStatus.enabled || emailStatus.missing.length > 0) && (
         <div role="status" className="border-b border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-center text-sm text-amber-100 sm:px-6">
           {!emailStatus.enabled
@@ -95,7 +133,7 @@ export default function AdminLayout() {
         </div>
       )}
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        <Outlet />
+        <Outlet context={team} />
       </main>
     </div>
   );

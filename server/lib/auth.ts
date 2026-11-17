@@ -30,6 +30,9 @@ export function safeEqual(a: string, b: string): boolean {
 export interface Session {
   email: string;
   exp: number;
+  /** Missing on sessions issued before representatives existed: those are the admin. */
+  role?: 'admin' | 'rep';
+  repId?: string;
 }
 
 export const SESSION_COOKIE = 'fae_session';
@@ -39,8 +42,8 @@ function sign(payload: string, secret: string) {
   return createHmac('sha256', secret).update(payload).digest('base64url');
 }
 
-export function createSessionToken(email: string, secret: string, now = Date.now()): string {
-  const payload = Buffer.from(JSON.stringify({ email, exp: now + SESSION_TTL_MS })).toString('base64url');
+export function createSessionToken(email: string, secret: string, now = Date.now(), who: { role: 'admin' } | { role: 'rep'; repId: string } = { role: 'admin' }): string {
+  const payload = Buffer.from(JSON.stringify({ email, exp: now + SESSION_TTL_MS, ...who })).toString('base64url');
   return payload + '.' + sign(payload, secret);
 }
 

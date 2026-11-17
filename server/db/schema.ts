@@ -301,6 +301,58 @@ export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
       CREATE INDEX idx_opportunities_status ON opportunities(status, created_at);
     `,
   },
+  {
+    id: 8,
+    name: 'representative_handoff',
+    sql: `
+      -- People who receive leads. They sign in with their own password and see
+      -- only the leads assigned to them. \`accepting\` is switched by a person;
+      -- availability is never inferred.
+      CREATE TABLE representatives (
+        id              TEXT PRIMARY KEY,
+        name            TEXT NOT NULL,
+        email           TEXT NOT NULL UNIQUE,
+        phone           TEXT NOT NULL DEFAULT '',
+        password_hash   TEXT NOT NULL DEFAULT '',
+        active          INTEGER NOT NULL DEFAULT 1,
+        accepting       INTEGER NOT NULL DEFAULT 0,
+        markets         TEXT NOT NULL DEFAULT '["*"]',
+        categories      TEXT NOT NULL DEFAULT '[]',
+        max_open_leads  INTEGER NOT NULL DEFAULT 0,
+        created_at      TEXT NOT NULL,
+        updated_at      TEXT NOT NULL
+      );
+
+      -- Assignment, routing result and the preview the customer saw, on the lead.
+      ALTER TABLE leads ADD COLUMN assigned_rep_id   TEXT;
+      ALTER TABLE leads ADD COLUMN assigned_at       TEXT;
+      ALTER TABLE leads ADD COLUMN routing_outcome   TEXT NOT NULL DEFAULT '';
+      ALTER TABLE leads ADD COLUMN routing_reason    TEXT NOT NULL DEFAULT '';
+      ALTER TABLE leads ADD COLUMN preview           TEXT NOT NULL DEFAULT '';
+      ALTER TABLE leads ADD COLUMN best_time         TEXT NOT NULL DEFAULT '';
+      ALTER TABLE leads ADD COLUMN marketing_consent INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE leads ADD COLUMN first_contact_at  TEXT;
+      -- One lead per submitted form, however many times the request is retried.
+      ALTER TABLE leads ADD COLUMN request_key       TEXT;
+      CREATE UNIQUE INDEX idx_leads_request_key ON leads(request_key) WHERE request_key IS NOT NULL;
+      CREATE INDEX idx_leads_assigned ON leads(assigned_rep_id, status);
+      CREATE INDEX idx_leads_phone ON leads(phone);
+
+      -- Structured history of status changes and assignments (for timelines and funnel metrics).
+      CREATE TABLE lead_history (
+        id          TEXT PRIMARY KEY,
+        lead_id     TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        kind        TEXT NOT NULL CHECK (kind IN ('status','assignment')),
+        from_value  TEXT NOT NULL DEFAULT '',
+        to_value    TEXT NOT NULL DEFAULT '',
+        detail      TEXT NOT NULL DEFAULT '',
+        actor       TEXT NOT NULL,
+        created_at  TEXT NOT NULL
+      );
+      CREATE INDEX idx_lead_history_lead ON lead_history(lead_id, created_at);
+      CREATE INDEX idx_lead_history_kind ON lead_history(kind, to_value, created_at);
+    `,
+  },
 ];
 
 /**

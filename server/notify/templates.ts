@@ -1,6 +1,7 @@
 import { BRAND, place } from '../../shared/content';
 import type { Market } from '../../shared/market';
 import type { Appointment, Lead } from '../../shared/schemas';
+import type { HandoffPreview } from '../../shared/platform/handoff';
 
 export interface Rendered {
   subject: string;
@@ -57,7 +58,10 @@ const rows = (pairs: [string, string][]) =>
     .join('')}</table>`;
 
 /** Requests from the household savings preview are about the customer's bills, not one provider's service. */
-const isSavings = (lead: Lead) => lead.source === 'platform_assessment';
+export const isSavings = (lead: Lead) => lead.source.startsWith('platform_');
+/** Last name is optional on pricing-review requests. */
+const fullName = (lead: Lead) => `${lead.firstName} ${lead.lastName}`.trim();
+const dollars = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 const consult = (lead: Lead) => (isSavings(lead) ? 'savings review' : 'fiber consultation');
 
 function customerFooter(m: Market, lead?: Lead) {
@@ -147,42 +151,49 @@ export function customerLeadReceived(lead: Lead, m: Market): Rendered {
 }
 
 // -------------------------------------------------------------------- team --
-function leadFacts(lead: Lead): [string, string][] {
+function leadFacts(lead: Lead, repName: string | null = null): [string, string][] {
   const source = [lead.utmSource || lead.source, lead.utmMedium, lead.utmCampaign].filter(Boolean).join(' / ');
-  return [
-    ['Name', `${lead.firstName} ${lead.lastName}`],
+  const preview = lead.preview as HandoffPreview | null;
+  const facts: [string, string][] = [
+    ['Name', fullName(lead)],
     ['Phone', fmtPhone(lead.phone)],
-    ['Email', lead.email],
+    ['Email', lead.email || '—'],
     ['Address', address(lead)],
     ['Area status', lead.areaStatus.replace('_', ' ')],
-    ['Prefers', lead.preferredContact],
+    ['Prefers', lead.bestTime && lead.bestTime !== 'anytime' ? `${lead.preferredContact}, ${lead.bestTime}` : lead.preferredContact],
     ['Current provider', lead.currentProvider || '—'],
     ['Source', source || '—'],
   ];
+  if (lead.routingOutcome) facts.push(['Assigned to', repName ?? (lead.routingOutcome === 'unsupported' ? 'Nobody — ZIP needs review' : 'Nobody yet — follow-up queue')]);
+  if (preview?.rows?.length) {
+    facts.push(['Pays now', preview.currentMonthlyCents === null ? '—' : `${dollars(preview.currentMonthlyCents)}/mo`]);
+    facts.push(['Previewed difference', `${dollars(preview.monthlyDifferenceCents)}/mo (${dollars(preview.annualDifferenceCents)}/yr). Illustrative, not verified pricing.`]);
+  }
+  return facts;
 }
 
 const teamFooter = (m: Market) => `${esc(BRAND.name)} · ${esc(place(m))} team alert. Manage lead alerts in Admin → Locations.`;
 
-export function teamNewLead(lead: Lead, m: Market, adminUrl: string, duplicate: boolean): Rendered {
-  const subject = oneLine(`${duplicate ? 'Returning lead' : 'New lead'}: ${lead.firstName} ${lead.lastName} — ${m.name} (${lead.zip})`);
+export function teamNewLead(lead: Lead, m: Market, adminUrl: string, duplicate: boolean, repName: string | null = null): Rendered {
+  const subject = oneLine(`${duplicate ? 'Returning lead' : 'New lead'}: ${fullName(lead)} — ${m.name} (${lead.zip})`);
   const body =
     p(duplicate ? 'This lead submitted the form again (details refreshed).' : `A new lead just came in for <strong>${esc(place(m))}</strong>.`) +
-    rows(leadFacts(lead)) +
-    p(`<a href="tel:${esc(lead.phone)}" style="color:#0891b2">Call</a> · <a href="sms:${esc(lead.phone)}" style="color:#0891b2">Text</a> · <a href="mailto:${esc(lead.email)}" style="color:#0891b2">Email</a>`) +
+    rows(leadFacts(lead, repName)) +
+    p(`<a href="tel:${esc(lead.phone)}" style="color:#0891b2">Call</a> · <a href="sms:${esc(lead.phone)}" style="color:#0891b2">Text</a>${lead.email ? ` · <a href="mailto:${esc(lead.email)}" style="color:#0891b2">Email</a>` : ''}`) +
     button(adminUrl, 'Open lead');
   const text = [
     `${duplicate ? 'Returning lead' : 'New lead'} — ${place(m)}`,
     '',
-    ...leadFacts(lead).map(([k, v]) => `${k}: ${v}`),
+    ...leadFacts(lead, repName).map(([k, v]) => `${k}: ${v}`),
     '',
     `Open lead: ${adminUrl}`,
   ].join('\n');
-  return { subject, html: layout({ preheader: `${lead.firstName} ${lead.lastName} · ${fmtPhone(lead.phone)}`, heading: duplicate ? 'Returning lead' : 'New lead', body, footer: teamFooter(m) }), text };
+  return { subject, html: layout({ preheader: `${fullName(lead)} · ${fmtPhone(lead.phone)}`, heading: duplicate ? 'Returning lead' : 'New lead', body, footer: teamFooter(m) }), text };
 }
 
 export function teamBooking(lead: Lead, appt: Appointment, m: Market, adminUrl: string): Rendered {
   const when = fmtWhen(appt.startUtc, m.timezone);
-  const subject = oneLine(`Booked: ${lead.firstName} ${lead.lastName} — ${when.date}, ${when.time}`);
+  const subject = oneLine(`Booked: ${fullName(lead)} — ${when.date}, ${when.time}`);
   const body =
     box(`<strong>${esc(when.date)}</strong> · ${esc(when.time)}<br>${esc(address(lead))}`) +
     (appt.notes ? p(`<strong>Customer note:</strong> ${esc(appt.notes)}`) : '') +
@@ -200,5 +211,5 @@ export function teamBooking(lead: Lead, appt: Appointment, m: Market, adminUrl: 
   ]
     .filter((l, i, a) => l !== '' || a[i - 1] !== '')
     .join('\n');
-  return { subject, html: layout({ preheader: `${when.full} · ${lead.firstName} ${lead.lastName}`, heading: 'Appointment booked', body, footer: teamFooter(m) }), text };
+  return { subject, html: layout({ preheader: `${when.full} · ${fullName(lead)}`, heading: 'Appointment booked', body, footer: teamFooter(m) }), text };
 }

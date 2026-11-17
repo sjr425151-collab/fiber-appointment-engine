@@ -3,17 +3,8 @@ import { z } from 'zod';
 // Our CSP forbids eval; tell Zod not to probe for it (it would log a CSP violation).
 z.config({ jitless: true });
 
-/** Lead pipeline stages — sales & installation tracking builds on these. */
-export const LEAD_STATUSES = [
-  'new',
-  'contacted',
-  'appointment_set',
-  'sold',
-  'install_scheduled',
-  'installed',
-  'lost',
-] as const;
-export type LeadStatus = (typeof LEAD_STATUSES)[number];
+export { CLOSED_LEAD_STATUSES, LEAD_STATUS_LABEL, LEAD_STATUSES, OPEN_LEAD_STATUSES, type LeadStatus } from './lead-status';
+import { LEAD_STATUSES, type LeadStatus } from './lead-status';
 
 export const AREA_STATUSES = ['available', 'verify', 'coming_soon', 'not_serviceable'] as const;
 export type AreaStatus = (typeof AREA_STATUSES)[number];
@@ -95,7 +86,19 @@ export const TRACKED_EVENTS = [
   'results_adjust',
   'assessment_complete',
   'advisor_request',
+  // Representative handoff funnel
+  'preview_view',
+  'handoff_cta_view',
+  'handoff_cta_click',
+  'handoff_start',
+  'handoff_error',
+  'handoff_submit',
+  'rep_assigned',
+  'lead_qualified',
+  'lead_converted',
 ] as const;
+/** Recorded by the server when the thing actually happened; the same name from a browser is ignored. */
+export const SERVER_ONLY_EVENTS: readonly string[] = ['lead_submit', 'appointment_booked', 'handoff_submit', 'rep_assigned', 'lead_qualified', 'lead_converted'];
 export type TrackedEvent = (typeof TRACKED_EVENTS)[number];
 
 export const eventInputSchema = z.object({
@@ -120,7 +123,44 @@ export const loginSchema = z.object({
 export const leadUpdateSchema = z.object({
   status: z.enum(LEAD_STATUSES).optional(),
   note: z.string().trim().min(1).max(2000).optional(),
+  /** Admin only: hand the lead to a representative, or null to return it to the queue. */
+  assignRepId: z.union([z.string().uuid(), z.null()]).optional(),
 });
+
+const slugList = z.array(z.string().trim().regex(/^(\*|[a-z0-9-]{2,40})$/)).max(50);
+/** A representative who receives leads and can sign in to see only their own. */
+export const repInputSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(80),
+  email: z.string().trim().toLowerCase().email('Enter a valid email').max(254),
+  phone: z.string().trim().max(30).optional().default(''),
+  active: z.boolean().optional().default(true),
+  /** Set by a person: "send new leads to this representative now". */
+  accepting: z.boolean().optional().default(false),
+  /** Location slugs, or "*" for every served location. */
+  markets: slugList.optional().default(['*']),
+  /** Services handled; empty means all. */
+  categories: z.array(z.enum(['internet', 'mobile', 'tv', 'electricity'])).max(4).optional().default([]),
+  maxOpenLeads: z.number().int().min(0).max(1000).optional().default(0),
+  /** Sign-in password; leave out to keep the current one. */
+  password: z.string().min(12, 'Use at least 12 characters').max(200).optional(),
+});
+
+export interface Representative {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  active: boolean;
+  accepting: boolean;
+  markets: string[];
+  categories: ('internet' | 'mobile' | 'tv' | 'electricity')[];
+  maxOpenLeads: number;
+  canSignIn: boolean;
+  openLeads: number;
+  lastAssignedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export const appointmentUpdateSchema = z.object({
   status: z.enum(['scheduled', 'completed', 'no_show', 'cancelled']),
@@ -179,6 +219,18 @@ export interface Lead {
   duplicateOf: string | null;
   /** Household assessment this lead came from (parent platform). */
   assessmentId: string | null;
+  /** Representative this lead is assigned to, if any. */
+  assignedRepId: string | null;
+  assignedAt: string | null;
+  /** Result of automatic routing: assigned, queued or unsupported ('' for leads from before routing). */
+  routingOutcome: string;
+  routingReason: string;
+  /** What the customer was shown when they asked for help (illustrative, never a quote). */
+  preview: unknown;
+  bestTime: string;
+  marketingConsent: boolean;
+  /** When a representative first confirmed speaking with the customer. */
+  firstContactAt: string | null;
   consentAt: string;
   createdAt: string;
   updatedAt: string;

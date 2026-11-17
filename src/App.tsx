@@ -15,6 +15,7 @@ const Locations = lazy(() => import('./pages/admin/Locations'));
 const PlatformApp = lazy(() => import('./platform/PlatformApp'));
 const AdminAssessments = lazy(() => import('./pages/admin/Assessments'));
 const AdminOpportunities = lazy(() => import('./pages/admin/Opportunities'));
+const AdminReps = lazy(() => import('./pages/admin/Reps'));
 
 function ScrollReset() {
   const { pathname } = useLocation();
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="locations" element={<Locations />} />
           <Route path="assessments" element={<AdminAssessments />} />
           <Route path="opportunities" element={<AdminOpportunities />} />
+          <Route path="reps" element={<AdminReps />} />
         </Route>
         {/* Optional regional internet campaigns, one per active location. */}
         <Route path="/internet/:market" element={<RegionalPage />} />

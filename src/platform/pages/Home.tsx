@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { Cents } from '../../../shared/finance/money';
 import { formatCents } from '../../../shared/finance/money';
 import type { AssessmentInput, PlatformCategory } from '../../../shared/platform/assessment';
 import { BENCHMARK_DISCLOSURE, BENCHMARKS, quickPreview } from '../../../shared/platform/benchmarks';
 import { PLATFORM, PLATFORM_META, PRIMARY_CTA } from '../../../shared/platform/brand';
+import { HANDOFF_COPY } from '../../../shared/platform/handoff';
 import { track } from '../../lib/analytics';
 import { Button, Card, CurrencyInput, Field, Money, Select, StatusChip } from '../ds';
+import { HandoffForm } from '../HandoffForm';
 import { editHandoff } from '../lib';
 
 const whole = (c: Cents) => formatCents(c, { cents: false });
@@ -35,6 +37,15 @@ function QuickPreview() {
   const [ownsHome, setOwnsHome] = useState(false);
   const preview = useMemo(() => quickPreview({ ...bills, mobileLines: lines, ownsHome }), [bills, lines, ownsHome]);
   const any = preview.rows.length > 0;
+  const [asking, setAsking] = useState(false);
+  const seen = useRef(false);
+  // Funnel: the preview and the call to action have been shown (once per visit to this page).
+  useEffect(() => {
+    if (!any || seen.current) return;
+    seen.current = true;
+    track('preview_view', { from: 'home' });
+    track('handoff_cta_view', { from: 'home' });
+  }, [any]);
 
   const money = (c: PlatformCategory, label: string, hint?: string) => (
     <Field id={`qp-${c}`} label={label} hint={hint} error={errors[c]} optional>
@@ -119,11 +130,38 @@ function QuickPreview() {
             </>
           )}
         </div>
-        <Button type="submit" size="lg" className="w-full">
-          {PRIMARY_CTA}
-        </Button>
         <p className="text-xs text-pf-subtle">Illustrative only. {BENCHMARK_DISCLOSURE}</p>
+        {!any ? (
+          <Button type="submit" size="lg" className="w-full">
+            {PRIMARY_CTA}
+          </Button>
+        ) : (
+          !asking && (
+            <div className="space-y-3">
+              <Button
+                type="button"
+                size="lg"
+                className="w-full"
+                onClick={() => {
+                  track('handoff_cta_click', { from: 'home' });
+                  setAsking(true);
+                }}
+              >
+                {HANDOFF_COPY.cta}
+              </Button>
+              <p className="text-sm text-pf-muted">{HANDOFF_COPY.support}</p>
+              <Button type="submit" variant="secondary" className="w-full">
+                See my full preview
+              </Button>
+            </div>
+          )
+        )}
       </form>
+      {any && asking && (
+        <div className="mt-5 border-t border-pf-line pt-5">
+          <HandoffForm bills={bills} mobileLines={lines} ownsHome={ownsHome} onCancel={() => setAsking(false)} />
+        </div>
+      )}
     </Card>
   );
 }

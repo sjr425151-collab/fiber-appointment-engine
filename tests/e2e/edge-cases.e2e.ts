@@ -124,7 +124,7 @@ describe('results access', () => {
     const { ctx } = await context(b);
     const p = await ctx.newPage();
     await p.goto(a.url);
-    await p.getByText(/already asked us to reach out/).waitFor();
+    await p.getByText(/already asked us to review these results/).waitFor();
     await ctx.close();
   });
 });

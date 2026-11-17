@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { assessmentSchema, contactSchema, type AssessmentInput } from '../../../shared/platform/assessment';
+import { assessmentSchema, type AssessmentInput } from '../../../shared/platform/assessment';
+import { contactSchema, HANDOFF_COPY, marketingConsentText, type HandoffResult } from '../../../shared/platform/handoff';
+import { HandoffDone } from '../HandoffForm';
 import { buildAnalysis, HORIZONS, type CategoryOption, type CategoryResult, type Horizon, type PlatformAnalysis, type ScenarioId, type Selections } from '../../../shared/platform/analysis';
 import { ASSUMPTIONS_V1 } from '../../../shared/finance/engine';
 import { formatCents } from '../../../shared/finance/money';
@@ -267,7 +269,7 @@ export default function Results() {
                   {reviews.length ? `, and review your ${listText(reviews)} for better prices` : ''}.
                 </p>
                 <a href="#next-steps" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-pf-brand px-5 font-semibold text-white hover:bg-pf-brand-strong">
-                  Get help switching
+                  {HANDOFF_COPY.cta}
                 </a>
               </div>
             </Card>
@@ -602,9 +604,17 @@ function ContactPanel({ id, token, contacted, selections, needsAddress }: { id: 
   const [intent, setIntent] = useState<Intent[]>(['appointment']);
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', preferredContact: 'phone', street: '', unit: '', city: '' });
   const [consent, setConsent] = useState(false);
+  const [marketing, setMarketing] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [lead, setLead] = useState<{ leadId: string; bookingToken: string; market: string } | null>(null);
+  const [result, setResult] = useState<HandoffResult | null>(null);
+  // One key for this open form: a retry or double tap can never create a second lead.
+  const requestKey = useRef(crypto.randomUUID());
+  const started = useRef(false);
+  useEffect(() => {
+    if (!contacted) track('handoff_cta_view', { from: 'results' });
+  }, [contacted]);
   const [done, setDone] = useState<string | null>(contacted ? 'contacted' : null);
   const doneRef = useRef<HTMLParagraphElement>(null);
   const firstDone = useRef(done);
@@ -613,9 +623,17 @@ function ContactPanel({ id, token, contacted, selections, needsAddress }: { id: 
     if (done && done !== firstDone.current) doneRef.current?.focus();
   }, [done]);
 
+  function edit(k: keyof typeof form, value: string) {
+    if (!started.current) {
+      started.current = true;
+      track('handoff_start', { from: 'results' });
+    }
+    setForm((f) => ({ ...f, [k]: value }));
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const body = { ...form, consent, token, intent: intent[0], sessionId: sessionId(), selections };
+    const body = { ...form, consent, marketingConsent: marketing, requestKey: requestKey.current, token, intent: intent[0], sessionId: sessionId(), selections };
     // Validate locally with the same schema the server uses, so errors appear instantly.
     const parsed = contactSchema.safeParse(body);
     if (!parsed.success) {
@@ -625,22 +643,26 @@ function ContactPanel({ id, token, contacted, selections, needsAddress }: { id: 
         fields[k] ??= i.message;
       }
       setErrors({ ...fields, _: 'Please fix the highlighted fields.' });
-      const first = ['firstName', 'lastName', 'phone', 'email', 'consent'].find((k) => fields[k]);
+      track('handoff_error', { kind: 'validation', from: 'results' });
+      const first = ['firstName', 'phone', 'email', 'consent'].find((k) => fields[k]);
       if (first) requestAnimationFrame(() => document.getElementById(`pf-contact-${first}`)?.focus());
       return;
     }
     setBusy(true);
     setErrors({});
     try {
-      const r = await api<{ leadId: string; bookingToken: string; market: string }>(`/platform/assessments/${encodeURIComponent(id)}/contact`, {
+      const r = await api<HandoffResult>(`/platform/assessments/${encodeURIComponent(id)}/contact`, {
         method: 'POST',
         body,
       });
       track('advisor_request', { intent: intent[0] }, false);
+      setResult(r);
       if (intent[0] === 'appointment') setLead(r);
       else setDone(intent[0]);
     } catch (err) {
-      setErrors(err instanceof ApiError ? { ...err.fields, _: err.message } : { _: 'Network error. Please try again.' });
+      // Everything typed stays in place; sending again is safe.
+      track('handoff_error', { kind: err instanceof ApiError ? 'server' : 'network', from: 'results' });
+      setErrors(err instanceof ApiError ? { ...err.fields, _: err.message } : { _: 'We couldn’t send your request. Check your connection and try again. Nothing you typed was lost.' });
     } finally {
       setBusy(false);
     }
@@ -648,11 +670,23 @@ function ContactPanel({ id, token, contacted, selections, needsAddress }: { id: 
 
   return (
     <Card className="mt-10 scroll-mt-4 border-pf-brand" id="next-steps">
-      <h2 className="font-display text-2xl font-bold text-pf-ink">Next steps</h2>
-      <p className="mt-1 text-pf-muted">Free, no obligation. We’ll use the options you selected above.</p>
-      {done ? (
+      <h2 className="font-display text-2xl font-bold text-pf-ink">{HANDOFF_COPY.cta}</h2>
+      <p className="mt-1 text-pf-muted">{HANDOFF_COPY.support} We’ll use the options you selected above.</p>
+      <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-pf-muted">
+        {HANDOFF_COPY.reassurance.map((r) => (
+          <li key={r} className="flex gap-2">
+            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-pf-save" aria-hidden />
+            {r}
+          </li>
+        ))}
+      </ul>
+      {done && result && done !== 'booked' ? (
+        <div className="mt-4">
+          <HandoffDone result={result} contact={form.preferredContact as 'phone' | 'text' | 'email'} phone={form.phone.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '')} />
+        </div>
+      ) : done ? (
         <p ref={doneRef} tabIndex={-1} className="mt-3 text-pf-ink outline-none" role="status">
-          {done === 'contacted' ? 'You’ve already asked us to reach out about these results — an advisor will be in touch.' : done === 'booked' ? 'You’re booked. We’ll be in touch beforehand to confirm.' : 'Thanks — an advisor will reach out shortly using your preferred method.'}
+          {done === 'contacted' ? 'You’ve already asked us to review these results. A representative has your request.' : 'You’re booked. Your time is saved, and your representative has your request.'}
         </p>
       ) : lead ? (
         <SlotPicker lead={lead} onBooked={() => setDone('booked')} />
@@ -672,15 +706,15 @@ function ContactPanel({ id, token, contacted, selections, needsAddress }: { id: 
           <div className="grid gap-4 sm:grid-cols-2">
             {(
               [
-                ['firstName', 'First name', 'given-name', 'text'],
-                ['lastName', 'Last name', 'family-name', 'text'],
-                ['phone', 'Mobile phone', 'tel', 'tel'],
-                ['email', 'Email', 'email', 'email'],
+                ['firstName', 'First name', 'given-name', 'text', false],
+                ['lastName', 'Last name', 'family-name', 'text', true],
+                ['phone', 'Mobile phone', 'tel', 'tel', false],
+                ['email', 'Email', 'email', 'email', true],
               ] as const
-            ).map(([k, label, ac, type]) => (
-              <Field key={k} label={label} error={errors[k]} id={`pf-contact-${k}`}>
+            ).map(([k, label, ac, type, optional]) => (
+              <Field key={k} label={label} optional={optional} error={errors[k]} id={`pf-contact-${k}`}>
                 {(p) => (
-                  <TextInput id={p.id} type={type} autoComplete={ac} aria-describedby={p.describedBy} aria-invalid={p.invalid || undefined} value={form[k]} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))} />
+                  <TextInput id={p.id} type={type} autoComplete={ac} aria-describedby={p.describedBy} aria-invalid={p.invalid || undefined} value={form[k]} onChange={(e) => edit(k, e.target.value)} />
                 )}
               </Field>
             ))}
@@ -723,13 +757,17 @@ function ContactPanel({ id, token, contacted, selections, needsAddress }: { id: 
               {errors.consent}
             </p>
           )}
+          <label className="flex cursor-pointer items-start gap-3 px-4 text-sm text-pf-muted">
+            <input id="pf-contact-marketing" type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--color-pf-brand)]" checked={marketing} onChange={(e) => setMarketing(e.target.checked)} />
+            <span>{marketingConsentText()}</span>
+          </label>
           {errors._ && (
             <p role="alert" className="text-sm font-medium text-pf-cost">
               {errors._}
             </p>
           )}
           <Button type="submit" size="lg" loading={busy}>
-            {intent[0] === 'appointment' ? 'Continue to pick a time' : 'Send my request'}
+            {intent[0] === 'appointment' ? 'Continue to pick a time' : HANDOFF_COPY.submit}
           </Button>
           <p className="text-xs text-pf-subtle">We use your details only to help with these results. We don’t sell your information.</p>
         </form>

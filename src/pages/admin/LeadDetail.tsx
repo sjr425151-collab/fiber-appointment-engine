@@ -4,6 +4,8 @@ import { LEAD_STATUSES, type Appointment, type Lead, type LeadNote, type LeadSta
 import { api, fmtDateTime, fmtPhone, STATUS_LABELS } from '../../lib/api';
 import { Spinner, StatusBadge } from '../../components/ui';
 import { formatCents } from '../../../shared/finance/money';
+import { HANDOFF_COPY, type HandoffPreview } from '../../../shared/platform/handoff';
+import { useTeam } from './Layout';
 import { OpportunityPanel, type OpportunityRow } from './Opportunities';
 
 interface EmailRow {
@@ -61,8 +63,72 @@ interface ConsentRow {
   createdAt: string;
 }
 
+interface HistoryRow {
+  id: string;
+  kind: 'status' | 'assignment';
+  from: string;
+  to: string;
+  detail: string;
+  actor: string;
+  createdAt: string;
+}
+
+const CATEGORY: Record<string, string> = { internet: 'Home internet', mobile: 'Mobile', tv: 'TV & streaming', electricity: 'Electricity / solar', household: 'Whole household' };
+const CONTACT: Record<string, string> = { phone: 'Phone call', text: 'Text message', email: 'Email' };
+const SOURCE: Record<string, string> = { platform_handoff: 'Home page preview', platform_assessment: 'Full savings preview', landing_page: 'Regional internet page' };
+const mo = (c: number | null) => (c === null ? '—' : `${formatCents(c)}/mo`);
+
+/** What the customer saw before asking for help. Always shown with the "not verified" warning. */
+function PreviewSummary({ lead }: { lead: Lead }) {
+  const p = lead.preview as HandoffPreview | null;
+  if (!p?.rows?.length) return null;
+  return (
+    <div className="glass p-5">
+      <h2 className="font-semibold">What they previewed</h2>
+      <p role="note" className="mt-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
+        {HANDOFF_COPY.unverified}
+      </p>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead className="text-xs uppercase tracking-wider text-slate-400">
+            <tr>
+              <th className="py-2 pr-3">Service</th>
+              <th className="py-2 pr-3">Pays now</th>
+              <th className="py-2 pr-3">Compared with</th>
+              <th className="py-2">Difference</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {p.rows.map((r) => (
+              <tr key={r.category}>
+                <td className="py-2 pr-3 text-slate-200">
+                  {CATEGORY[r.category] ?? r.category}
+                  {r.category === 'mobile' && p.mobileLines ? ` (${p.mobileLines} line${p.mobileLines === 1 ? '' : 's'})` : ''}
+                </td>
+                <td className="py-2 pr-3 text-slate-300">{mo(r.currentMonthlyCents)}</td>
+                <td className="py-2 pr-3 text-slate-300">
+                  {mo(r.comparisonMonthlyCents)}
+                  <div className="text-xs text-slate-400">{r.comparison}</div>
+                </td>
+                <td className="py-2 text-slate-300">{r.differenceCents === null ? '—' : r.differenceCents > 0 ? `${formatCents(r.differenceCents)}/mo less` : r.differenceCents < 0 ? `${formatCents(-r.differenceCents)}/mo more` : 'None'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-sm text-slate-300">
+        Stated spending {mo(p.currentMonthlyCents)} · illustrative difference {formatCents(p.monthlyDifferenceCents)}/mo ({formatCents(p.annualDifferenceCents)}/yr)
+        {p.source === 'home_preview' && p.ownsHome !== undefined ? ` · ${p.ownsHome ? 'owns their home' : 'did not say they own their home'}` : ''}
+      </p>
+    </div>
+  );
+}
+
 interface Detail {
   lead: Lead;
+  history?: HistoryRow[];
+  representative?: string | null;
+  representatives?: { id: string; name: string; accepting: boolean; openLeads: number }[];
   notes: LeadNote[];
   notifications?: EmailRow[];
   consents?: ConsentRow[];
@@ -81,10 +147,11 @@ export default function LeadDetail() {
     api<Detail>(`/admin/leads/${id}`).then(setD);
   }, [id]);
 
-  async function patch(body: { status?: LeadStatus; note?: string }) {
+  const team = useTeam();
+  async function patch(body: { status?: LeadStatus; note?: string; assignRepId?: string | null }) {
     setSaving(true);
     try {
-      const r = await api<{ lead: Lead; notes: LeadNote[] }>(`/admin/leads/${id}`, { method: 'PATCH', body });
+      const r = await api<{ lead: Lead; notes: LeadNote[]; history: HistoryRow[]; representative: string | null }>(`/admin/leads/${id}`, { method: 'PATCH', body });
       setD((prev) => prev && { ...prev, ...r });
     } finally {
       setSaving(false);
@@ -100,7 +167,7 @@ export default function LeadDetail() {
 
   if (!d) {
     return (
-      <div className="grid place-items-center py-20 text-slate-500">
+      <div className="grid place-items-center py-20 text-slate-400">
         <Spinner />
       </div>
     );
@@ -108,17 +175,20 @@ export default function LeadDetail() {
   const { lead } = d;
   const rows: [string, string][] = [
     ['Phone', fmtPhone(lead.phone)],
-    ['Email', lead.email],
-    ['Address', [lead.street, lead.unit, `${lead.city}, MI ${lead.zip}`].filter(Boolean).join(', ')],
-    ['Area status', lead.areaStatus],
-    ['Prefers', lead.preferredContact],
+    ['Email', lead.email || 'Not given'],
+    ['Location', [lead.street, lead.unit, [lead.city, lead.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ')],
+    ['Area status', lead.areaStatus.replace('_', ' ')],
+    ['Prefers', [CONTACT[lead.preferredContact] ?? lead.preferredContact, lead.bestTime && lead.bestTime !== 'anytime' ? lead.bestTime : ''].filter(Boolean).join(', ')],
+    ['Contact consent', `Recorded ${fmtDateTime(lead.consentAt)}`],
+    ['Marketing consent', lead.marketingConsent ? 'Yes (optional box ticked)' : 'No'],
+    ['Lead source', SOURCE[lead.source] ?? lead.source],
     ['Current provider', lead.currentProvider || '—'],
     ['Source', [lead.source, lead.utmSource, lead.utmMedium, lead.utmCampaign, lead.utmContent, lead.utmTerm].filter(Boolean).join(' / ')],
     ['Click ID', lead.clickId || '—'],
     ['Referrer', lead.referrer || '—'],
     ['Landing page', lead.landingPage || '—'],
-    ['Consent recorded', fmtDateTime(lead.consentAt)],
-    ['Created', fmtDateTime(lead.createdAt)],
+    ['Submitted', fmtDateTime(lead.createdAt)],
+    ['First confirmed contact', lead.firstContactAt ? fmtDateTime(lead.firstContactAt) : 'Not recorded'],
   ];
 
   return (
@@ -134,7 +204,7 @@ export default function LeadDetail() {
         <div className="ml-auto flex gap-2">
           <a href={`tel:${lead.phone}`} className="btn-ghost py-2 text-sm">Call</a>
           <a href={`sms:${lead.phone}`} className="btn-ghost py-2 text-sm">Text</a>
-          <a href={`mailto:${lead.email}`} className="btn-ghost py-2 text-sm">Email</a>
+          {lead.email && <a href={`mailto:${lead.email}`} className="btn-ghost py-2 text-sm">Email</a>}
         </div>
       </div>
 
@@ -144,14 +214,43 @@ export default function LeadDetail() {
             <dl className="grid grid-cols-[9rem_1fr] gap-y-3 text-sm">
               {rows.map(([k, v]) => (
                 <div key={k} className="contents">
-                  <dt className="text-slate-500">{k}</dt>
+                  <dt className="text-slate-400">{k}</dt>
                   <dd className="break-words text-slate-200">{v}</dd>
                 </div>
               ))}
             </dl>
           </div>
           <div className="glass p-5">
+            <h2 className="mb-3 font-semibold">Assigned to</h2>
+            {team.role === 'admin' && d.representatives ? (
+              <>
+                <label className="sr-only" htmlFor="lead-assign">
+                  Assign this lead
+                </label>
+                <select id="lead-assign" className="input py-2" disabled={saving} value={lead.assignedRepId ?? ''} onChange={(e) => patch({ assignRepId: e.target.value || null })}>
+                  <option value="">Nobody (follow-up queue)</option>
+                  {lead.assignedRepId && !d.representatives.some((r) => r.id === lead.assignedRepId) && <option value={lead.assignedRepId}>{d.representative ?? 'Former representative'} (inactive)</option>}
+                  {d.representatives.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} · {r.openLeads} open{r.accepting ? '' : ' · not accepting'}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <p className="text-sm text-slate-200">{d.representative ?? 'Nobody yet'}</p>
+            )}
+            {lead.routingOutcome && (
+              <p className={`mt-2 text-xs ${lead.assignedRepId ? 'text-slate-400' : 'text-amber-300'}`}>
+                {lead.routingOutcome === 'unsupported' ? 'ZIP needs review. Do not tell the customer service is available until it is confirmed.' : lead.assignedRepId ? '' : 'Waiting in the follow-up queue.'} {lead.routingReason}
+                {lead.assignedAt ? ` · ${fmtDateTime(lead.assignedAt)}` : ''}
+              </p>
+            )}
+          </div>
+          <PreviewSummary lead={lead} />
+          <div className="glass p-5">
             <h2 className="mb-3 font-semibold">Pipeline stage</h2>
+            <p className="mb-3 text-xs text-slate-400">Set a stage only after it has actually happened. Each change is recorded with your name and the time.</p>
             <div className="flex flex-wrap gap-2">
               {LEAD_STATUSES.map((s) => (
                 <button
@@ -168,7 +267,7 @@ export default function LeadDetail() {
           <div className="glass p-5">
             <h2 className="mb-3 font-semibold">Appointments</h2>
             {d.appointments.length === 0 ? (
-              <p className="text-sm text-slate-500">No appointments booked.</p>
+              <p className="text-sm text-slate-400">No appointments booked.</p>
             ) : (
               <ul className="space-y-2 text-sm">
                 {d.appointments.map((a) => (
@@ -212,7 +311,7 @@ export default function LeadDetail() {
           )}
           {lead.duplicateOf && (
             <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
-              Repeat submission — same email and phone as an{' '}
+              Repeat request — same contact details as an{' '}
               <Link to={`/admin/leads/${lead.duplicateOf}`} className="underline underline-offset-4">
                 earlier lead
               </Link>
@@ -222,7 +321,7 @@ export default function LeadDetail() {
           <div className="glass p-5">
             <h2 className="mb-3 font-semibold">Contact consent</h2>
             {!d.consents?.length ? (
-              <p className="text-sm text-slate-500">No consent record.</p>
+              <p className="text-sm text-slate-400">No consent record.</p>
             ) : (
               <ul className="space-y-2 text-xs text-slate-400">
                 {d.consents.map((c) => (
@@ -241,7 +340,7 @@ export default function LeadDetail() {
           <div className="glass p-5">
             <h2 className="mb-3 font-semibold">Emails</h2>
             {!d.notifications?.length ? (
-              <p className="text-sm text-slate-500">No emails for this lead.</p>
+              <p className="text-sm text-slate-400">No emails for this lead.</p>
             ) : (
               <ul className="space-y-2 text-sm">
                 {d.notifications.map((n) => (
@@ -278,12 +377,12 @@ export default function LeadDetail() {
             {d.notes.map((n) => (
               <li key={n.id} className="border-l-2 border-white/10 pl-3">
                 <p className="whitespace-pre-wrap text-sm text-slate-200">{n.body}</p>
-                <p className="mt-0.5 text-xs text-slate-500">
+                <p className="mt-0.5 text-xs text-slate-400">
                   {n.author} · {fmtDateTime(n.createdAt)}
                 </p>
               </li>
             ))}
-            {d.notes.length === 0 && <li className="text-sm text-slate-500">No activity yet.</li>}
+            {d.notes.length === 0 && <li className="text-sm text-slate-400">No activity yet.</li>}
           </ul>
         </div>
       </div>

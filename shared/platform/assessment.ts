@@ -5,7 +5,6 @@
  * guessing).
  */
 import { z } from 'zod';
-import { leadInputSchema } from '../schemas';
 
 z.config({ jitless: true });
 
@@ -118,20 +117,6 @@ export const assessmentSchema = z.preprocess(upgradeLegacy, assessmentObject);
 
 export type Assessment = z.output<typeof assessmentObject>;
 export type AssessmentInput = z.input<typeof assessmentObject>;
-
-/** Contact request from the results page. Address is optional (an advisor can confirm it). */
-export const contactSchema = leadInputSchema
-  .pick({ firstName: true, lastName: true, email: true, phone: true, preferredContact: true, consent: true, website: true, sessionId: true })
-  .extend({
-    token: z.string().min(16).max(128),
-    intent: z.enum(['callback', 'appointment', 'advisor']),
-    street: z.string().trim().max(120).optional().default(''),
-    unit: z.string().trim().max(30).optional().default(''),
-    city: z.string().trim().max(60).optional().default(''),
-    /** The options the customer selected on the results page (offer id or "keep"). The server re-derives all figures. */
-    selections: z.partialRecord(z.enum(PLATFORM_CATEGORIES), z.string().trim().max(80)).optional().default({}),
-  });
-export type ContactInput = z.input<typeof contactSchema>;
 
 /** Submission body: the assessment plus first-party attribution. */
 export const submissionSchema = z.object({

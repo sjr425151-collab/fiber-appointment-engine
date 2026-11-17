@@ -15,10 +15,15 @@ import {
   leadUpdateSchema,
   LEAD_STATUSES,
   loginSchema,
+  repInputSchema,
   serviceAreaSchema,
+  SERVER_ONLY_EVENTS,
   slotsQuerySchema,
   type AvailabilityResult,
+  type Representative,
 } from '../shared/schemas';
+import { ROUTING_REASON } from '../shared/platform/routing';
+import { noCrm, type CrmAdapter } from './integrations/crm';
 import { BRAND, CONSENT_VERSION, consentText } from '../shared/content';
 import { marketSchema, type Market } from '../shared/market';
 import type { AppConfig } from './config';
@@ -32,6 +37,7 @@ import { createNotifier, listNotifications, type Notifier } from './notify';
 import { platformRouter, PlatformError } from './platform';
 import {
   createSessionToken,
+  hashPassword,
   newToken,
   parseCookies,
   readSessionToken,
@@ -49,6 +55,8 @@ import { availableSlots, bookableDates, bookAppointment, BookingError } from './
 declare module 'express-serve-static-core' {
   interface Request {
     session?: Session;
+    /** Set when the signed-in person is a representative (they see only their own leads). */
+    rep?: Representative;
     /** Correlates a response with its log lines (also sent as X-Request-Id). */
     requestId?: string;
   }
@@ -102,7 +110,7 @@ export function describeAvailability(zip: string, area: repo.ServiceArea | null,
   }
 }
 
-export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier; htmlTemplate?: string } = {}) {
+export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier; htmlTemplate?: string; crm?: CrmAdapter } = {}) {
   const notifier = deps.notifier ?? createNotifier(db, config);
   const app = express();
   app.disable('x-powered-by');
@@ -283,7 +291,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
   api.post('/events', limiter(120, 15), (req, res) => {
     const e = parse(eventInputSchema, req.body);
     const marketId = e.market && repo.getMarket(db, e.market) ? e.market : '';
-    if (e.name !== 'lead_submit' && e.name !== 'appointment_booked') repo.insertEvent(db, { ...e, marketId });
+    if (!SERVER_ONLY_EVENTS.includes(e.name)) repo.insertEvent(db, { ...e, marketId });
     res.status(204).end();
   });
 
@@ -327,9 +335,16 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     const { email, password } = parse(loginSchema, req.body);
     // Always run the hash check so response time doesn't reveal valid emails.
     const pwOk = verifyPassword(password, config.adminPasswordHash);
-    if (!pwOk || !safeEqual(email, config.adminEmail)) throw new HttpError(401, 'Invalid email or password.');
-    res.cookie(SESSION_COOKIE, createSessionToken(email, config.sessionSecret), { ...cookieOpts, maxAge: SESSION_TTL_MS });
-    res.json({ email });
+    if (pwOk && safeEqual(email, config.adminEmail)) {
+      res.cookie(SESSION_COOKIE, createSessionToken(email, config.sessionSecret), { ...cookieOpts, maxAge: SESSION_TTL_MS });
+      res.json({ email, role: 'admin' });
+      return;
+    }
+    // Representatives sign in with their own password and get a restricted session.
+    const cred = repo.getRepCredentials(db, email);
+    if (!cred?.active || !cred.passwordHash || !verifyPassword(password, cred.passwordHash)) throw new HttpError(401, 'Invalid email or password.');
+    res.cookie(SESSION_COOKIE, createSessionToken(email, config.sessionSecret, Date.now(), { role: 'rep', repId: cred.id }), { ...cookieOpts, maxAge: SESSION_TTL_MS });
+    res.json({ email, role: 'rep' });
   });
 
   api.post('/admin/logout', (req, res) => {
@@ -337,6 +352,18 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     res.clearCookie(SESSION_COOKIE, cookieOpts);
     res.json({ ok: true });
   });
+
+  /** Everything a representative's session may call. All other team routes are admin only. */
+  const UUID = '[0-9a-f-]{36}';
+  const REP_ROUTES: [string, RegExp][] = [
+    ['GET', /^\/me$/],
+    ['GET', /^\/leads$/],
+    ['GET', new RegExp(`^/leads/${UUID}$`)],
+    ['PATCH', new RegExp(`^/leads/${UUID}$`)],
+    ['PATCH', new RegExp(`^/opportunities/${UUID}$`)],
+    ['PATCH', /^\/reps\/me$/],
+  ];
+  const crm: CrmAdapter = deps.crm ?? noCrm;
 
   const admin = express.Router();
   admin.use((req, res, next) => {
@@ -349,8 +376,23 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
       throw new HttpError(403, 'Missing request header.');
     }
     req.session = session;
+    if (session.role === 'rep') {
+      // Checked on every request, so deactivating a representative ends their access at once.
+      const me = session.repId ? repo.getRep(db, session.repId) : null;
+      if (!me?.active) throw new HttpError(401, 'Please sign in.');
+      if (!REP_ROUTES.some(([method, path]) => method === req.method && path.test(req.path))) throw new HttpError(403, 'Not available for your account.');
+      req.rep = me;
+    }
     next();
   });
+
+  /** Lead access: an admin sees every lead; a representative only the ones assigned to them (anything else looks missing). */
+  const leadFor = (req: Request, id: string) => {
+    const lead = repo.getLead(db, id);
+    if (!lead || (req.rep && lead.assignedRepId !== req.rep.id)) throw new HttpError(404, 'Lead not found.');
+    return lead;
+  };
+  const actor = (req: Request) => req.session!.email;
 
   const marketQuery = z.object({ market: z.string().trim().max(40).optional() });
 
@@ -361,7 +403,16 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
         .listMarkets(db, { activeOnly: true })
         .map((m) => ({ name: m.name, ...pricingHealth(m, new Date()) }))
         .filter((p) => p.state === 'expiring' || p.state === 'hidden');
-    res.json({ email: req.session!.email, emailEnabled: notifier.enabled, locationsWithoutTeamEmail: missingTeam, pricingWarnings: pricing });
+    res.json({
+      email: req.session!.email,
+      role: req.rep ? 'rep' : 'admin',
+      rep: req.rep ? { id: req.rep.id, name: req.rep.name, accepting: req.rep.accepting, openLeads: req.rep.openLeads } : null,
+      emailEnabled: notifier.enabled,
+      locationsWithoutTeamEmail: req.rep ? [] : missingTeam,
+      pricingWarnings: req.rep ? [] : pricing,
+      crm: { name: crm.name, configured: crm.configured },
+      representatives: req.rep ? undefined : repo.listReps(db).filter((r) => r.active).length,
+    });
   });
 
   admin.get('/stats', (_req, res) => res.json(repo.leadStats(db)));
@@ -406,10 +457,15 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
         q: z.string().trim().max(100).optional(),
         limit: z.coerce.number().int().min(1).max(200).optional(),
         offset: z.coerce.number().int().min(0).optional(),
+        /** A representative's id, or "unassigned" for the follow-up queue. */
+        assigned: z.union([z.literal('unassigned'), z.string().uuid()]).optional(),
       }),
       req.query,
     );
-    res.json(repo.listLeads(db, q));
+    const { assigned, ...rest } = q;
+    // A representative's list is always their own leads, whatever the query says.
+    const scope = req.rep ? { rep: req.rep.id } : assigned === 'unassigned' ? { unassigned: true } : assigned ? { rep: assigned } : {};
+    res.json(repo.listLeads(db, { ...rest, ...scope }));
   });
 
   admin.get('/leads.csv', (req, res) => {
@@ -449,14 +505,17 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
 
   admin.patch('/opportunities/:id', (req, res) => {
     const { status } = parse(z.object({ status: z.enum(OPPORTUNITY_STATUSES) }).strict(), req.body);
-    const o = repo.updateOpportunityStatus(db, String(req.params.id), status, req.session!.email);
+    const before = repo.getOpportunity(db, String(req.params.id));
+    if (!before) throw new HttpError(404, 'Opportunity not found.');
+    if (req.rep && repo.getLead(db, before.leadId)?.assignedRepId !== req.rep.id) throw new HttpError(404, 'Opportunity not found.');
+    const o = repo.updateOpportunityStatus(db, before.id, status, actor(req));
     if (!o) throw new HttpError(404, 'Opportunity not found.');
     res.json({ opportunity: o, notes: repo.listNotes(db, o.leadId) });
   });
 
   admin.get('/leads/:id', (req, res) => {
-    const lead = repo.getLead(db, String(req.params.id));
-    if (!lead) throw new HttpError(404, 'Lead not found.');
+    const lead = leadFor(req, String(req.params.id));
+    const reps = repo.listReps(db);
     res.json({
       lead,
       notes: repo.listNotes(db, lead.id),
@@ -465,17 +524,70 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
       consents: repo.listConsents(db, lead.id),
       assessment: lead.assessmentId ? repo.getAssessment(db, lead.assessmentId) : null,
       opportunities: repo.opportunitiesForLead(db, lead.id),
+      history: repo.listLeadHistory(db, lead.id),
+      representative: reps.find((r) => r.id === lead.assignedRepId)?.name ?? null,
+      // Only an admin can reassign, so only an admin gets the list of people.
+      representatives: req.rep ? undefined : reps.filter((r) => r.active).map((r) => ({ id: r.id, name: r.name, accepting: r.accepting, openLeads: r.openLeads })),
     });
   });
 
   admin.patch('/leads/:id', (req, res) => {
     const id = String(req.params.id);
     const body = parse(leadUpdateSchema, req.body);
-    if (!repo.getLead(db, id)) throw new HttpError(404, 'Lead not found.');
-    if (body.status) repo.updateLeadStatus(db, id, body.status, req.session!.email);
-    if (body.note) repo.addNote(db, id, body.note, req.session!.email);
-    res.json({ lead: repo.getLead(db, id), notes: repo.listNotes(db, id) });
+    const lead = leadFor(req, id);
+    if (body.assignRepId !== undefined) {
+      if (req.rep) throw new HttpError(403, 'Only an admin can reassign a lead.');
+      if (body.assignRepId && !repo.getRep(db, body.assignRepId)?.active) throw new HttpError(400, 'Choose an active representative.');
+      repo.assignLead(db, id, body.assignRepId, { outcome: body.assignRepId ? 'assigned' : 'queued', reason: ROUTING_REASON.manual, actor: actor(req) });
+      if (body.assignRepId) repo.insertEvent(db, { name: 'rep_assigned', sessionId: '', path: lead.landingPage, props: { reason: 'manual' }, utmSource: lead.utmSource, utmCampaign: lead.utmCampaign, marketId: lead.marketId });
+    }
+    if (body.status && body.status !== lead.status) {
+      repo.updateLeadStatus(db, id, body.status, actor(req));
+      // Funnel events are recorded only when a person confirms the outcome here.
+      const event = body.status === 'qualified' ? 'lead_qualified' : body.status === 'sold' ? 'lead_converted' : null;
+      if (event) repo.insertEvent(db, { name: event, sessionId: '', path: lead.landingPage, props: {}, utmSource: lead.utmSource, utmCampaign: lead.utmCampaign, marketId: lead.marketId });
+    }
+    if (body.note) repo.addNote(db, id, body.note, actor(req));
+    res.json({ lead: repo.getLead(db, id), notes: repo.listNotes(db, id), history: repo.listLeadHistory(db, id), representative: repo.listReps(db).find((r) => r.id === repo.getLead(db, id)?.assignedRepId)?.name ?? null });
   });
+
+  // Representatives: who receives leads. Managed by the admin; a representative can only switch their own "accepting".
+  const repBody = (req: Request) => {
+    const b = parse(repInputSchema, req.body);
+    const { password, ...rest } = b;
+    return { ...rest, passwordHash: password ? hashPassword(password) : undefined };
+  };
+  const uniqueEmail = (err: unknown) => {
+    if (err instanceof Error && /UNIQUE constraint failed: representatives.email/.test(err.message)) throw new HttpError(400, 'Another representative already uses that email.');
+    throw err;
+  };
+  admin.get('/reps', (_req, res) => res.json({ representatives: repo.listReps(db) }));
+  admin.post('/reps', (req, res) => {
+    const input = repBody(req);
+    if (safeEqual(input.email, config.adminEmail)) throw new HttpError(400, 'That email belongs to the admin account.');
+    try {
+      res.status(201).json({ representative: repo.createRep(db, input) });
+    } catch (err) {
+      uniqueEmail(err);
+    }
+  });
+  admin.patch('/reps/me', (req, res) => {
+    if (!req.rep) throw new HttpError(403, 'Only a representative can change this.');
+    const { accepting } = parse(z.object({ accepting: z.boolean() }).strict(), req.body);
+    res.json({ representative: repo.setRepAccepting(db, req.rep.id, accepting) });
+  });
+  admin.put('/reps/:id', (req, res) => {
+    const input = repBody(req);
+    try {
+      const r = repo.updateRep(db, String(req.params.id), input);
+      if (!r) throw new HttpError(404, 'Representative not found.');
+      res.json({ representative: r });
+    } catch (err) {
+      uniqueEmail(err);
+    }
+  });
+
+  admin.get('/handoff-funnel', (_req, res) => res.json(repo.handoffFunnel(db, 30)));
 
   admin.get('/appointments', (req, res) => {
     const { from, market } = parse(z.object({ from: z.string().datetime().optional(), market: z.string().trim().max(40).optional() }), req.query);

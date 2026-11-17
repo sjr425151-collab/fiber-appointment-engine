@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LEAD_STATUSES, type Lead } from '../../../shared/schemas';
+import { LEAD_STATUSES, type Lead, type Representative } from '../../../shared/schemas';
 import { api, fmtDateTime, fmtPhone, STATUS_LABELS } from '../../lib/api';
 import { Spinner, StatusBadge } from '../../components/ui';
+import { useTeam } from './Layout';
 import { MarketFilter, useAdminMarkets } from './useMarkets';
 
 interface Conversions {
@@ -67,6 +68,57 @@ function ConversionPanel({ market }: { market: string }) {
   );
 }
 
+interface HandoffFunnel {
+  days: number;
+  events: Record<string, { events: number; sessions: number }>;
+  leads: { total: number; assigned: number; queued: number; unsupported: number; contacted: number; appointments: number; qualified: number; converted: number; avgMinutesToFirstContact: number | null };
+}
+
+const pct = (part: number, whole: number) => (whole > 0 ? `${((part / whole) * 100).toFixed(0)}%` : '—');
+
+/** Pricing-review requests: from seeing a preview to a confirmed outcome. Counts come from this site only. */
+function HandoffPanel() {
+  const [f, setF] = useState<HandoffFunnel | null>(null);
+  useEffect(() => {
+    api<HandoffFunnel>('/admin/handoff-funnel').then(setF);
+  }, []);
+  if (!f) return null;
+  const previews = f.events.preview_view?.sessions ?? 0;
+  const clicks = f.events.handoff_cta_click?.sessions ?? 0;
+  const l = f.leads;
+  const wait = l.avgMinutesToFirstContact;
+  const steps: [string, number, string][] = [
+    ['Previews seen', previews, ''],
+    ['Tapped “Get My Exact Pricing”', clicks, `${pct(clicks, previews)} of previews`],
+    ['Requests saved', l.total, `${pct(l.total, clicks)} of taps`],
+    ['Assigned', l.assigned, `${pct(l.assigned, l.total)} of requests`],
+    ['Contacted', l.contacted, `${pct(l.contacted, l.total)} of requests`],
+    ['Appointments', l.appointments, `${pct(l.appointments, l.total)} of requests`],
+    ['Qualified', l.qualified, `${pct(l.qualified, l.total)} of requests`],
+    ['Converted', l.converted, `${pct(l.converted, l.total)} of requests`],
+  ];
+  return (
+    <div className="glass p-5">
+      <h2 className="font-semibold">
+        Pricing-review requests <span className="text-sm font-normal text-slate-400">· last {f.days} days</span>
+      </h2>
+      <ol className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+        {steps.map(([label, v, sub]) => (
+          <li key={label} className="rounded-xl bg-white/[0.03] p-3">
+            <p className="text-xs text-slate-400">{label}</p>
+            <p className="mt-1 font-display text-2xl font-bold">{v}</p>
+            {sub && <p className="text-xs text-cyan-300">{sub}</p>}
+          </li>
+        ))}
+      </ol>
+      <p className="mt-3 text-sm text-slate-400">
+        Waiting in the queue: {l.queued} · ZIP needs review: {l.unsupported} · Average time to first confirmed contact:{' '}
+        {wait === null ? 'no contacts recorded yet' : wait < 90 ? `${wait} min` : `${(wait / 60).toFixed(1)} h`}. Contacted, qualified and converted count only what a person recorded on the lead.
+      </p>
+    </div>
+  );
+}
+
 interface Stats {
   byStatus: Record<string, number>;
   last24h: number;
@@ -80,13 +132,20 @@ export default function Dashboard() {
   const [status, setStatus] = useState('');
   const [q, setQ] = useState('');
   const [market, setMarket] = useState('');
-  const { data: md, bySlug } = useAdminMarkets();
+  const [assigned, setAssigned] = useState('');
+  const [reps, setReps] = useState<Representative[]>([]);
+  const team = useTeam();
+  const isRep = team.role === 'rep';
+  const { data: md, bySlug } = useAdminMarkets(!isRep);
   const markets = md?.markets ?? [];
   const multi = markets.length > 1;
+  const repName = (id: string | null) => (id ? (isRep ? team.rep?.name : reps.find((r) => r.id === id)?.name) ?? 'Former representative' : null);
 
   useEffect(() => {
+    if (isRep) return;
     api<Stats>('/admin/stats').then(setStats);
-  }, []);
+    api<{ representatives: Representative[] }>('/admin/reps').then((r) => setReps(r.representatives));
+  }, [isRep]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -94,13 +153,14 @@ export default function Dashboard() {
       if (status) params.set('status', status);
       if (q.trim()) params.set('q', q.trim());
       if (market) params.set('market', market);
+      if (assigned) params.set('assigned', assigned);
       api<{ leads: Lead[]; total: number }>(`/admin/leads?${params}`).then((r) => {
         setLeads(r.leads);
         setTotal(r.total);
       });
     }, 200);
     return () => clearTimeout(t);
-  }, [status, q, market]);
+  }, [status, q, market, assigned]);
 
   const totalLeads = stats ? Object.values(stats.byStatus).reduce((a, b) => a + b, 0) : 0;
   const tiles = stats
@@ -114,7 +174,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={isRep ? 'hidden' : 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4'}>
         {tiles.map((t) => (
           <div key={t.label} className="glass p-5">
             <p className="text-sm text-slate-400">{t.label}</p>
@@ -129,12 +189,13 @@ export default function Dashboard() {
           <MarketFilter markets={markets} value={market} onChange={setMarket} />
         </div>
       )}
-      <ConversionPanel market={market} />
+      {!isRep && <HandoffPanel />}
+      {!isRep && <ConversionPanel market={market} />}
 
       <div className="glass overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 border-b border-white/10 p-4">
           <h1 className="mr-auto font-display text-lg font-bold">
-            Leads <span className="text-slate-500">({total})</span>
+            {isRep ? 'My leads' : 'Leads'} <span className="text-slate-500">({total})</span>
           </h1>
           <input className="input w-full py-2 sm:w-64" placeholder="Search name, phone, email, ZIP" value={q} onChange={(e) => setQ(e.target.value)} />
           <select className="input w-auto py-2" value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -145,16 +206,29 @@ export default function Dashboard() {
               </option>
             ))}
           </select>
-          <a href={`/api/admin/leads.csv${market ? `?market=${market}` : ''}`} className="btn-ghost py-2 text-sm">
-            Export CSV
-          </a>
+          {!isRep && (
+            <select className="input w-auto py-2" aria-label="Assigned to" value={assigned} onChange={(e) => setAssigned(e.target.value)}>
+              <option value="">Everyone</option>
+              <option value="unassigned">Unassigned (follow-up queue)</option>
+              {reps.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {!isRep && (
+            <a href={`/api/admin/leads.csv${market ? `?market=${market}` : ''}`} className="btn-ghost py-2 text-sm">
+              Export CSV
+            </a>
+          )}
         </div>
         {leads === null ? (
           <div className="grid place-items-center py-16 text-slate-500">
             <Spinner />
           </div>
         ) : leads.length === 0 ? (
-          <p className="py-16 text-center text-slate-500">No leads yet. Share the landing page to start collecting them.</p>
+          <p className="py-16 text-center text-slate-500">{isRep ? 'No leads are assigned to you right now.' : assigned === 'unassigned' ? 'The follow-up queue is empty.' : 'No leads match.'}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -165,6 +239,7 @@ export default function Dashboard() {
                   <th className="px-4 py-3">Address</th>
                   {multi && <th className="px-4 py-3">Location</th>}
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Assigned to</th>
                   <th className="px-4 py-3">Source</th>
                   <th className="px-4 py-3">Created</th>
                 </tr>
@@ -192,6 +267,7 @@ export default function Dashboard() {
                     <td className="px-4 py-3">
                       <StatusBadge status={l.status} />
                     </td>
+                    <td className="px-4 py-3 text-slate-300">{repName(l.assignedRepId) ?? <span className="text-amber-300">{l.routingOutcome === 'unsupported' ? 'ZIP needs review' : 'Unassigned'}</span>}</td>
                     <td className="px-4 py-3 text-xs text-slate-400">{[l.utmSource || l.source, l.utmCampaign].filter(Boolean).join(' / ')}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-400">{fmtDateTime(l.createdAt)}</td>
                   </tr>
