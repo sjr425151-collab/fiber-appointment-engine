@@ -27,6 +27,7 @@ export const SOURCE_TYPES = [
   'customer_bill', // from the customer's own bill
   'third_party', // public datasets (e.g. FCC broadband map) — never address-level proof
   'sample', // illustrative data for staging/demos — never a real offer
+  'benchmark', // owner-set comparison price used for an illustrative preview — never an offer
 ] as const;
 
 export const provenanceSchema = z.object({
@@ -102,7 +103,7 @@ export const offerSchema = z.object({
   geography: z.object({
     zips: z.array(z.string().regex(/^\d{5}$/)).default([]),
     marketIds: z.array(z.string()).default([]),
-    /** Applies everywhere (sample data only). */
+    /** Applies everywhere (sample data and comparison benchmarks only). */
     nationwide: z.boolean().default(false),
   }),
   eligibility: z
@@ -121,7 +122,7 @@ export type Offer = z.input<typeof offerSchema>;
 type OfferOut = z.output<typeof offerSchema>;
 
 /** The five statuses consumers ever see (Section 1.2). */
-export type PublicStatus = 'verified' | 'manually_verified' | 'estimated' | 'pending_verification' | 'unavailable' | 'sample';
+export type PublicStatus = 'verified' | 'manually_verified' | 'estimated' | 'pending_verification' | 'unavailable' | 'sample' | 'benchmark';
 
 /** Maximum age of a verification before the offer is treated as pending again. */
 export const STALE_AFTER_DAYS: Record<(typeof SOURCE_TYPES)[number], number> = {
@@ -132,6 +133,7 @@ export const STALE_AFTER_DAYS: Record<(typeof SOURCE_TYPES)[number], number> = {
   customer_bill: 90,
   third_party: 30,
   sample: 36_500,
+  benchmark: 36_500,
 };
 
 /**
@@ -143,6 +145,8 @@ export function publicStatus(offer: Offer | OfferOut, now: Date): { status: Publ
   const reasons: string[] = [];
   // Sample data is always and only "sample" — it can never present as verified.
   if (p.sourceType === 'sample') return { status: p.review === 'withdrawn' ? 'unavailable' : 'sample', reasons: ['Illustrative sample — not a real offer'] };
+  // A benchmark is always and only a benchmark — it can never present as an offer.
+  if (p.sourceType === 'benchmark') return { status: p.review === 'withdrawn' ? 'unavailable' : 'benchmark', reasons: ['Comparison benchmark, not an offer'] };
   if (p.review === 'withdrawn') return { status: 'unavailable', reasons: ['Offer withdrawn'] };
   if (p.expiresAt && new Date(p.expiresAt) <= now) return { status: 'unavailable', reasons: ['Offer expired'] };
   if (p.effectiveFrom && new Date(p.effectiveFrom) > now) return { status: 'pending_verification', reasons: ['Offer not yet effective'] };
@@ -185,7 +189,7 @@ export function checkEligibility(input: Offer, ctx: HouseholdContext): Eligibili
   const missing = offer.eligibility.requires.filter((r) => !ctx.facts?.has(r));
   if (missing.length) reasons.push(`Requires: ${missing.join(', ')}`);
   // Illustrative samples have no real coverage to check.
-  if (offer.provenance.sourceType === 'sample') return { eligible: missing.length ? false : true, reasons };
+  if (offer.provenance.sourceType === 'sample' || offer.provenance.sourceType === 'benchmark') return { eligible: missing.length ? false : true, reasons };
   const level = ctx.coverage?.[offer.providerId] ?? 'unknown';
   if (level === 'none') return { eligible: false, reasons: ['Provider reports no service at this address'] };
   if (level !== 'address_confirmed') {

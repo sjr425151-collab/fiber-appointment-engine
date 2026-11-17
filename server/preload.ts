@@ -4,8 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
  * Resource hints for lazily loaded parts of the app, read from Vite's build
  * manifest. Without them the browser discovers the platform's JS and CSS only
  * after the main bundle runs (main → PlatformApp → page), which delays the
- * first paint of /savings pages on slow mobile connections. The fiber site's
- * pages get no hints, so its loading is unchanged.
+ * first paint on slow mobile connections.
  */
 interface ManifestChunk {
   file: string;
@@ -32,14 +31,20 @@ function collect(manifest: Manifest, key: string, out: Preloads, seen: Set<strin
   for (const i of c.imports ?? []) collect(manifest, i, out, seen);
 }
 
+const SHELL = 'src/platform/PlatformApp.tsx';
+/** Pages that render outside the savings app shell: only their own chunk is hinted. */
+const STANDALONE_PAGES: [RegExp, string][] = [
+  [/^\/internet\/[a-z0-9-]+$/, 'src/internet/RegionalPage.tsx'],
+  [/^\/privacy$/, 'src/pages/Privacy.tsx'],
+];
 const PLATFORM_PAGES: [RegExp, string][] = [
-  [/^\/savings$/, 'src/platform/pages/Home.tsx'],
+  [/^\/$/, 'src/platform/pages/Home.tsx'],
   [/^\/savings\/assess$/, 'src/platform/pages/Assess.tsx'],
   [/^\/savings\/results\/[^/]+$/, 'src/platform/pages/Results.tsx'],
   [/^\/savings\/design$/, 'src/platform/pages/DesignSystem.tsx'],
 ];
 
-/** Returns a function giving the preloads for a /savings path (empty if no manifest, e.g. in tests). */
+/** Returns a function giving the preloads for a page path (empty if no manifest, e.g. in tests). */
 export function platformPreloader(manifestPath: string): (path: string) => Preloads {
   if (!existsSync(manifestPath)) return () => NONE;
   let manifest: Manifest;
@@ -50,12 +55,13 @@ export function platformPreloader(manifestPath: string): (path: string) => Prelo
   }
   const cache = new Map<string, Preloads>();
   return (path) => {
-    const page = PLATFORM_PAGES.find(([re]) => re.test(path))?.[1] ?? '';
+    const standalone = STANDALONE_PAGES.find(([re]) => re.test(path))?.[1];
+    const page = standalone ?? PLATFORM_PAGES.find(([re]) => re.test(path))?.[1] ?? '';
     const hit = cache.get(page);
     if (hit) return hit;
     const out: Preloads = { scripts: [], styles: [] };
     const seen = new Set<string>();
-    collect(manifest, 'src/platform/PlatformApp.tsx', out, seen);
+    if (!standalone) collect(manifest, SHELL, out, seen);
     if (page) collect(manifest, page, out, seen);
     const unique = { scripts: [...new Set(out.scripts)], styles: [...new Set(out.styles)] };
     cache.set(page, unique);

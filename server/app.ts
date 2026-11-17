@@ -25,7 +25,7 @@ import type { AppConfig } from './config';
 import type { DB } from './db';
 import { renderHtml, type BootData } from './html';
 import { platformPreloader } from './preload';
-import { PLATFORM_META } from '../shared/platform/brand';
+import { PLATFORM_META, PLATFORM_OG_IMAGE, platformStructuredData } from '../shared/platform/brand';
 import { OPPORTUNITY_STATUSES } from '../shared/platform/opportunity';
 import { pricingHealth } from '../shared/platform/market-offers';
 import { createNotifier, listNotifications, type Notifier } from './notify';
@@ -120,21 +120,38 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
   //  - legacy domains redirect only once LEGACY_REDIRECTS is switched on.
   // Only page requests (GET/HEAD outside /api) are redirected, so a form already
   // open on the old domain can still submit, and health checks are never touched.
+  // Retired paths are mapped in the same step so an old link takes a single hop.
   // The target is always the fixed canonical origin, so this cannot loop or be
   // steered to another site.
   const canonicalHost = new URL(config.siteUrl).hostname.toLowerCase();
-  const legacyHosts = new Set((config.domains?.legacyHosts ?? []).filter((h) => h !== canonicalHost));
+  // A retired domain's www form moves with it, listed or not.
+  const legacyHosts = new Set((config.domains?.legacyHosts ?? []).flatMap((h) => [h, h.startsWith('www.') ? h : `www.${h}`]).filter((h) => h !== canonicalHost));
   const legacyRedirects = config.domains?.legacyRedirects === true;
+  /**
+   * Retired URLs → their replacement, or null when the path is current.
+   *  /savings          → /                  (Tucker's home moved to the root)
+   *  /internet         → /                  (no national internet page; the home covers it)
+   *  /<location>       → /internet/<location>  (regional internet pages moved under /internet)
+   */
+  const retiredPath = (rawPath: string): string | null => {
+    const path = rawPath.replace(/\/+$/, '') || '/';
+    if (path === '/savings' || path === '/internet') return '/';
+    const slug = /^\/([a-z0-9-]{2,40})$/.exec(path)?.[1];
+    if (slug && repo.getMarket(db, slug)?.active) return `/internet/${slug}`;
+    return null;
+  };
   app.use((req, res, next) => {
-    const host = (req.hostname ?? '').toLowerCase();
-    if (!host || host === canonicalHost) return next();
-    const isWww = host === `www.${canonicalHost}`;
-    const isLegacy = legacyHosts.has(host);
-    if (!isWww && !(isLegacy && legacyRedirects)) return next();
     if ((req.method !== 'GET' && req.method !== 'HEAD') || req.path === '/api' || req.path.startsWith('/api/')) return next();
-    // One hour of caching at first, so the switch can be undone quickly if needed.
+    const host = (req.hostname ?? '').toLowerCase();
+    const moveHost = !!host && host !== canonicalHost && (host === `www.${canonicalHost}` || (legacyHosts.has(host) && legacyRedirects));
+    const moved = retiredPath(req.path);
+    if (!moveHost && moved === null) return next();
+    // One hop: the new path and (when needed) the canonical host together, query kept.
+    const query = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+    const target = `${moved ?? req.path}${query}`;
+    // One hour of caching at first, so a change can be undone quickly if needed.
     res.set('Cache-Control', 'public, max-age=3600');
-    res.redirect(301, `${config.siteUrl}${req.originalUrl}`);
+    res.redirect(301, moveHost ? `${config.siteUrl}${target}` : target);
   });
 
   app.use(
@@ -340,12 +357,10 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
   admin.get('/me', (req, res) => {
     const missingTeam = repo.listMarkets(db, { activeOnly: true }).filter((m) => !notifier.teamTo(m).length).map((m) => m.name);
     // Prices that are (about to be) hidden from the savings comparison because nobody re-verified them.
-    const pricing = config.flags.platform
-      ? repo
-          .listMarkets(db, { activeOnly: true })
-          .map((m) => ({ name: m.name, ...pricingHealth(m, new Date()) }))
-          .filter((p) => p.state === 'expiring' || p.state === 'hidden')
-      : [];
+    const pricing = repo
+        .listMarkets(db, { activeOnly: true })
+        .map((m) => ({ name: m.name, ...pricingHealth(m, new Date()) }))
+        .filter((p) => p.state === 'expiring' || p.state === 'hidden');
     res.json({ email: req.session!.email, emailEnabled: notifier.enabled, locationsWithoutTeamEmail: missingTeam, pricingWarnings: pricing });
   });
 
@@ -493,8 +508,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     res.json({ areas: repo.listServiceAreas(db) });
   });
 
-  // Parent platform API — 404 unless PLATFORM_ENABLED (production default: off).
-  api.use('/platform', (_req, _res, next) => next(config.flags.platform ? undefined : new HttpError(404, 'Not found.')));
+  // Household savings API (assessments, results, contact).
   api.use('/platform', platformRouter(config, db, notifier));
 
   api.use('/admin', admin);
@@ -507,14 +521,8 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\n\nSitemap: ${config.siteUrl}/sitemap.xml\n`);
   });
   app.get('/sitemap.xml', (_req, res) => {
-    const def = repo.getDefaultMarket(db);
-    const paths = [
-      '/',
-      // The household savings pages are listed only where they are switched on.
-      ...(config.flags.platform ? ['/savings', '/savings/assess'] : []),
-      ...repo.marketSummaries(db).filter((m) => m.slug !== def.slug).map((m) => `/${m.slug}`),
-      '/privacy',
-    ];
+    // National pages first, then each active location's regional internet page.
+    const paths = ['/', '/savings/assess', ...repo.marketSummaries(db).map((m) => `/internet/${m.slug}`), '/privacy'];
     const urls = paths.map((p) => `  <url><loc>${config.siteUrl}${p}</loc></url>`).join('\n');
     res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
   });
@@ -544,37 +552,39 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
       const path = req.path.replace(/\/+$/, '') || '/';
       const base = { siteUrl: config.siteUrl };
 
-      if (path === '/') return send(200, renderHtml(template, { ...base, canonicalPath: '/', boot: boot(def) }));
-      if (path === '/privacy') {
-        return send(200, renderHtml(template, { ...base, canonicalPath: '/privacy', title: `Privacy Notice — ${BRAND.name}`, boot: boot(def) }));
+      const tucker = { title: PLATFORM_META.title, description: PLATFORM_META.description, ogImage: PLATFORM_OG_IMAGE, ogImageAlt: `${BRAND.name}. Your home service savings broker.`, omitStructuredData: true };
+      // Tucker's national home.
+      if (path === '/') {
+        return send(200, renderHtml(template, { ...base, ...tucker, canonicalPath: '/', structuredData: platformStructuredData(config.siteUrl), preload: platformPreloads(path), boot: boot(def) }));
       }
-      if (path === '/savings' || path.startsWith('/savings/')) {
-        // Parent platform: invisible unless explicitly enabled (staging/dev).
-        if (!config.flags.platform) return send(404, renderHtml(template, { ...base, canonicalPath: '/', noindex: true, boot: boot(def) }));
+      if (path === '/privacy') {
+        return send(200, renderHtml(template, { ...base, ...tucker, canonicalPath: '/privacy', title: `Privacy Notice — ${BRAND.name}`, preload: platformPreloads(path), boot: boot(def) }));
+      }
+      if (path.startsWith('/savings/')) {
+        const known = /^\/savings\/(assess|design|results\/[^/]+)$/.test(path);
         return send(
-          200,
+          known ? 200 : 404,
           renderHtml(template, {
             ...base,
-            canonicalPath: path === '/savings' ? '/savings' : path,
-            title: PLATFORM_META.title,
-            description: PLATFORM_META.description,
-            omitStructuredData: true,
-            noindex: path.startsWith('/savings/results') || path.startsWith('/savings/design'),
+            ...tucker,
+            canonicalPath: path,
+            // Private results and the internal style guide are never indexed.
+            noindex: !known || path.startsWith('/savings/results') || path.startsWith('/savings/design'),
             preload: platformPreloads(path),
             boot: boot(def),
           }),
         );
       }
+      // Regional internet pages (optional local campaigns), one per active location.
+      const region = /^\/internet\/([a-z0-9-]{2,40})$/.exec(path)?.[1];
+      if (region) {
+        const m = repo.getMarket(db, region);
+        if (m?.active) return send(200, renderHtml(template, { ...base, canonicalPath: `/internet/${region}`, heroPreload: true, preload: platformPreloads(path), boot: boot(m) }));
+      }
       if (path === '/admin' || path.startsWith('/admin/')) {
-        return send(200, renderHtml(template, { ...base, canonicalPath: '/', noindex: true, title: `${BRAND.name} — Team`, boot: boot(def) }));
+        return send(200, renderHtml(template, { ...base, ...tucker, canonicalPath: '/', noindex: true, title: `${BRAND.name} — Team`, boot: boot(def) }));
       }
-      const slug = path.slice(1);
-      if (/^[a-z0-9-]{2,40}$/.test(slug)) {
-        if (slug === def.slug) return res.redirect(301, '/'); // one URL per page
-        const m = repo.getMarket(db, slug);
-        if (m?.active) return send(200, renderHtml(template, { ...base, canonicalPath: `/${slug}`, boot: boot(m) }));
-      }
-      return send(404, renderHtml(template, { ...base, canonicalPath: '/', noindex: true, boot: boot(def) }));
+      return send(404, renderHtml(template, { ...base, ...tucker, canonicalPath: '/', noindex: true, title: `Page not found — ${BRAND.name}`, boot: boot(def) }));
     });
   }
 

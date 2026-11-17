@@ -1,6 +1,17 @@
 import type { ReactNode } from 'react';
 import { STATUS_COLORS, STATUS_LABELS } from '../lib/api';
 
+/** The square mark: a lowercase "t" with the nose-shaped period (also the favicon). */
+export function Mark({ className = 'h-8 w-8' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" className={className} aria-hidden>
+      <rect width="32" height="32" rx="8" fill="#101828" />
+      <path d="M13.2 6.8v4.1h-2.9v3.1h2.9v5.9c0 3 1.7 4.7 4.7 4.7.9 0 1.7-.1 2.4-.4v-3.1c-.4.1-.9.2-1.4.2-1.3 0-1.9-.6-1.9-1.9V14h3.3v-3.1H17V6.8z" fill="#fff" />
+      <path d="M22.3 20.6h3c.8 0 1.3.7 1 1.4l-.7 1.7c-.3.8-1 1.2-1.8 1.2s-1.500-.4-1.8-1.2l-.7-1.700c-.3-.7.2-1.400 1-1.400z" fill="#fff" />
+    </svg>
+  );
+}
+
 /**
  * The wordmark: lowercase "tucker" with a period shaped like the bear's nose.
  * Screen readers get the name once; the nose is decorative.
@@ -18,17 +29,7 @@ export function Wordmark({ noseClassName = 'bg-current' }: { noseClassName?: str
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <span className="inline-flex shrink-0 items-center gap-2.5">
-      <svg viewBox="0 0 32 32" className="h-8 w-8" aria-hidden>
-        <defs>
-          <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#22d3ee" />
-            <stop offset="1" stopColor="#8b5cf6" />
-          </linearGradient>
-        </defs>
-        <rect width="32" height="32" rx="8" fill="#121a33" />
-        <path d="M6 20c5-9 15-9 20 0M10 23c3-5 9-5 12 0" fill="none" stroke="url(#lg)" strokeWidth="2.6" strokeLinecap="round" />
-        <circle cx="16" cy="25" r="2" fill="#22d3ee" />
-      </svg>
+      <Mark />
       {!compact && (
         <span className="whitespace-nowrap font-display text-base font-bold tracking-tight sm:text-lg">
           <Wordmark noseClassName="bg-fiber-400" />

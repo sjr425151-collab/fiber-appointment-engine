@@ -26,6 +26,14 @@ export interface RenderOptions {
   description?: string;
   /** Omit the fiber-location structured data (e.g. platform pages). */
   omitStructuredData?: boolean;
+  /** Structured data to use instead of the location's (e.g. the national homepage). */
+  structuredData?: unknown;
+  /** Site-relative share image instead of the location's (e.g. "/og-tucker.jpg"). */
+  ogImage?: string;
+  /** Text alternative for the share image. */
+  ogImageAlt?: string;
+  /** Keep the hero photo preload (regional internet pages, the only pages that show it). */
+  heroPreload?: boolean;
   /** Same-origin build assets to fetch early (lazy chunks of this page). */
   preload?: { scripts: string[]; styles: string[] };
   boot: BootData;
@@ -40,12 +48,16 @@ export function renderHtml(template: string, o: RenderOptions): string {
   const meta = siteMeta(m);
   const pageUrl = `${o.siteUrl}${o.canonicalPath}`;
   const title = o.title ?? meta.title;
-  const ogImage = `${o.siteUrl}${m.ogImage || '/og-image.jpg'}`;
+  const ogImage = `${o.siteUrl}${o.ogImage ?? (m.ogImage || '/og-image.jpg')}`;
   const assetPath = (p: string) => /^\/assets\/[A-Za-z0-9._-]+\.(js|css)$/.test(p);
   const head = [
     ...(o.preload?.styles ?? []).filter(assetPath).map((h) => `<link rel="stylesheet" crossorigin href="${escAttr(h)}" />`),
     ...(o.preload?.scripts ?? []).filter(assetPath).map((h) => `<link rel="modulepreload" crossorigin href="${escAttr(h)}" />`),
-    o.omitStructuredData ? '' : `<script type="application/ld+json">${escJson(structuredData(o.siteUrl, m, pageUrl))}</script>`,
+    o.structuredData
+      ? `<script type="application/ld+json">${escJson(o.structuredData)}</script>`
+      : o.omitStructuredData
+        ? ''
+        : `<script type="application/ld+json">${escJson(structuredData(o.siteUrl, m, pageUrl))}</script>`,
     `<script type="application/json" id="boot-data">${escJson(o.boot)}</script>`,
   ]
     .filter(Boolean)
@@ -60,8 +72,10 @@ export function renderHtml(template: string, o: RenderOptions): string {
     '%%SITE_NAME%%': escAttr(BRAND.name),
     '%%CANONICAL%%': escAttr(pageUrl),
     '%%OG_IMAGE%%': escAttr(ogImage),
+    '%%OG_ALT%%': escAttr(o.ogImageAlt ?? 'Fiber-optic light streams connecting homes across a small town at dusk'),
     '%%ROBOTS%%': noindex ? 'noindex, nofollow' : 'index, follow',
     '<!--%%HEAD_DATA%%-->': head,
   };
-  return template.replace(/%%[A-Z_]+%%|<!--%%HEAD_DATA%%-->/g, (token) => values[token] ?? token);
+  const shell = o.heroPreload ? template : template.replace(/\s*<!--hero-preload[\s\S]*?<!--\/hero-preload-->/, '');
+  return shell.replace(/%%[A-Z_]+%%|<!--%%HEAD_DATA%%-->/g, (token) => values[token] ?? token);
 }

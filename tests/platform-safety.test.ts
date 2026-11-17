@@ -25,42 +25,45 @@ const base = (flags: AppConfig['flags']): AppConfig => ({
   isProduction: true,
   email: { resendApiKey: '', from: 'x <x@example.com>', teamEmails: [], dailyCustomerLimit: 80, nonProductionAllowlist: [] },
 });
-const PROD = base({ env: 'production', platform: false, sampleData: false });
+const PROD = base({ env: 'production', platform: true, sampleData: false });
 const STAGING = base({ env: 'staging', platform: true, sampleData: true });
 const app = (c: AppConfig) => createApp(c, openDatabase(':memory:'), { htmlTemplate: TEMPLATE });
 
-describe('production defaults keep the live fiber site unchanged', () => {
-  it('derives all-off flags from a production environment with no new variables', () => {
+describe('production configuration', () => {
+  it('runs Tucker as the application in production, with sample data off', () => {
     const c = loadConfig({ NODE_ENV: 'production', SESSION_SECRET: 'x'.repeat(44), ADMIN_PASSWORD: 'correct-horse-battery' });
-    expect(c.flags).toEqual({ env: 'production', platform: false, sampleData: false });
+    expect(c.flags).toEqual({ env: 'production', platform: true, sampleData: false });
+    // The retired launch switch is ignored, whatever it holds.
+    expect(loadConfig({ NODE_ENV: 'production', SESSION_SECRET: 'x'.repeat(44), ADMIN_PASSWORD: 'correct-horse-battery', PLATFORM_ENABLED: 'false' }).flags.platform).toBe(true);
   });
 
-  it('refuses sample data in production and rejects malformed flag values', () => {
+  it('refuses sample data in production and rejects malformed settings', () => {
     const env = { NODE_ENV: 'production', SESSION_SECRET: 'x'.repeat(44), ADMIN_PASSWORD: 'correct-horse-battery' };
     expect(() => loadConfig({ ...env, SAMPLE_DATA_ENABLED: 'true' })).toThrow(/cannot be used when APP_ENV=production/);
     expect(() => loadConfig({ ...env, APP_ENV: 'prod' })).toThrow(/APP_ENV/);
-    expect(() => loadConfig({ ...env, PLATFORM_ENABLED: 'yes' })).toThrow(/PLATFORM_ENABLED/);
-    expect(loadConfig({ ...env, APP_ENV: 'staging', SAMPLE_DATA_ENABLED: 'true', PLATFORM_ENABLED: '1' }).flags).toEqual({
-      env: 'staging',
-      platform: true,
-      sampleData: true,
-    });
+    expect(loadConfig({ ...env, APP_ENV: 'staging', SAMPLE_DATA_ENABLED: 'true' }).flags).toEqual({ env: 'staging', platform: true, sampleData: true });
   });
 
-  it('hides every platform page and API in production while fiber pages work as before', async () => {
+  it('serves Tucker’s national home at the root, indexable, with no location or provider in its metadata', async () => {
     const a = app(PROD);
-    for (const path of ['/savings', '/savings/assess', '/savings/results/abc', '/savings/design']) await request(a).get(path).expect(404);
-    for (const path of ['/api/platform/assessments', '/api/platform/offers']) await request(a).get(path).expect(404);
-    await request(a).post('/api/platform/assessments').send({}).expect(404);
     const home = await request(a).get('/').expect(200);
+    expect(home.text).toContain('<title>Tucker — Your home service savings broker</title>');
     expect(home.text).toContain('content="index, follow"');
-    expect(home.text).toContain('"flags":{"env":"production","platform":false,"sampleData":false}');
+    expect(home.text).toContain('"sampleData":false');
+    expect(home.text.replace(/<script type="application\/json" id="boot-data">.*?<\/script>/s, '')).not.toMatch(/Monroe|Omni|Fiber/);
+    expect(home.text).toContain('"@type":"Organization"');
+    await request(a).get('/savings/assess').expect(200);
+    const results = await request(a).get('/savings/results/abc').expect(200);
+    expect(results.text).toContain('content="noindex, nofollow"'); // private results are never indexed
+    await request(a).get('/savings/unknown').expect(404);
+    await request(a).get('/no-such-page').expect(404);
     expect((await request(a).get('/robots.txt')).text).toContain('Disallow: /admin');
   });
 
   it('reserves platform paths so no location can take them', () => {
     expect(marketSchema.safeParse({ ...MONROE, slug: 'savings' }).success).toBe(false);
     expect(marketSchema.safeParse({ ...MONROE, slug: 'platform' }).success).toBe(false);
+    expect(marketSchema.safeParse({ ...MONROE, slug: 'internet' }).success).toBe(false);
   });
 });
 
@@ -92,16 +95,16 @@ describe('platform code and styles stay out of the fiber site', () => {
 describe('staging', () => {
   it('serves the platform, and is never indexed', async () => {
     const a = app(STAGING);
-    const page = await request(a).get('/savings').expect(200);
+    const page = await request(a).get('/').expect(200);
     expect(page.text).toContain('content="noindex, nofollow"');
     expect(page.text).toContain('Tucker — Your home service savings broker');
-    expect((await request(a).get('/').expect(200)).text).toContain('content="noindex, nofollow"');
+    expect((await request(a).get('/internet/monroe').expect(200)).text).toContain('content="noindex, nofollow"');
     expect((await request(a).get('/robots.txt')).text).toBe('User-agent: *\nDisallow: /\n');
   });
 });
 
 describe('platform resource hints', () => {
-  it('preloads only the platform chunk and the page chunk, never the entry, and only for /savings', async () => {
+  it('preloads only the platform chunk and the page chunk, never the entry', async () => {
     const { mkdtempSync, writeFileSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
     const { platformPreloader } = await import('../server/preload');
@@ -114,12 +117,15 @@ describe('platform resource hints', () => {
         '_ds.js': { file: 'assets/ds-b.js', imports: ['index.html'] },
         'src/platform/PlatformApp.tsx': { file: 'assets/PlatformApp-c.js', imports: ['index.html'], css: ['assets/PlatformApp-c.css'] },
         'src/platform/pages/Home.tsx': { file: 'assets/Home-d.js', imports: ['index.html', 'src/platform/PlatformApp.tsx', '_ds.js'] },
+        'src/internet/RegionalPage.tsx': { file: 'assets/RegionalPage-e.js', imports: ['index.html'] },
       }),
     );
     const pre = platformPreloader(file);
-    expect(pre('/savings')).toEqual({ scripts: ['/assets/PlatformApp-c.js', '/assets/Home-d.js', '/assets/ds-b.js'], styles: ['/assets/PlatformApp-c.css'] });
+    expect(pre('/')).toEqual({ scripts: ['/assets/PlatformApp-c.js', '/assets/Home-d.js', '/assets/ds-b.js'], styles: ['/assets/PlatformApp-c.css'] });
     expect(pre('/savings/unknown').scripts).toEqual(['/assets/PlatformApp-c.js']);
-    expect(platformPreloader(join(dir, 'missing.json'))('/savings')).toEqual({ scripts: [], styles: [] });
+    // A regional internet page gets its own chunk and never the savings app.
+    expect(pre('/internet/monroe')).toEqual({ scripts: ['/assets/RegionalPage-e.js'], styles: [] });
+    expect(platformPreloader(join(dir, 'missing.json'))('/')).toEqual({ scripts: [], styles: [] });
   });
 
   it('renders hints as same-origin asset links only', async () => {

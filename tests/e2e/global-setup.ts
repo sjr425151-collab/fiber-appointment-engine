@@ -11,7 +11,7 @@ declare module 'vitest' {
   export interface ProvidedContext {
     stagingUrl: string;
     productionUrl: string;
-    /** Production settings with the platform switched on (what livefiberconnect.com runs). */
+    /** Production settings (what trytucker.com runs). Same server as productionUrl. */
     liveUrl: string;
   }
 }
@@ -64,11 +64,11 @@ export default async function setup(project: TestProject) {
     return url;
   };
 
-  const stagingUrl = await start(base, { APP_ENV: 'staging', PLATFORM_ENABLED: 'true', SAMPLE_DATA_ENABLED: 'true' });
+  const stagingUrl = await start(base, { APP_ENV: 'staging', SAMPLE_DATA_ENABLED: 'true' });
   const productionUrl = await start(base + 1, { APP_ENV: 'production' });
   project.provide('stagingUrl', stagingUrl);
   project.provide('productionUrl', productionUrl);
-  project.provide('liveUrl', await start(base + 2, { APP_ENV: 'production', PLATFORM_ENABLED: 'true' }));
+  project.provide('liveUrl', productionUrl); // production settings: real data and benchmarks, no samples
 
   return async () => {
     await Promise.all(

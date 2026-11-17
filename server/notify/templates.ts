@@ -37,7 +37,7 @@ function layout(o: { preheader: string; heading: string; body: string; footer: s
 <span style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(o.preheader)}</span>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f7;padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden">
-<tr><td style="background:#0b1020;padding:20px 28px;font-size:20px;font-weight:700;color:#ffffff">Fiber <span style="color:#22d3ee">Connect</span></td></tr>
+<tr><td style="background:#0b1020;padding:20px 28px;font-size:20px;font-weight:700;color:#ffffff">tucker<span style="color:#22d3ee">.</span></td></tr>
 <tr><td style="padding:28px">
 <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;color:#0b1020">${esc(o.heading)}</h1>
 ${o.body}
@@ -56,7 +56,14 @@ const rows = (pairs: [string, string][]) =>
     .map(([k, v]) => `<tr><td style="padding:6px 12px 6px 0;color:#64748b;white-space:nowrap;vertical-align:top">${esc(k)}</td><td style="padding:6px 0">${esc(v)}</td></tr>`)
     .join('')}</table>`;
 
-function customerFooter(m: Market) {
+/** Requests from the household savings preview are about the customer's bills, not one provider's service. */
+const isSavings = (lead: Lead) => lead.source === 'platform_assessment';
+const consult = (lead: Lead) => (isSavings(lead) ? 'savings review' : 'fiber consultation');
+
+function customerFooter(m: Market, lead?: Lead) {
+  if (lead && isSavings(lead)) {
+    return `${esc(BRAND.name)} is operated by ${esc(BRAND.agency)}. We may be paid by providers when a household switches; that never changes how options are ranked. You’re receiving this because you asked us to review your household bills.`;
+  }
   return `${esc(BRAND.name)} is operated by ${esc(BRAND.agency)}, an independent marketing partner of ${esc(m.provider)}. You’re receiving this because you requested information about fiber internet service at your address.`;
 }
 const contactLine = (m: Market) => (m.phoneDisplay ? ` Call or text us at ${m.phoneDisplay}.` : ' Just reply to this email.');
@@ -64,10 +71,10 @@ const contactLine = (m: Market) => (m.phoneDisplay ? ` Call or text us at ${m.ph
 // ---------------------------------------------------------------- customer --
 export function customerConfirmation(lead: Lead, appt: Appointment, m: Market): Rendered {
   const when = fmtWhen(appt.startUtc, m.timezone);
-  const subject = oneLine(`You're booked: fiber consultation on ${when.date}`);
+  const subject = oneLine(`You're booked: ${consult(lead)} on ${when.date}`);
   const body =
     p(`Hi ${esc(lead.firstName)},`) +
-    p(`Thanks for booking your free fiber consultation. Here are the details:`) +
+    p(`Thanks for booking your free ${consult(lead)}. Here are the details:`) +
     box(`<strong>${esc(when.date)}</strong><br>${esc(when.time)}<br>${esc(address(lead))}`) +
     p(`<strong>What to expect:</strong> a local specialist will confirm ${esc(m.provider)} service at your exact address, walk you through the plans available to you, and answer any questions. There’s no cost and no obligation.`) +
     p(`Need to change the time?${esc(contactLine(m))}`) +
@@ -75,7 +82,7 @@ export function customerConfirmation(lead: Lead, appt: Appointment, m: Market): 
   const text = [
     `Hi ${lead.firstName},`,
     '',
-    'Thanks for booking your free fiber consultation.',
+    `Thanks for booking your free ${consult(lead)}.`,
     '',
     `When: ${when.full}`,
     `Where: ${address(lead)}`,
@@ -87,21 +94,21 @@ export function customerConfirmation(lead: Lead, appt: Appointment, m: Market): 
     '—',
     `${BRAND.name} · operated by ${BRAND.agency}, an independent marketing partner of ${m.provider}.`,
   ].join('\n');
-  return { subject, html: layout({ preheader: `${when.full} — free fiber consultation`, heading: 'Your consultation is booked', body, footer: customerFooter(m) }), text };
+  return { subject, html: layout({ preheader: `${when.full} — free ${consult(lead)}`, heading: 'Your consultation is booked', body, footer: customerFooter(m, lead) }), text };
 }
 
 export function customerReminder(lead: Lead, appt: Appointment, m: Market): Rendered {
   const when = fmtWhen(appt.startUtc, m.timezone);
-  const subject = oneLine(`Reminder: your fiber consultation is ${when.date} at ${when.time}`);
+  const subject = oneLine(`Reminder: your ${consult(lead)} is ${when.date} at ${when.time}`);
   const body =
     p(`Hi ${esc(lead.firstName)},`) +
-    p(`Just a friendly reminder about your free fiber consultation:`) +
+    p(`Just a friendly reminder about your free ${consult(lead)}:`) +
     box(`<strong>${esc(when.date)}</strong><br>${esc(when.time)}<br>${esc(address(lead))}`) +
     p(`If the time no longer works, let us know and we’ll find a better one.${esc(contactLine(m))}`);
   const text = [
     `Hi ${lead.firstName},`,
     '',
-    'A friendly reminder about your free fiber consultation:',
+    `A friendly reminder about your free ${consult(lead)}:`,
     `When: ${when.full}`,
     `Where: ${address(lead)}`,
     '',
@@ -109,10 +116,19 @@ export function customerReminder(lead: Lead, appt: Appointment, m: Market): Rend
     '',
     `— ${BRAND.name}`,
   ].join('\n');
-  return { subject, html: layout({ preheader: `See you ${when.full}`, heading: 'See you soon', body, footer: customerFooter(m) }), text };
+  return { subject, html: layout({ preheader: `See you ${when.full}`, heading: 'See you soon', body, footer: customerFooter(m, lead) }), text };
 }
 
 export function customerLeadReceived(lead: Lead, m: Market): Rendered {
+  if (isSavings(lead)) {
+    const how = lead.preferredContact === 'text' ? 'text' : lead.preferredContact === 'email' ? 'email' : 'phone';
+    const body =
+      p(`Hi ${esc(lead.firstName)},`) +
+      p(`Thanks for asking ${esc(BRAND.name)} to look at your household bills. An advisor will reach out by ${how} to go through real prices for your address and answer any questions. There is no obligation.`) +
+      p(`Prefer to talk now?${esc(contactLine(m))}`);
+    const text = [`Hi ${lead.firstName},`, '', `Thanks for asking ${BRAND.name} to look at your household bills. An advisor will reach out by ${how} to go through real prices for your address and answer any questions. There is no obligation.`, '', `Prefer to talk now?${contactLine(m)}`, '', `— ${BRAND.name}`].join('\n');
+    return { subject: 'We got your request — your household savings review', html: layout({ preheader: 'An advisor will be in touch shortly.', heading: 'We got your request', body, footer: customerFooter(m, lead) }), text };
+  }
   const subject = oneLine(`We got your request — fiber in ${place(m)}`);
   const body =
     p(`Hi ${esc(lead.firstName)},`) +

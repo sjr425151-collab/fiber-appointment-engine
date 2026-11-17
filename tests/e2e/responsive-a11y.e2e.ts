@@ -17,7 +17,7 @@ afterAll(async () => {
 
 async function ready(p: Page, url: string) {
   await p.goto(url);
-  await p.locator('main h1').first().waitFor();
+  await p.locator('h1').first().waitFor();
 }
 
 describe('responsive layout', () => {
@@ -25,7 +25,7 @@ describe('responsive layout', () => {
     it(`has no horizontal scroll and keeps the main action reachable at ${width}px`, async () => {
       const { ctx, errors } = await context(b, { viewport: { width, height: 800 } });
       const p = await ctx.newPage();
-      for (const path of ['/savings', '/savings/assess', '/savings/design']) {
+      for (const path of ['/', '/savings/assess', '/savings/design', '/internet/monroe', '/no-such-page']) {
         await ready(p, BASE + path);
         expect({ path, overflow: await overflow(p) }).toEqual({ path, overflow: 0 });
       }
@@ -59,7 +59,7 @@ describe('accessibility (axe-core)', () => {
     const found: Record<string, string[]> = {};
     const scan = async (name: string) => (found[name] = await axe(p));
 
-    await ready(p, `${BASE}/savings`);
+    await ready(p, `${BASE}/`);
     await scan('home');
     await ready(p, `${BASE}/savings/design`);
     await scan('design system');
@@ -93,7 +93,7 @@ describe('accessibility (axe-core)', () => {
   it('is fully operable by keyboard: tab order reaches the main controls with visible focus', async () => {
     const { ctx } = await context(b, { viewport: { width: 1280, height: 900 } });
     const p = await ctx.newPage();
-    await ready(p, `${BASE}/savings`);
+    await ready(p, `${BASE}/`);
     await p.keyboard.press('Tab');
     expect(await p.evaluate(() => document.activeElement?.textContent)).toBe('Skip to content');
     await p.keyboard.press('Enter');
@@ -101,9 +101,9 @@ describe('accessibility (axe-core)', () => {
     const seen: string[] = [];
     for (let i = 0; i < 3; i++) {
       await p.keyboard.press('Tab');
-      seen.push(await p.evaluate(() => `${document.activeElement?.textContent?.trim()}|${getComputedStyle(document.activeElement as Element).outlineStyle}`));
+      seen.push(await p.evaluate(() => `${document.activeElement?.tagName}#${document.activeElement?.id}|${getComputedStyle(document.activeElement as Element).outlineStyle}`));
     }
-    expect(seen).toEqual(['Find My Savings|solid', 'Analyze My Household Bills|solid', 'Privacy notice|solid']);
+    expect(seen).toEqual(['A#|solid', 'INPUT#qp-internet|solid', 'INPUT#qp-mobile|solid']);
     await ctx.close();
   });
 

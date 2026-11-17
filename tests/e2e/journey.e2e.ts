@@ -47,7 +47,7 @@ describe('household journey (staging, phone)', () => {
     const p = await ctx.newPage();
 
     // 1. Enter the site.
-    await p.goto(`${BASE}/savings?utm_source=e2e&utm_campaign=journey`);
+    await p.goto(`${BASE}/?utm_source=e2e&utm_campaign=journey`);
     await p.getByRole('heading', { level: 1 }).waitFor();
     expect(await p.title()).toMatch(/Tucker/);
 

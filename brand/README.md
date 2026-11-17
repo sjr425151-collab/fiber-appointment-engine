@@ -19,6 +19,7 @@ Central record for the TUCKER brand system (Master Brand Directive v3.0). Status
 - Campaign line (experimental, selected advertising only): **One money-saving mother trucker.**
 - TUCKER is not a trucking company and never claims guaranteed savings.
 - **Tucker is the only public name** (founder, 2026-11-17). The site, emails and calendar files are renamed in code (built and tested); the change reaches the live site at the next approved deploy. "LiveFiberConnect" and "Fiber Connect" are retired. The legal operator (Spotlight Marketing LLC) still appears in consent and disclosure text.
+- **Provisional mark (2026-11-17):** the favicon, touch icon, header mark and `/og-tucker.jpg` share image use a simple mark derived from the approved wordmark (a lowercase "t" with the nose period). It is a placeholder so the old fiber icon is gone; the final mark, colors and mascot remain behind gates G2–G5.
 - **Territory: C · Name Patch, with A's nose-shaped period**, keeping C's typeface (founder, 2026-11-17). A's typeface is not used.
 - **Gate G1 passed** with a 300-credit cap for round 1.
 - **Domain: trytucker.com** (founder, 2026-11-17). Migration runbook: `docs/14-domain-migration.md`.

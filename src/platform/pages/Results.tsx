@@ -14,7 +14,7 @@ import { editHandoff, tokenFromHash, type ResultsPayload } from '../lib';
 
 const LENS_LABEL = { lowest_cost: 'Lowest cost', best_value: 'Best value', highest_performance: 'Fastest', lowest_friction: 'Easiest switch' } as const;
 const PRIORITY_LENS: Record<string, keyof typeof LENS_LABEL> = { lower_cost: 'lowest_cost', faster_speed: 'highest_performance', simple_switch: 'lowest_friction', no_contract: 'lowest_friction' };
-const KIND_CHIP: Record<CategoryOption['kind'], ChipStatus> = { verified: 'manually_verified', pending_address: 'pending_verification', sample: 'sample' };
+const KIND_CHIP: Record<CategoryOption['kind'], ChipStatus> = { verified: 'manually_verified', pending_address: 'pending_verification', benchmark: 'benchmark', sample: 'sample' };
 const HORIZON_LABEL: Record<Horizon, string> = { 12: '1 year', 60: '5 years', 120: '10 years' };
 const NOT_FOUND = 'We couldn’t find these results. The link may be incomplete or expired.';
 
@@ -159,6 +159,11 @@ export default function Results() {
         {analysis.projectionBasis === 'sample' && (
           <Callout tone="sample" title="Includes sample data">
             Some alternatives on this preview are illustrative samples, not real offers. Any savings that use them are for demonstration only.
+          </Callout>
+        )}
+        {analysis.projectionBasis === 'benchmark' && (
+          <Callout tone="warn" title="This is an illustrative preview">
+            We don’t have a real plan on file for every service at your home, so some savings below compare your bills with Tucker’s benchmarks. They are comparison assumptions, not offers or guarantees: real prices depend on availability, eligibility, active promotions and other pricing factors. An advisor can find actual prices for you.
           </Callout>
         )}
         {analysis.projectionBasis === 'pending_address' && (
@@ -448,7 +453,7 @@ function CategoryCard({ c, priorities, canSelect, onSelect }: { c: CategoryResul
         </div>
       ) : (
         <fieldset className="mt-5" disabled={!canSelect}>
-          <legend className="text-sm font-semibold text-pf-ink">Compare options for {c.label}{c.lensKind === 'pending_address' ? ' (if available at your address)' : ''}</legend>
+          <legend className="text-sm font-semibold text-pf-ink">Compare options for {c.label}{c.lensKind === 'pending_address' ? ' (if available at your address)' : c.lensKind === 'benchmark' ? ' (illustrative benchmark)' : ''}</legend>
           <div className="mt-3 space-y-3">
             <OptionRow
               id={`opt-${c.category}-keep`}

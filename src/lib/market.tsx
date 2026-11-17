@@ -28,7 +28,7 @@ export const currentMarketSlug = () => currentSlug;
 export const allMarkets = (): MarketSummary[] => boot?.markets ?? [];
 export const defaultMarketSlug = () => boot?.defaultSlug ?? '';
 /** Feature flags rendered by the server (all off in production). */
-export const bootFlags = () => boot?.flags ?? { env: 'production' as const, platform: false, sampleData: false };
+export const bootFlags = () => boot?.flags ?? { env: 'production' as const, platform: true, sampleData: false };
 export const bootDefaultMarket = () => boot?.market ?? null;
 
 type State = { status: 'ready'; market: Market } | { status: 'loading' } | { status: 'notfound' };
@@ -81,4 +81,5 @@ export function useMarket(): Market {
 export const hasPhone = (m: Market) => Boolean(m.phoneDisplay && m.phoneE164);
 
 /** Public URL path for a market: the default market lives at "/". */
-export const marketPath = (slug: string) => (slug === defaultMarketSlug() ? '/' : `/${slug}`);
+/** URL of a location's regional internet page. */
+export const marketPath = (slug: string) => `/internet/${slug}`;

@@ -1,13 +1,13 @@
 # 14 — Domain migration: livefiberconnect.com → trytucker.com
 
-**Status (2026-11-17): code built and tested, not deployed.** Both domains already reach the same Render service over HTTPS. This is a domain and name change only: same service, same database, same features.
+**Status (2026-11-17): code built and tested, not deployed.** The URL structure changed after this page was first written; `15-consolidation.md` has the full old-to-new URL map. Both domains already reach the same Render service over HTTPS. This is a domain and name change only: same service, same database, same features.
 
 ## What the code now does
 
 | Area | Behaviour |
 |---|---|
 | Canonical origin | Everything public is built from `SITE_URL`: canonical links, Open Graph URL and image, structured data, `robots.txt`, `sitemap.xml`, links in emails |
-| Sitemap | Now also lists `/savings` and `/savings/assess` when the savings pages are switched on |
+| Sitemap | Lists `/`, `/savings/assess`, `/internet/<each active location>` and `/privacy` |
 | `www.` of the canonical domain | Always redirects (301) to the bare domain, keeping path and query |
 | Previous domain | Listed in `LEGACY_HOSTS`. Served normally while `LEGACY_REDIRECTS=false`, with canonical links already pointing at the new domain. With `LEGACY_REDIRECTS=true`, every page request redirects (301) to the same path and query on the new domain |
 | Safety | Only page requests redirect (never `/api`, never form posts), the target is always the fixed canonical origin, and the canonical host never redirects, so loops and open redirects are not possible. A typo in `LEGACY_REDIRECTS` leaves redirects off; it cannot stop the site |
@@ -31,7 +31,7 @@
 
 **Render** (service `fiber-connect`; the service name is internal and stays):
 1. *Settings → Custom Domains:* confirm `trytucker.com` and `www.trytucker.com` are listed and verified, and leave `livefiberconnect.com` attached.
-2. *Environment:* set `SITE_URL` = `https://trytucker.com`, `LEGACY_HOSTS` = `livefiberconnect.com,www.livefiberconnect.com`, `LEGACY_REDIRECTS` = `false`, and `EMAIL_FROM` = `Tucker <hello@mail.trytucker.com>`. Keep `TRUST_PROXY=1`. Saving deploys the newest commit (about 1 minute of downtime). Take a backup first: `npm run db:backup` in the Render shell.
+2. *Environment:* set `SITE_URL` = `https://trytucker.com`, `LEGACY_HOSTS` = `livefiberconnect.com` (its `www.` form is included automatically), `LEGACY_REDIRECTS` = `false`, and `EMAIL_FROM` = `Tucker <hello@mail.trytucker.com>`. Keep `TRUST_PROXY=1`. Saving deploys the newest commit (about 1 minute of downtime). Take a backup first: `npm run db:backup` in the Render shell.
 3. After verification (below), set `LEGACY_REDIRECTS` = `true`. That restarts the service once more.
 
 **Cloudflare:**
@@ -48,17 +48,20 @@
 Run after the deploy in step 2. The read-only checks can be run from a development session on request.
 
 - [ ] `https://trytucker.com/api/health` shows the expected commit.
-- [ ] Page source on `/`, `/savings`, `/privacy`: canonical link and share URL start with `https://trytucker.com`; site name is Tucker.
+- [ ] Page source on `/`, `/savings/assess`, `/internet/monroe`, `/privacy`: canonical link and share URL start with `https://trytucker.com`; site name is Tucker.
 - [ ] `https://trytucker.com/robots.txt` and `/sitemap.xml` show only `trytucker.com` URLs.
 - [ ] `http://trytucker.com`, `https://www.trytucker.com` and `http://www.trytucker.com` all end at `https://trytucker.com` with the path and query kept.
-- [ ] `https://livefiberconnect.com/savings` still loads (redirects are off) and its canonical link points to the new domain.
+- [ ] `https://livefiberconnect.com/savings/assess` still loads (redirects are off) and its canonical link points to the new domain.
+- [ ] `https://trytucker.com/monroe` → 301 → `/internet/monroe`; `https://trytucker.com/savings` → 301 → `/`; `https://trytucker.com/no-such-page` → 404.
 - [ ] On `trytucker.com`: complete an assessment, open the results link, send a help request and book a time; sign in to the admin and find that lead and its opportunities. Use a recognisable test name and mark the lead afterwards.
-- [ ] Fiber page: ZIP check and lead form work.
+- [ ] Regional page (`/internet/monroe`): ZIP check and lead form work.
+- [ ] Home: the quick preview shows a figure before any contact details are asked for.
 
 ## After switching redirects on
 
 - [ ] `https://livefiberconnect.com/savings/assess?utm_source=test` → 301 → `https://trytucker.com/savings/assess?utm_source=test` (one hop).
 - [ ] `https://www.livefiberconnect.com/` ends at `https://trytucker.com/`.
+- [ ] `https://livefiberconnect.com/monroe?utm_source=test` → 301 → `https://trytucker.com/internet/monroe?utm_source=test` (one hop).
 - [ ] An old private results link opens the same results on the new domain.
 - [ ] `https://livefiberconnect.com/api/health` still answers 200 (the API is not redirected).
 

@@ -273,7 +273,7 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
 }
 
 // -------------------------------------------------------------- StatusChip --
-export type ChipStatus = 'verified' | 'manually_verified' | 'estimated' | 'pending_verification' | 'unavailable' | 'sample' | 'user_reported';
+export type ChipStatus = 'verified' | 'manually_verified' | 'estimated' | 'pending_verification' | 'unavailable' | 'sample' | 'user_reported' | 'benchmark';
 
 const CHIP: Record<ChipStatus, { label: string; cls: string; icon: string }> = {
   verified: { label: 'Verified', cls: 'bg-pf-save-soft text-pf-save', icon: '✓' },
@@ -282,6 +282,7 @@ const CHIP: Record<ChipStatus, { label: string; cls: string; icon: string }> = {
   pending_verification: { label: 'Needs address check', cls: 'bg-pf-info-soft text-pf-info', icon: '?' },
   unavailable: { label: 'Unavailable', cls: 'bg-pf-cost-soft text-pf-cost', icon: '×' },
   sample: { label: 'Sample data', cls: 'bg-pf-sample-soft text-pf-sample', icon: '◇' },
+  benchmark: { label: 'Benchmark', cls: 'bg-pf-warn-soft text-pf-warn', icon: '≈' },
   user_reported: { label: 'You told us', cls: 'bg-pf-bg text-pf-muted ring-1 ring-inset ring-pf-line', icon: '•' },
 };
 

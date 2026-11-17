@@ -34,7 +34,7 @@ export default function Privacy() {
           <h1 className="font-display text-3xl font-bold text-white sm:text-4xl">Privacy notice</h1>
           <p className="text-sm text-slate-400">Last updated {CONSENT_VERSION}</p>
           <p>
-            This website ({BRAND.name}) is operated by {BRAND.agency}, an independent marketing partner of fiber internet providers including {m.provider}. This notice explains what
+            This website ({BRAND.name}) is operated by {BRAND.agency}, an independent broker for household services such as internet, mobile, TV and electricity. We work as a marketing partner of providers including {m.provider}. This notice explains what
             information we collect when you use this site and how we use it.
           </p>
 
@@ -58,8 +58,8 @@ export default function Privacy() {
 
           <h2>How we use it</h2>
           <ul className="list-disc space-y-2 pl-6">
-            <li>To check whether fiber service is available at your address.</li>
-            <li>To contact you about fiber service and your consultation, using the contact details you provide.</li>
+            <li>To prepare your savings preview and check which services are available at your address.</li>
+            <li>To contact you about the services you asked about and any appointment you book, using the contact details you provide.</li>
             <li>To understand which campaigns bring people to this site, so we can improve it.</li>
           </ul>
           <p>

@@ -51,6 +51,13 @@ const PROVIDER_SUGGESTIONS: Record<string, string[]> = {
 /** Stable DOM id for a field, so the error summary can link to it. */
 const fid = (key: string) => `pf-f-${key.replace(/\./g, '-')}`;
 
+/** Fills in any field a hand-off left out (the home page preview only knows the bill amounts). */
+function withDefaults(a: Answers): Answers {
+  const out: Answers = { ...a, zip: a.zip ?? '', categories: a.categories ?? [] };
+  for (const c of out.categories) (out as Record<string, unknown>)[c] = { ...(DEFAULTS[c] as object), ...((a[c] as object | undefined) ?? {}) };
+  return out;
+}
+
 const int = (s: string) => (s.trim() === '' ? null : /^\d+$/.test(s.trim()) ? Number(s.trim()) : NaN);
 
 export default function Assess() {
@@ -59,7 +66,7 @@ export default function Assess() {
   const [initial] = useState(() => {
     // Older answers may carry the retired "solar" category; fold it into electricity.
     const edit = editHandoff.take();
-    if (edit) return { answers: upgradeLegacy(edit) as Answers, step: 0, remember: false, edit: true };
+    if (edit) return { answers: withDefaults(upgradeLegacy(edit) as Answers), step: 0, remember: false, edit: true };
     const d = draftStore.load();
     return d ? { answers: upgradeLegacy(d.answers) as Answers, step: Math.min(d.step, 1), remember: true, edit: false } : { answers: { zip: '', categories: [] } as Answers, step: 0, remember: false, edit: false };
   });

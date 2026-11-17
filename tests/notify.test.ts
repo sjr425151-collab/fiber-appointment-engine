@@ -374,3 +374,24 @@ describe('staging email isolation', () => {
     expect(mailer.sent.some((e) => e.to[0] === 'jamie@example.com' && /^\[STAGING\]/.test(e.subject))).toBe(true);
   });
 });
+
+describe('emails for household savings requests', () => {
+  it('talk about a savings review, not fiber, and carry the Tucker name', async () => {
+    const savingsLead = repo.createLead(db, {
+      firstName: 'Dana', lastName: 'Reyes', email: 'dana@example.com', phone: '7345550177', street: '', unit: '', city: '', zip: '60601',
+      preferredContact: 'email', currentProvider: '', areaStatus: 'unknown', source: 'platform_assessment', utmSource: '', utmMedium: '', utmCampaign: '', utmContent: '', utmTerm: '',
+      clickId: '', referrer: '', landingPage: '/', sessionId: '', marketId: 'monroe', bookingTokenHash: 'h', consentText: 'x', consentIp: '', consentUserAgent: '',
+    }).lead;
+    notifier.onLead(savingsLead, false);
+    await notifier.processDue(minutes(30));
+    const followUp = mailer.sent.find((e) => e.to[0] === 'dana@example.com')!;
+    expect(followUp.subject).toBe('We got your request — your household savings review');
+    expect(followUp.text).toMatch(/asking Tucker to look at your household bills/);
+    expect(followUp.html).toContain('tucker<span');
+    expect(`${followUp.subject} ${followUp.text} ${followUp.html}`).not.toMatch(/fiber|Fiber Connect|LiveFiberConnect/);
+    // Regional internet leads keep their fiber wording.
+    await request(app).post('/api/leads').send(lead).expect(201);
+    await notifier.processDue(minutes(30));
+    expect(mailer.bySubject(/We got your request — fiber in Monroe/)).toHaveLength(1);
+  });
+});

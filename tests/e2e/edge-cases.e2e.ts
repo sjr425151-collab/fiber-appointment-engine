@@ -19,7 +19,8 @@ describe('assessment edge cases', () => {
     await p.goto(`${BASE}/savings/assess`);
     await p.getByLabel('ZIP code').fill('481');
     await p.getByRole('button', { name: 'Continue' }).click();
-    expect(await p.evaluate(() => document.activeElement?.id)).toBe('pf-error-summary');
+    // Focus moves on the next frame; wait for it rather than racing it.
+    await p.waitForFunction(() => document.activeElement?.id === 'pf-error-summary');
     await p.locator('#pf-error-summary a').click();
     expect(await p.evaluate(() => document.activeElement?.id)).toBe('pf-f-zip');
     await p.getByLabel('ZIP code').fill('48161abc'); // non-digits are stripped

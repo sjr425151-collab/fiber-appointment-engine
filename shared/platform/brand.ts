@@ -15,5 +15,19 @@ export const PLATFORM = {
 export const PLATFORM_META = {
   title: `${PLATFORM.name} — Your home service savings broker`,
   description:
-    'Tucker compares what you pay for internet, mobile, TV and electricity. See a clear cost breakdown, verified alternatives where available, a free advisor review for the rest, and projections with every assumption shown.',
+    'See what your household could save on internet, mobile, TV and electricity. Enter your bills for a free savings preview in about a minute. No account, no contact details.',
 };
+
+/** Share image for Tucker's own pages (regional internet pages keep theirs). */
+export const PLATFORM_OG_IMAGE = '/og-tucker.jpg';
+
+/** National structured data for the homepage: the business and the website, with no location or provider. */
+export function platformStructuredData(siteUrl: string) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      { '@type': 'Organization', '@id': `${siteUrl}/#org`, name: PLATFORM.name, legalName: PLATFORM.operator, url: `${siteUrl}/`, description: PLATFORM.descriptor },
+      { '@type': 'WebSite', '@id': `${siteUrl}/#website`, url: `${siteUrl}/`, name: PLATFORM.name, publisher: { '@id': `${siteUrl}/#org` } },
+    ],
+  };
+}

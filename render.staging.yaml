@@ -30,8 +30,6 @@ services:
         value: production
       - key: APP_ENV
         value: staging
-      - key: PLATFORM_ENABLED
-        value: "true"
       - key: SAMPLE_DATA_ENABLED
         value: "true"
       - key: DATABASE_PATH

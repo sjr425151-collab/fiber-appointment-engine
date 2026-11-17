@@ -1,4 +1,4 @@
-import type { AvailabilityResult } from '../../shared/schemas';
+import type { AvailabilityResult } from '../../../shared/schemas';
 
 const STATUS_TONE: Record<string, string> = {
   available: 'from-emerald-400/20 to-fiber-400/10 border-emerald-400/30',

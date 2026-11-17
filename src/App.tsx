@@ -1,9 +1,9 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
-import Landing from './pages/Landing';
 import { Spinner } from './components/ui';
 
-// Admin and secondary pages are split out so visitors only download the landing page.
+// Every page is its own chunk, so a visitor only downloads the one they open.
+const RegionalPage = lazy(() => import('./internet/RegionalPage'));
 const Privacy = lazy(() => import('./pages/Privacy'));
 const AdminLogin = lazy(() => import('./pages/admin/Login'));
 const AdminLayout = lazy(() => import('./pages/admin/Layout'));
@@ -27,7 +27,7 @@ function ScrollReset() {
 }
 
 const fallback = (
-  <div className="grid min-h-screen place-items-center text-slate-400">
+  <div className="grid min-h-screen place-items-center text-slate-500">
     <Spinner className="h-8 w-8" />
   </div>
 );
@@ -37,7 +37,6 @@ export default function App() {
     <Suspense fallback={fallback}>
       <ScrollReset />
       <Routes>
-        <Route path="/" element={<Landing />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin" element={<AdminLayout />}>
@@ -49,9 +48,10 @@ export default function App() {
           <Route path="assessments" element={<AdminAssessments />} />
           <Route path="opportunities" element={<AdminOpportunities />} />
         </Route>
-        <Route path="/savings/*" element={<PlatformApp />} />
-        <Route path="/:market" element={<Landing />} />
-        <Route path="*" element={<Landing />} />
+        {/* Optional regional internet campaigns, one per active location. */}
+        <Route path="/internet/:market" element={<RegionalPage />} />
+        {/* Tucker: home at the root, the savings preview under /savings, and the not-found page. */}
+        <Route path="/*" element={<PlatformApp />} />
       </Routes>
     </Suspense>
   );

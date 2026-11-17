@@ -11,9 +11,10 @@ import { rankOffers, type Candidate, type LensResult } from '../offers/rank';
 import { offerSchema, type Offer } from '../offers/model';
 import { CATEGORY_LABEL, PROMO_MONTHS, type Assessment, type PlatformCategory } from './assessment';
 import { CATALOG_VERSION, offersFor } from './catalog';
+import { BENCHMARK_DISCLOSURE, BENCHMARKS_VERSION, benchmarkAssumptions, benchmarkOffer } from './benchmarks';
 import { SAMPLE_SOLAR_PROGRAMS, SOLAR_FACTS, SOLAR_PROGRAMS, solarAssumptions, solarOffer } from './solar';
 
-export const ANALYSIS_VERSION = `analysis-3/${CATALOG_VERSION}`;
+export const ANALYSIS_VERSION = `analysis-4/${CATALOG_VERSION}/b${BENCHMARKS_VERSION}`;
 export const HORIZONS = [12, 60, 120] as const;
 export type Horizon = (typeof HORIZONS)[number];
 export type ScenarioId = 'flat' | 'moderate' | 'high';
@@ -44,7 +45,12 @@ export interface AreaCatalog {
   internetNote?: string;
 }
 
-export type OptionKind = 'verified' | 'pending_address' | 'sample';
+/**
+ * - verified / pending_address: a real plan on file (address confirmed or not yet)
+ * - benchmark: Tucker's comparison benchmark, used where no real plan is on file (illustrative)
+ * - sample: staging-only demo data
+ */
+export type OptionKind = 'verified' | 'pending_address' | 'benchmark' | 'sample';
 
 export interface CategoryOption {
   offerId: string;
@@ -185,6 +191,8 @@ export function currentStreamsFor(a: Assessment, c: PlatformCategory): { streams
 interface CategoryOffers {
   real: Offer[];
   samples: Offer[];
+  /** Comparison benchmark for this household, used only when no real plan is usable. */
+  benchmark?: Offer;
   /** Assumptions per offer id (solar estimates). */
   assumptions: Map<string, string[]>;
   notes: string[];
@@ -219,6 +227,12 @@ function solarOffersFor(a: Assessment, includeSamples: boolean): CategoryOffers 
   out.real = build(SOLAR_PROGRAMS);
   out.samples = includeSamples ? build(SAMPLE_SOLAR_PROGRAMS) : [];
   if (e.roofSun === 'unknown') out.notes.push('We assumed your roof gets enough sun; a site assessment will confirm it.');
+  // No program terms on file: compare against the solar benchmark (illustrative), unless demo samples are shown.
+  if (!out.real.length && !includeSamples) {
+    out.benchmark = benchmarkOffer('electricity');
+    out.assumptions.set(out.benchmark.id, benchmarkAssumptions('electricity'));
+    return { ...out, solar: 'estimated' };
+  }
   if (!out.real.length && !out.samples.length) {
     out.notes.push('Solar could lower your electricity costs. We don’t have current solar pricing on file for your area yet — an advisor can prepare a free site-specific estimate.');
   }
@@ -228,15 +242,20 @@ function solarOffersFor(a: Assessment, includeSamples: boolean): CategoryOffers 
 function offersForCategory(c: PlatformCategory, a: Assessment, includeSamples: boolean, catalog: AreaCatalog | undefined): CategoryOffers {
   if (c === 'electricity') return solarOffersFor(a, includeSamples);
   const cat = offersFor(c, { zip: a.zip, mobileLines: a.mobile?.lines, mobileDataNeed: a.mobile?.dataNeed, mobileInternational: a.mobile?.international, includeSamples });
+  // Where no real plan is on file, the household is compared with Tucker's benchmark
+  // (not in sample-data mode, which shows demo offers instead).
+  const ctx = { mobileLines: a.mobile?.lines };
+  const bench = includeSamples ? {} : { benchmark: benchmarkOffer(c, ctx) };
+  const assumptions = new Map(bench.benchmark ? [[bench.benchmark.id, benchmarkAssumptions(c, ctx)]] : []);
   // With an area catalog, real internet offers come from it (never from the built-in pilot data).
-  if (catalog && c === 'internet') return { real: catalog.internet, samples: cat.samples, assumptions: new Map(), notes: !catalog.internet.length && catalog.internetNote ? [catalog.internetNote] : [] };
-  return { ...cat, real: catalog ? [] : cat.real, assumptions: new Map(), notes: [] };
+  if (catalog && c === 'internet') return { real: catalog.internet, samples: cat.samples, ...bench, assumptions, notes: !catalog.internet.length && catalog.internetNote ? [catalog.internetNote] : [] };
+  return { ...cat, real: catalog ? [] : cat.real, ...bench, assumptions, notes: [] };
 }
 
 const kindOf = (status: Candidate['status'], eligible: Candidate['eligible']): OptionKind | null =>
-  status === 'sample' ? 'sample' : (status === 'verified' || status === 'manually_verified') && eligible === true ? 'verified' : (status === 'verified' || status === 'manually_verified') && eligible === 'unknown' ? 'pending_address' : null;
+  status === 'sample' ? 'sample' : status === 'benchmark' ? 'benchmark' : (status === 'verified' || status === 'manually_verified') && eligible === true ? 'verified' : (status === 'verified' || status === 'manually_verified') && eligible === 'unknown' ? 'pending_address' : null;
 
-const KIND_RANK: Record<OptionKind, number> = { verified: 2, pending_address: 1, sample: 0 };
+const KIND_RANK: Record<OptionKind, number> = { verified: 3, pending_address: 2, benchmark: 1, sample: 0 };
 
 export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAnalysis {
   const now = new Date(opts.computedAt);
@@ -258,14 +277,17 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
     let lensKind: OptionKind | null = null;
     const cat = offersForCategory(c, a, opts.includeSamples, opts.catalog);
     notes.push(...cat.notes);
-    const offerById = new Map([...cat.real, ...cat.samples].map((o) => [o.id, offerSchema.parse(o)]));
+    const offerById = new Map([...cat.real, ...(cat.benchmark ? [cat.benchmark] : []), ...cat.samples].map((o) => [o.id, offerSchema.parse(o)]));
     {
       const current: CostStream[] = known ? streams.map((s) => ({ ...s, baseMonthly: s.baseMonthly as Cents })) : [];
       const rankOf = (offers: Offer[], usable?: Candidate['status'][]) =>
         rankOffers({ current, offers, replaces: () => MAIN(c), ctx: { zip: a.zip, facts: c === 'electricity' ? SOLAR_FACT_SET : undefined }, now, horizonMonths: 60, scenario, usableStatuses: usable });
       const real = cat.real.length ? rankOf(cat.real) : null;
       const samples = cat.samples.length ? rankOf(cat.samples, ['sample']) : null;
-      for (const cand of [...(real ? [...real.recommendable, ...real.needsVerification] : []), ...(samples ? samples.recommendable : [])]) {
+      // The benchmark only fills in when no real plan can be shown for this household.
+      const realUsable = real ? [...real.recommendable, ...real.needsVerification].some((x) => kindOf(x.status, x.eligible)) : false;
+      const bench = cat.benchmark && known && !realUsable ? rankOf([cat.benchmark], ['benchmark']) : null;
+      for (const cand of [...(real ? [...real.recommendable, ...real.needsVerification] : []), ...(bench ? bench.recommendable : []), ...(samples ? samples.recommendable : [])]) {
         const kind = kindOf(cand.status, cand.eligible);
         if (!kind) continue;
         const offer = offerById.get(cand.offerId)!;
@@ -292,6 +314,7 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
       );
       if (real?.recommendable.length) [lenses, lensKind] = [real.lenses, 'verified'];
       else if (real?.provisionalLenses.some((l) => l.offerId)) [lenses, lensKind] = [real.provisionalLenses, 'pending_address'];
+      else if (bench?.recommendable.length) [lenses, lensKind] = [bench.lenses, 'benchmark'];
       else if (samples?.recommendable.length) [lenses, lensKind] = [samples.lenses, 'sample'];
       if (!options.length && c !== 'electricity' && !cat.notes.length)
         notes.push(opts.includeSamples ? 'No alternatives found for this service.' : 'We don’t have verified prices to compare for this service in your area yet. An advisor can review this bill for you, free.');
@@ -332,7 +355,10 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
     });
   }
 
-  if (categories.some((c) => c.options.some((o) => o.estimate))) {
+  if (categories.some((c) => c.options.some((o) => o.kind === 'benchmark'))) {
+    globalNotes.push(`Where we have no real plan on file for your home, savings are an illustrative preview against Tucker’s comparison benchmarks. ${BENCHMARK_DISCLOSURE}`);
+  }
+  if (categories.some((c) => c.options.some((o) => o.estimate && o.kind !== 'benchmark'))) {
     globalNotes.push(
       'Solar figures are estimates, not quotes. Real savings depend on a site assessment, your actual usage, future utility rates and the final contract. No tax credits or incentives are included.',
     );
@@ -435,6 +461,6 @@ function toStream(offer: ReturnType<typeof offerSchema.parse>, kind: OptionKind)
     category: offer.category as Category,
     // Real prices are manually verified even when availability at the address isn't confirmed yet;
     // household-specific estimates (solar) stay estimates.
-    quality: kind === 'sample' || offer.pricing.quality === 'estimated' ? 'estimated' : 'manually_verified',
+    quality: kind === 'sample' || kind === 'benchmark' || offer.pricing.quality === 'estimated' ? 'estimated' : 'manually_verified',
   };
 }

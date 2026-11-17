@@ -73,13 +73,12 @@ describe('configuration', () => {
   const base = { NODE_ENV: 'production', SESSION_SECRET: 's'.repeat(40), ADMIN_EMAIL: 'a@example.com', ADMIN_PASSWORD_HASH: hashPassword('correct-horse-battery') };
 
   it('defaults to the live-site behaviour with no new variables', () => {
-    expect(loadConfig(base).flags).toEqual({ env: 'production', platform: false, sampleData: false });
+    expect(loadConfig(base).flags).toEqual({ env: 'production', platform: true, sampleData: false });
   });
 
   it('rejects unsafe or malformed settings', () => {
     expect(() => loadConfig({ ...base, SAMPLE_DATA_ENABLED: 'true' })).toThrow(/production/);
     expect(() => loadConfig({ ...base, APP_ENV: 'prod' })).toThrow(/APP_ENV/);
-    expect(() => loadConfig({ ...base, PLATFORM_ENABLED: 'yes' })).toThrow();
   });
 
   it('parses the staging email allow-list', () => {
@@ -89,5 +88,20 @@ describe('configuration', () => {
     expect(allowedOutsideProduction('anyone@example.com', c.email.nonProductionAllowlist)).toBe(true);
     expect(allowedOutsideProduction('customer@gmail.com', c.email.nonProductionAllowlist)).toBe(false);
     expect(allowedOutsideProduction('x@notexample.com', c.email.nonProductionAllowlist)).toBe(false);
+  });
+});
+
+describe('hero photo preload', () => {
+  it('is sent only on regional internet pages, never on the national home', async () => {
+    const { renderHtml } = await import('../server/html');
+    const { readFileSync } = await import('node:fs');
+    const { MONROE } = await import('../shared/market');
+    const template = readFileSync('index.html', 'utf8');
+    const boot = { market: MONROE, markets: [], defaultSlug: 'monroe', flags: { env: 'production' as const, platform: true, sampleData: false } };
+    const home = renderHtml(template, { siteUrl: 'https://trytucker.com', canonicalPath: '/', boot });
+    const regional = renderHtml(template, { siteUrl: 'https://trytucker.com', canonicalPath: '/internet/monroe', heroPreload: true, boot });
+    expect(home).not.toMatch(/poster-|hero-preload/);
+    expect(regional.match(/rel="preload" as="image"/g)).toHaveLength(2);
+    expect(home).toContain('<script type="application/json" id="boot-data">');
   });
 });

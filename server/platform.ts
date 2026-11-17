@@ -1,6 +1,5 @@
 /**
- * Parent-platform API (mounted at /api/platform; the caller 404s it unless
- * PLATFORM_ENABLED). Assessments contain no contact details; results are only
+ * Household savings API (mounted at /api/platform). Assessments contain no contact details; results are only
  * readable with the random token returned at submission (stored hashed).
  */
 import express from 'express';

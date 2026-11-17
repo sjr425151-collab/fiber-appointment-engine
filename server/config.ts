@@ -85,7 +85,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     if (v && !['true', 'false', '1', '0'].includes(v)) throw new Error(`${name} must be true or false`);
     return v === 'true' || v === '1';
   };
-  const flags: Flags = { env: appEnv, platform: flag('PLATFORM_ENABLED'), sampleData: flag('SAMPLE_DATA_ENABLED') };
+  // Tucker's household savings experience is the application, so `platform` is always on.
+  // (PLATFORM_ENABLED was the launch switch; it is no longer read.)
+  const flags: Flags = { env: appEnv, platform: true, sampleData: flag('SAMPLE_DATA_ENABLED') };
   if (flags.sampleData && appEnv === 'production') throw new Error('SAMPLE_DATA_ENABLED cannot be used when APP_ENV=production');
 
   return {

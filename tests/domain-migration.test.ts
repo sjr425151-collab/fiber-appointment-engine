@@ -42,7 +42,7 @@ describe('canonical domain', () => {
     const app = make(false);
     for (const [path, canonical] of [
       ['/', 'https://trytucker.com/'],
-      ['/savings', 'https://trytucker.com/savings'],
+      ['/internet/monroe', 'https://trytucker.com/internet/monroe'],
       ['/savings/assess', 'https://trytucker.com/savings/assess'],
       ['/privacy', 'https://trytucker.com/privacy'],
     ]) {
@@ -55,14 +55,11 @@ describe('canonical domain', () => {
     }
     const home = await get(app, 'trytucker.com', '/');
     expect(home.text).toContain('"url":"https://trytucker.com/"');
+    expect(home.text).toContain('content="https://trytucker.com/og-tucker.jpg"'); // Tucker's own share image, not the fiber one
+    expect((await get(app, 'trytucker.com', '/internet/monroe')).text).toContain('content="https://trytucker.com/og-monroe.jpg"');
     expect((await get(app, 'trytucker.com', '/robots.txt')).text).toContain('Sitemap: https://trytucker.com/sitemap.xml');
     const sitemap = (await get(app, 'trytucker.com', '/sitemap.xml')).text;
-    expect(sitemap.match(/<loc>[^<]+<\/loc>/g)).toEqual(['<loc>https://trytucker.com/</loc>', '<loc>https://trytucker.com/savings</loc>', '<loc>https://trytucker.com/savings/assess</loc>', '<loc>https://trytucker.com/privacy</loc>']);
-  });
-
-  it('lists the savings pages in the sitemap only where they are switched on', async () => {
-    const off = make(false, { flags: { env: 'production', platform: false, sampleData: false } });
-    expect((await get(off, 'trytucker.com', '/sitemap.xml')).text).not.toContain('/savings');
+    expect(sitemap.match(/<loc>[^<]+<\/loc>/g)).toEqual(['<loc>https://trytucker.com/</loc>', '<loc>https://trytucker.com/savings/assess</loc>', '<loc>https://trytucker.com/internet/monroe</loc>', '<loc>https://trytucker.com/privacy</loc>']);
   });
 
   it('sends www to the bare domain, keeping the path and query', async () => {
@@ -74,7 +71,7 @@ describe('canonical domain', () => {
   it('never redirects the canonical host, so there can be no loop', async () => {
     for (const on of [false, true]) {
       const app = make(on);
-      for (const path of ['/', '/savings', '/privacy', '/admin/login', '/robots.txt', '/sitemap.xml', '/api/health']) {
+      for (const path of ['/', '/savings/assess', '/internet/monroe', '/privacy', '/admin/login', '/robots.txt', '/sitemap.xml', '/api/health']) {
         const r = await get(app, 'trytucker.com', path);
         expect({ path, status: r.status, location: r.headers.location }).toEqual({ path, status: 200, location: undefined });
       }
@@ -86,8 +83,8 @@ describe('previous domain before the switch', () => {
   it('keeps serving every page, already pointing search engines at the new domain', async () => {
     const app = make(false);
     for (const host of LEGACY) {
-      const page = await get(app, host, '/savings?utm_source=old').expect(200);
-      expect(page.text).toContain('<link rel="canonical" href="https://trytucker.com/savings" />');
+      const page = await get(app, host, '/savings/assess?utm_source=old').expect(200);
+      expect(page.text).toContain('<link rel="canonical" href="https://trytucker.com/savings/assess" />');
     }
   });
 });
@@ -95,19 +92,34 @@ describe('previous domain before the switch', () => {
 describe('previous domain after the switch', () => {
   const app = () => make(true);
 
-  it('permanently redirects each page to the same path and query on the new domain', async () => {
+  it('permanently redirects each old URL to its Tucker destination in a single hop, keeping the query', async () => {
     const a = app();
+    const MAP: [string, string][] = [
+      ['/', '/'], // old homepage → Tucker homepage
+      ['/?utm_source=facebook&utm_campaign=monroe_launch', '/?utm_source=facebook&utm_campaign=monroe_launch'],
+      ['/monroe', '/internet/monroe'], // old location page → regional internet page
+      ['/monroe/?fbclid=X1', '/internet/monroe?fbclid=X1'],
+      ['/savings', '/'], // old savings home → Tucker homepage
+      ['/savings/assess?utm_source=facebook&fbclid=X1', '/savings/assess?utm_source=facebook&fbclid=X1'],
+      ['/savings/results/abc-123', '/savings/results/abc-123'], // private results links keep working
+      ['/privacy', '/privacy'],
+      ['/admin/login', '/admin/login'],
+      ['/sitemap.xml', '/sitemap.xml'],
+      ['/no-such-page?x=1', '/no-such-page?x=1'], // unknown stays unknown: it 404s on the new domain
+    ];
     for (const host of LEGACY) {
-      for (const path of ['/', '/savings', '/savings/assess?utm_source=facebook&fbclid=X1', '/savings/results/abc-123', '/monroe', '/privacy', '/admin/login', '/sitemap.xml', '/no-such-page?x=1']) {
-        const r = await get(a, host, path);
-        expect({ host, path, status: r.status, to: r.headers.location }).toEqual({ host, path, status: 301, to: `https://trytucker.com${path}` });
+      for (const [from, to] of MAP) {
+        const r = await get(a, host, from);
+        expect({ host, from, status: r.status, to: r.headers.location }).toEqual({ host, from, status: 301, to: `https://trytucker.com${to}` });
       }
     }
-    const r = await get(a, 'livefiberconnect.com', '/savings');
+    const r = await get(a, 'livefiberconnect.com', '/monroe');
     expect(r.headers['cache-control']).toBe('public, max-age=3600');
-    // The redirect target itself answers 200: a single hop, no chain.
-    const target = new URL(r.headers.location);
-    await get(a, target.hostname, target.pathname).expect(200);
+    // Every destination answers directly (no chain), and unknown pages are a real 404, not a homepage redirect.
+    for (const [, to] of MAP) {
+      const target = await get(a, 'trytucker.com', to);
+      expect({ to, status: target.status }).toEqual({ to, status: to.startsWith('/no-such-page') ? 404 : 200 });
+    }
   });
 
   it('cannot be steered to another site', async () => {
@@ -125,19 +137,51 @@ describe('previous domain after the switch', () => {
     await get(a, 'livefiberconnect.com', '/api/availability?zip=48161').expect(200);
     const post = await request(a).post('/api/leads').set('Host', 'livefiberconnect.com').send({});
     expect(post.status).toBe(400); // validated as usual, not redirected
-    const page = await request(a).post('/savings').set('Host', 'livefiberconnect.com');
+    const page = await request(a).post('/savings/assess').set('Host', 'livefiberconnect.com');
     expect(page.status).not.toBe(301);
   });
 
   it('ignores hosts it does not know (Render address, health checks, localhost)', async () => {
     const a = app();
-    for (const host of ['fiber-connect.onrender.com', 'localhost:3001', '10.0.0.5']) await get(a, host, '/savings').expect(200);
+    for (const host of ['fiber-connect.onrender.com', 'localhost:3001', '10.0.0.5']) await get(a, host, '/savings/assess').expect(200);
   });
 
   it('reads the public host behind the proxy', async () => {
     process.env.TRUST_PROXY = '1';
-    const r = await request(app()).get('/savings?a=1').set('Host', 'internal:10000').set('X-Forwarded-Host', 'livefiberconnect.com');
-    expect([r.status, r.headers.location]).toEqual([301, 'https://trytucker.com/savings?a=1']);
+    const r = await request(app()).get('/savings/assess?a=1').set('Host', 'internal:10000').set('X-Forwarded-Host', 'livefiberconnect.com');
+    expect([r.status, r.headers.location]).toEqual([301, 'https://trytucker.com/savings/assess?a=1']);
+  });
+});
+
+describe('retired URLs on the new domain', () => {
+  it('moves old paths to their replacements and gives a real 404 for everything else', async () => {
+    const a = make(false);
+    const moved: [string, string][] = [
+      ['/monroe', '/internet/monroe'],
+      ['/monroe?utm_source=x&b=2', '/internet/monroe?utm_source=x&b=2'],
+      ['/savings', '/'],
+      ['/savings/?ref=ad', '/?ref=ad'],
+      ['/internet', '/'],
+    ];
+    for (const [from, to] of moved) {
+      const r = await get(a, 'trytucker.com', from);
+      expect({ from, status: r.status, to: r.headers.location }).toEqual({ from, status: 301, to });
+    }
+    // Not every old-looking path goes to the homepage: unknown places and pages are 404s.
+    for (const path of ['/toledo', '/internet/toledo', '/internet/monroe/extra', '/savings/old-page', '/plans']) {
+      const r = await get(a, 'trytucker.com', path);
+      expect({ path, status: r.status }).toEqual({ path, status: 404 });
+      expect(r.text).toContain('content="noindex, nofollow"');
+    }
+    const regional = await get(a, 'trytucker.com', '/internet/monroe').expect(200);
+    expect(regional.text).toContain('<link rel="canonical" href="https://trytucker.com/internet/monroe" />');
+    expect(regional.text).toMatch(/<title>Omni Fiber Internet in Monroe, MI/); // regional SEO kept on the regional page only
+  });
+
+  it('never redirects form posts or the API on retired paths', async () => {
+    const a = make(false);
+    expect((await request(a).post('/savings').set('Host', 'trytucker.com')).status).not.toBe(301);
+    await get(a, 'trytucker.com', '/api/markets/monroe').expect(200);
   });
 });
 
@@ -157,8 +201,15 @@ describe('configuration safety', () => {
 
   it('does nothing if the canonical domain is itself listed as legacy', async () => {
     const stillOld = make(true, { siteUrl: 'https://livefiberconnect.com' });
-    await get(stillOld, 'livefiberconnect.com', '/savings').expect(200);
-    const r = await get(stillOld, 'www.livefiberconnect.com', '/savings').expect(301);
-    expect(r.headers.location).toBe('https://livefiberconnect.com/savings');
+    await get(stillOld, 'livefiberconnect.com', '/savings/assess').expect(200);
+    const r = await get(stillOld, 'www.livefiberconnect.com', '/savings/assess').expect(301);
+    expect(r.headers.location).toBe('https://livefiberconnect.com/savings/assess');
+  });
+
+  it('moves the www form of an old domain even when only the bare domain is listed', async () => {
+    const bareOnly = make(true, { domains: { legacyHosts: ['livefiberconnect.com'], legacyRedirects: true } });
+    const r = await get(bareOnly, 'www.livefiberconnect.com', '/privacy').expect(301);
+    expect(r.headers.location).toBe('https://trytucker.com/privacy');
+    await get(make(false, { domains: { legacyHosts: ['livefiberconnect.com'], legacyRedirects: false } }), 'www.livefiberconnect.com', '/privacy').expect(200);
   });
 });

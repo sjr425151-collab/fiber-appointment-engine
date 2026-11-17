@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { afterLoadIdle, isConstrained, prefersReducedMotion } from '../lib/motion';
+import { afterLoadIdle, isConstrained, prefersReducedMotion } from '../../lib/motion';
 
 const MOBILE_QUERY = '(max-width: 767px) and (orientation: portrait)';
 

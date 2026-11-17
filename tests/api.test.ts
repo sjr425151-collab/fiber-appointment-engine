@@ -324,12 +324,16 @@ describe('multi-location markets', () => {
     expect(row.consent_text).toContain('on behalf of Omni Fiber');
   });
 
-  it('lists active locations in the sitemap (default market at the root)', async () => {
+  it('lists the national pages and each active location’s regional page in the sitemap', async () => {
     await addToledo();
     const sitemap = (await request(app).get('/sitemap.xml')).text;
-    expect(sitemap).toContain('<loc>https://fiber.example.com/</loc>');
-    expect(sitemap).toContain('<loc>https://fiber.example.com/toledo</loc>');
-    expect(sitemap).not.toContain('/monroe</loc>');
+    expect(sitemap.match(/<loc>[^<]+<\/loc>/g)).toEqual([
+      '<loc>https://fiber.example.com/</loc>',
+      '<loc>https://fiber.example.com/savings/assess</loc>',
+      '<loc>https://fiber.example.com/internet/monroe</loc>',
+      '<loc>https://fiber.example.com/internet/toledo</loc>',
+      '<loc>https://fiber.example.com/privacy</loc>',
+    ]);
   });
 
   it('filters admin leads and CSV by location', async () => {

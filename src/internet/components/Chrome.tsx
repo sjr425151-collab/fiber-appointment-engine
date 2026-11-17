@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { BRAND, broadbandDisclosure, partnerDisclosure, place } from '../../../shared/content';
 import { track } from '../../lib/analytics';
 import { allMarkets, hasPhone, marketPath, useMarket } from '../../lib/market';
-import { Logo } from '../ui';
+import { Logo } from '../../components/ui';
 
 const YEAR = new Date().getFullYear();
 

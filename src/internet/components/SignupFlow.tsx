@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import type { AvailabilityResult, Slot } from '../../shared/schemas';
-import { consentText } from '../../shared/content';
-import { hasPhone, useMarket } from '../lib/market';
-import { api, ApiError, fmtCalendarDate, fmtDateTime, tzLabel } from '../lib/api';
-import { attribution, sessionId, track } from '../lib/analytics';
+import type { AvailabilityResult, Slot } from '../../../shared/schemas';
+import { consentText } from '../../../shared/content';
+import { hasPhone, useMarket } from '../../lib/market';
+import { api, ApiError, fmtCalendarDate, fmtDateTime, tzLabel } from '../../lib/api';
+import { attribution, sessionId, track } from '../../lib/analytics';
 import AvailabilityBanner from './AvailabilityBanner';
-import { Check, Field, Spinner } from './ui';
+import { Check, Field, Spinner } from '../../components/ui';
 
 type Step = 'details' | 'schedule' | 'done';
 

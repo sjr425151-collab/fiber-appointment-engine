@@ -88,45 +88,57 @@ describe('opportunities from an advisor request', () => {
     await contact(a, { selections: { gas: 'x' } }).expect(400);
   });
 
-  it('records a solar advisor request when no solar pricing is on file (production-like data)', async () => {
+  it('records a benchmark comparison as work for an advisor, never as an offer (production-like data)', async () => {
     setup(false);
-    const { body: a } = await submit({ zip: '48161', categories: ['electricity'], electricity: HOUSEHOLD.electricity }).expect(201);
-    expect(a.analysis.categories[0]).toMatchObject({ solar: 'advisor', options: [] });
+    const { body: a } = await submit({ zip: '60601', categories: ['electricity'], electricity: { ...HOUSEHOLD.electricity, monthlyCents: 26000 } }).expect(201);
+    expect(a.analysis.categories[0]).toMatchObject({ solar: 'estimated', selected: 'benchmark-electricity' });
     const c = await contact(a).expect(201);
     const [o] = repo.opportunitiesForLead(db, c.body.leadId);
-    expect(o).toMatchObject({ category: 'electricity', kind: 'advisor', planName: 'Solar estimate requested', currentMonthlyCents: 16000, monthlySavingsCents: null });
+    expect(o).toMatchObject({
+      category: 'electricity',
+      kind: 'advisor', // a real plan still has to be found and quoted
+      estimate: true,
+      planName: 'Tucker benchmark: electricity with solar',
+      currentMonthlyCents: 26000,
+      proposedMonthlyCents: 20000,
+      monthlySavingsCents: 6000,
+    });
+    // Benchmark figures never count toward the pipeline's real-offer savings.
+    const agent = await admin();
+    expect((await agent.get('/api/admin/opportunities')).body.stats.new).toEqual({ count: 1, monthlySavingsCents: 0 });
   });
 
-  it('turns categories with nothing verified into bill-review opportunities (production-like data)', async () => {
+  it('uses real plans where they exist and benchmarks elsewhere (production-like data)', async () => {
     setup(false);
     const { body: a } = await submit().expect(201);
+    // Monroe has real internet plans; mobile ($160 for 2 lines vs $90) uses the benchmark; electricity ($160) is below the $200 solar benchmark.
     expect(a.analysis.categories.map((c: { category: string; selected: string }) => [c.category, c.selected])).toEqual([
       ['internet', 'monroe-1-gig'],
-      ['mobile', 'review'],
-      ['electricity', 'review'],
+      ['mobile', 'benchmark-mobile'],
+      ['electricity', 'keep'],
     ]);
+    expect(a.analysis.projectionBasis).toBe('benchmark');
     const c = await contact(a, { street: '12 W Front St', city: 'Monroe' }).expect(201);
     expect(repo.opportunitiesForLead(db, c.body.leadId).map((o) => [o.category, o.planName, o.kind, o.monthlySavingsCents])).toEqual([
       ['internet', '1 Gig', 'pending_address', 5500],
-      ['mobile', 'Mobile phones bill review requested', 'advisor', null],
-      ['electricity', 'Solar estimate requested', 'advisor', null],
+      ['mobile', 'Tucker benchmark: mobile', 'advisor', 7000],
     ]);
     expect(repo.getLead(db, c.body.leadId)).toMatchObject({ street: '12 W Front St', city: 'Monroe' });
-    // The customer can opt out of a review.
+    // The customer can keep a service out of the request.
     const { body: b } = await submit().expect(201);
     const d = await contact(b, { selections: { mobile: 'keep' }, email: 'other@example.com' }).expect(201);
-    expect(repo.opportunitiesForLead(db, d.body.leadId).map((o) => o.category)).toEqual(['internet', 'electricity']);
+    expect(repo.opportunitiesForLead(db, d.body.leadId).map((o) => o.category)).toEqual(['internet']);
   });
 
   it('uses each location’s own plans, and explains "coming soon" areas', async () => {
     setup(false);
     // 48166 (Newport) is seeded as coming soon.
     const soon = (await submit({ zip: '48166', categories: ['internet'], internet: HOUSEHOLD.internet }).expect(201)).body;
-    expect(soon.analysis.categories[0]).toMatchObject({ options: [], selected: 'review' });
+    expect(soon.analysis.categories[0].options.map((o: { kind: string }) => o.kind)).toEqual(['benchmark']);
     expect(soon.analysis.categories[0].notes.join(' ')).toMatch(/Omni Fiber is coming to Newport but isn’t available to order yet/);
     // A ZIP nobody serves: no offers, generic note.
     const none = (await submit({ zip: '10001', categories: ['internet'], internet: HOUSEHOLD.internet }).expect(201)).body;
-    expect(none.analysis.categories[0].notes.join(' ')).toMatch(/don’t have verified prices to compare/);
+    expect(none.analysis.categories[0].options.map((o: { offerId: string }) => o.offerId)).toEqual(['benchmark-internet']);
     // Changing a location's prices in the admin changes new analyses, with no code change.
     const monroe = repo.getMarket(db, 'monroe')!;
     repo.saveMarket(db, { ...monroe, plans: [{ name: '1 Gig', speed: 'Fiber', price: '$60/mo', highlights: [] }] });
@@ -232,11 +244,13 @@ describe('authorization', () => {
     expect(bad1.body).toEqual(bad2.body);
   });
 
-  it('keeps the platform API closed when the platform is disabled', async () => {
-    const c = { ...cfg(false), flags: { env: 'production' as const, platform: false, sampleData: false } };
+  it('needs no feature switch: the savings API is part of the application in production', async () => {
+    const c = { ...cfg(false), flags: { env: 'production' as const, platform: true, sampleData: false } };
     const prodDb = openDatabase(':memory:');
     const prod = createApp(c, prodDb, { notifier: createNotifier(prodDb, c) });
-    await request(prod).post('/api/platform/assessments').send({ assessment: HOUSEHOLD }).expect(404);
+    const r = await request(prod).post('/api/platform/assessments').send({ assessment: HOUSEHOLD }).expect(201);
+    expect(r.body.analysis.includeSamples).toBe(false);
+    expect(JSON.stringify(r.body.analysis.categories)).not.toMatch(/"kind":"sample"/);
     await request(prod).post('/api/platform/assessments/x/contact').send({ ...CONTACT, token: 'x'.repeat(43) }).expect(404);
   });
 });

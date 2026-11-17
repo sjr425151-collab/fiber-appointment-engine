@@ -27,15 +27,15 @@
 | Flag | Default | Effect |
 |---|---|---|
 | `APP_ENV` | from `NODE_ENV` | `staging` or `development`: `noindex` on every page, robots.txt disallows all, staging banner |
-| `PLATFORM_ENABLED` | `false` | Serves `/savings/*` and `/api/platform/*`; otherwise both return 404 |
+| `PLATFORM_ENABLED` | retired | No longer read. The savings experience is always on (`15-consolidation.md`) |
 | `SAMPLE_DATA_ENABLED` | `false` | Adds illustrative offers labelled "Sample"; **the server refuses to start** with this set when `APP_ENV=production` |
 
-Production sets none of these, so it behaves exactly as before (tested).
+Production must never set `SAMPLE_DATA_ENABLED`; without it, categories with no real plan show labelled benchmarks.
 
 **Run staging locally:**
 ```bash
 npm run build
-NODE_ENV=production APP_ENV=staging PLATFORM_ENABLED=true SAMPLE_DATA_ENABLED=true \
+NODE_ENV=production APP_ENV=staging SAMPLE_DATA_ENABLED=true \
 PORT=3200 SITE_URL=http://localhost:3200 DATABASE_PATH=./staging.db \
 SESSION_SECRET=$(openssl rand -hex 32) ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='a-staging-only-password' \
 npx tsx server/index.ts

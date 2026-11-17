@@ -23,7 +23,7 @@ export const OPPORTUNITY_STATUS_LABEL: Record<OpportunityStatus, string> = {
  * - verified / pending_address / sample: an option the customer selected
  * - advisor: help requested without a priced option (e.g. solar with no program terms on file)
  */
-export type OpportunityKind = OptionKind | 'advisor';
+export type OpportunityKind = Exclude<OptionKind, 'benchmark'> | 'advisor';
 
 export interface OpportunityDraft {
   /** A platform category, or "household" for a general review. */
@@ -52,8 +52,9 @@ export function opportunitiesFrom(analysis: PlatformAnalysis): OpportunityDraft[
         category: c.category,
         offerId: o.offerId,
         planName: o.planName,
-        kind: o.kind,
-        estimate: !!o.estimate,
+        // A benchmark is not an offer: the advisor still has to find and quote a real plan.
+        kind: o.kind === 'benchmark' ? 'advisor' : o.kind,
+        estimate: !!o.estimate || o.kind === 'benchmark',
         currentMonthlyCents: c.currentMonthly,
         proposedMonthlyCents: o.monthlyPrice,
         monthlySavingsCents: o.candidate.steadyMonthlySavings,

@@ -1,9 +1,9 @@
 import './platform.css';
 import { lazy, Suspense, useEffect, type ReactNode } from 'react';
-import { Link, Route, Routes } from 'react-router-dom';
+import { Link, Navigate, Route, Routes } from 'react-router-dom';
 import { PLATFORM } from '../../shared/platform/brand';
 import { bootFlags } from '../lib/market';
-import { Wordmark } from '../components/ui';
+import { Mark, Wordmark } from '../components/ui';
 
 const Home = lazy(() => import('./pages/Home'));
 const Assess = lazy(() => import('./pages/Assess'));
@@ -25,17 +25,15 @@ function Shell({ children }: { children: ReactNode }) {
           </div>
         )}
         <nav aria-label="Main" className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:gap-4 sm:px-6">
-          <Link to="/savings" className="flex min-w-0 items-center gap-2 font-display text-base font-bold text-pf-ink sm:text-lg">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-pf-ink text-sm text-white" aria-hidden>
-              ¢
-            </span>
+          <Link to="/" className="flex min-w-0 items-center gap-2 font-display text-base font-bold text-pf-ink sm:text-lg">
+            <Mark />
             <Wordmark />
           </Link>
           <div className="flex shrink-0 items-center gap-1 text-sm sm:gap-4">
-            <a href="/savings#how" className="hidden rounded-lg px-2 py-2 text-pf-muted hover:text-pf-ink sm:inline">
+            <a href="/#how" className="hidden rounded-lg px-2 py-2 text-pf-muted hover:text-pf-ink sm:inline">
               How it works
             </a>
-            <a href="/savings#data" className="hidden rounded-lg px-2 py-2 text-pf-muted hover:text-pf-ink md:inline">
+            <a href="/#data" className="hidden rounded-lg px-2 py-2 text-pf-muted hover:text-pf-ink md:inline">
               Our data
             </a>
             <Link to="/savings/assess" className="inline-flex min-h-11 items-center rounded-xl bg-pf-brand px-3 font-semibold sm:px-4 text-white hover:bg-pf-brand-strong">
@@ -75,31 +73,35 @@ function Shell({ children }: { children: ReactNode }) {
 
 function NotFound() {
   useEffect(() => {
-    document.title = 'Page not found';
+    document.title = `Page not found – ${PLATFORM.name}`;
   }, []);
   return (
-    <div className="pf grid min-h-screen place-items-center px-4 text-center">
-      <div>
-        <h1 className="font-display text-3xl font-bold text-pf-ink">Page not found</h1>
-        <a href="/" className="mt-6 inline-flex min-h-11 items-center rounded-xl bg-pf-brand px-5 font-semibold text-white">
+    <div className="mx-auto max-w-xl px-4 py-20 text-center">
+      <h1 className="font-display text-3xl font-bold text-pf-ink">We can’t find that page</h1>
+      <p className="mt-3 text-pf-muted">The link may be old or mistyped. Your savings preview is one tap away.</p>
+      <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+        <Link to="/" className="inline-flex min-h-11 items-center justify-center rounded-xl bg-pf-brand px-5 font-semibold text-white hover:bg-pf-brand-strong">
           Go to the home page
-        </a>
+        </Link>
+        <Link to="/savings/assess" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-pf-field px-5 font-semibold text-pf-ink hover:bg-pf-surface">
+          Start my savings preview
+        </Link>
       </div>
     </div>
   );
 }
 
-/** Parent platform. Renders nothing unless the server enabled it (production: off). */
+/** Tucker: the home page, the savings preview and results, and the not-found page. */
 export default function PlatformApp() {
-  if (!bootFlags().platform) return <NotFound />;
   return (
     <Shell>
       <Routes>
         <Route index element={<Home />} />
-        <Route path="assess" element={<Assess />} />
-        <Route path="results/:id" element={<Results />} />
-        <Route path="design" element={<DesignSystem />} />
-        <Route path="*" element={<Home />} />
+        <Route path="savings" element={<Navigate to="/" replace />} />
+        <Route path="savings/assess" element={<Assess />} />
+        <Route path="savings/results/:id" element={<Results />} />
+        <Route path="savings/design" element={<DesignSystem />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </Shell>
   );

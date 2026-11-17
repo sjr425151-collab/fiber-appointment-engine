@@ -133,12 +133,12 @@ export function createNotifier(db: DB, config: AppConfig, mailer: Mailer = maile
           uid: `${appt.id}@fiber-connect`,
           startUtc: appt.startUtc,
           endUtc: appt.endUtc,
-          summary: `Free fiber consultation (${market.provider})`,
-          description: `Your free consultation with ${BRAND.name} (${market.name}).${market.phoneDisplay ? ` Questions? Call or text ${market.phoneDisplay}.` : ''}`,
+          summary: lead.source === 'platform_assessment' ? `Savings review with ${BRAND.name}` : `Free fiber consultation (${market.provider})`,
+          description: `Your free ${lead.source === 'platform_assessment' ? 'savings review' : 'consultation'} with ${BRAND.name}${lead.source === 'platform_assessment' ? '' : ` (${market.name})`}.${market.phoneDisplay ? ` Questions? Call or text ${market.phoneDisplay}.` : ''}`,
           location: [lead.street, lead.unit, `${lead.city}, ${market.state} ${lead.zip}`].filter(Boolean).join(', '),
         });
         return forCustomer(t.customerConfirmation(lead, appt, market), {
-          attachments: [{ filename: 'fiber-consultation.ics', content: Buffer.from(ics).toString('base64') }],
+          attachments: [{ filename: lead.source === 'platform_assessment' ? 'tucker-savings-review.ics' : 'fiber-consultation.ics', content: Buffer.from(ics).toString('base64') }],
         });
       }
       case 'customer_reminder':

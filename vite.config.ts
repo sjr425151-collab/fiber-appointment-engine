@@ -25,7 +25,7 @@ function seoHead(): Plugin {
             market: MONROE,
             markets: [{ slug: MONROE.slug, name: MONROE.name, state: MONROE.state }],
             defaultSlug: MONROE.slug,
-            flags: { env: 'development', platform: process.env.PLATFORM_ENABLED === 'true', sampleData: process.env.SAMPLE_DATA_ENABLED === 'true' },
+            flags: { env: 'development', platform: true, sampleData: process.env.SAMPLE_DATA_ENABLED === 'true' },
           },
         });
       }

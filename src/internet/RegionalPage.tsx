@@ -7,13 +7,13 @@ import { MarketProvider, marketPath, useMarket, useMarketState } from '../lib/ma
 import { api, ApiError } from '../lib/api';
 import { attribution, track } from '../lib/analytics';
 import { attachParallax } from '../lib/motion';
-import HeroMedia from '../components/HeroMedia';
-import AvailabilityBanner from '../components/AvailabilityBanner';
-import { CallButton, MobileCtaBar, SiteFooter, SiteHeader, TextButton } from '../components/landing/Chrome';
-import { bootFlags, hasPhone } from '../lib/market';
+import HeroMedia from './components/HeroMedia';
+import AvailabilityBanner from './components/AvailabilityBanner';
+import { CallButton, MobileCtaBar, SiteFooter, SiteHeader, TextButton } from './components/Chrome';
+import { hasPhone } from '../lib/market';
 import { Check, Spinner } from '../components/ui';
 
-const SignupFlow = lazy(() => import('../components/SignupFlow'));
+const SignupFlow = lazy(() => import('./components/SignupFlow'));
 
 const trust = (city: string) => ['Free consultation', 'No obligation', `Local ${city} specialists`, 'Confirmed address by address'];
 
@@ -318,7 +318,7 @@ function LandingPage() {
         </section>
 
         {/* ------------------------------------- whole-household savings -- */}
-        {bootFlags().platform && (
+        {(
           <section aria-labelledby="savings-title" className="border-t border-white/10 bg-ink-900/60 px-4 py-14 sm:px-6">
             <div className="mx-auto flex max-w-6xl flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
               <div className="max-w-2xl">
@@ -329,7 +329,7 @@ function LandingPage() {
                   Add what you pay for internet, mobile, TV and electricity. In about 3 minutes you’ll see where your money goes, real options where we can verify them, and a free advisor review for the rest.
                 </p>
               </div>
-              <a href="/savings" onClick={() => track('cta_click', { location: 'landing_savings' })} className="btn-primary shrink-0 justify-center">
+              <a href="/" onClick={() => track('cta_click', { location: 'landing_savings' })} className="btn-primary shrink-0 justify-center">
                 Analyze my household bills
               </a>
             </div>

@@ -2,6 +2,8 @@
 
 The product is the household bill optimization and service brokerage platform. This page is the short map; details live in the other docs.
 
+> **Superseded in part (2026-11-17):** the name is now Tucker, the homepage is the national savings home, and the fiber page lives at `/internet/<location>`. "Build next" items 2 and 4 are done. See `15-consolidation.md`.
+
 ## Functional today
 
 | Piece | Status |

@@ -3,6 +3,8 @@ import { assessmentSchema, type AssessmentInput } from '../shared/platform/asses
 import { buildAnalysis, currentStreamsFor } from '../shared/platform/analysis';
 import { estimateSolar, SAMPLE_SOLAR_PROGRAMS, SOLAR_PROGRAMS, solarOffer } from '../shared/platform/solar';
 import { projectStream, ASSUMPTIONS_V1 } from '../shared/finance/engine';
+import { BENCHMARKS, benchmarkMonthly, benchmarkOffer, quickPreview } from '../shared/platform/benchmarks';
+import { publicStatus } from '../shared/offers/model';
 import { offersFromMarket, parseMonthlyPrice, parseSpeedMbps, pricingHealth } from '../shared/platform/market-offers';
 
 const AT = '2026-11-16T12:00:00.000Z';
@@ -59,21 +61,22 @@ describe('real offers (Monroe pilot, no samples)', () => {
 
   it('downgrades stale offers automatically (data verified > 30 days before the analysis)', () => {
     const later = buildAnalysis(a, { includeSamples: false, computedAt: '2027-01-30T00:00:00.000Z' });
-    expect(later.categories[0].options).toEqual([]);
-    // Nothing verified left to compare → the default becomes a free advisor review.
-    expect(later.categories[0].selected).toBe('review');
+    // The stale plans are gone; the household is compared with the benchmark instead.
+    expect(later.categories[0].options.map((o) => o.kind)).toEqual(['benchmark']);
+    expect(later.categories[0].selected).toBe('benchmark-internet');
   });
 });
 
 describe('outside covered areas', () => {
   it('without samples: no alternatives, an honest note, current spend still analysed', () => {
     const r = buildAnalysis(parse({ zip: '10001', categories: ['internet'], internet: internet() }), { includeSamples: false, computedAt: AT });
-    expect(r.categories[0].options).toEqual([]);
-    expect(r.categories[0].notes.join(' ')).toMatch(/don’t have verified prices to compare.*advisor can review this bill/);
-    expect(r.categories[0].selected).toBe('review');
-    expect(r.opportunities).toEqual([]); // a review request is never counted as savings
+    // No real plan on file → an illustrative comparison with the $55 benchmark, labelled as such.
+    expect(r.categories[0].options.map((o) => [o.kind, o.monthlyPrice, o.estimate])).toEqual([['benchmark', 5500, true]]);
+    expect(r.categories[0].selected).toBe('benchmark-internet');
+    expect(r.opportunities).toEqual([{ category: 'internet', label: 'Home internet', monthlySavings: 10500 - 5500, kind: 'benchmark' }]);
+    expect(r.notes.join(' ')).toMatch(/illustrative preview against Tucker’s comparison benchmarks.*not offers or guarantees/);
     expect(r.status).toBe('complete');
-    expect(r.projectionBasis).toBe('current_only');
+    expect(r.projectionBasis).toBe('benchmark');
   });
 
   it('with samples: every option is labelled sample and the projection basis says so', () => {
@@ -136,15 +139,22 @@ describe('incomplete inputs, energy and solar', () => {
     expect(r.household!.scenarios[0].months[0].savings).toBe(16000 - 11360);
   });
 
-  it('never shows a solar number in production without real program terms', () => {
+  it('without real program terms, compares electricity only with the labelled $200 solar benchmark', () => {
     expect(SOLAR_PROGRAMS).toEqual([]);
-    const r = buildAnalysis(elec(), { includeSamples: false, computedAt: AT });
-    const e = r.categories[0];
-    expect(e.options).toEqual([]);
-    expect(e.solar).toBe('advisor');
-    expect(e.selected).toBe('review');
-    expect(r.opportunities).toEqual([]);
-    expect(e.notes.join(' ')).toMatch(/advisor can prepare a free site-specific estimate/);
+    // $160 bill: the benchmark costs more, so it is shown but not selected and no saving is claimed.
+    const low = buildAnalysis(elec(), { includeSamples: false, computedAt: AT });
+    expect(low.categories[0].options.map((o) => [o.kind, o.monthlyPrice, o.estimate])).toEqual([['benchmark', 20000, true]]);
+    expect(low.categories[0].selected).toBe('keep');
+    expect(low.opportunities).toEqual([]);
+    // $260 bill: an illustrative $60 a month, with the basis spelled out.
+    const high = buildAnalysis(elec({ monthlyCents: 26000 }), { includeSamples: false, computedAt: AT });
+    const e = high.categories[0];
+    expect(e.selected).toBe('benchmark-electricity');
+    expect(e.options[0].candidate.steadyMonthlySavings).toBe(6000);
+    expect(e.options[0].assumptions.join(' ')).toMatch(/Illustrative: compares your bill with \$200 a month.*site assessment.*not offers or guarantees/);
+    expect(high.projectionBasis).toBe('benchmark');
+    // Renters and shaded roofs still get an explanation, never a number.
+    expect(buildAnalysis(elec({ homeownership: 'rent', monthlyCents: 26000 }), { includeSamples: false, computedAt: AT }).categories[0].options).toEqual([]);
   });
 
   it('explains when solar does not apply instead of estimating', () => {
@@ -235,7 +245,10 @@ describe('offers from admin-managed locations', () => {
     ]);
     expect(net.selected).toBe('toledo-500-mbps');
     expect(net.options[0].candidate.steadyMonthlySavings).toBe(9500 + 1500 - 6500);
-    expect(mobile).toMatchObject({ options: [], selected: 'review' });
+    // Mobile has no real plan: benchmark of $45 × 3 lines = $135, which is more than they pay, so nothing is pre-selected.
+    expect(mobile.options.map((o) => [o.kind, o.monthlyPrice])).toEqual([['benchmark', 13500]]);
+    expect(mobile.selected).toBe('keep');
+    expect(net.options.some((o) => o.kind === 'benchmark')).toBe(false); // a real plan always replaces the benchmark
     expect(mobile.insights).toEqual(['That’s $40.00 per line for 3 lines.']);
     expect(net.insights).toEqual(['Equipment rental costs you $180 a year.']);
     expect(r.catalog?.internet).toHaveLength(2); // stored with the snapshot for later recalculation
@@ -247,11 +260,11 @@ describe('offers from admin-managed locations', () => {
 
   it('hides prices with no readable verification date, and never falls back to built-in data', () => {
     const unverified = offersFromMarket({ ...toledo, plansVerifiedOn: 'last week' }, ['43604']);
-    expect(buildAnalysis(a, { includeSamples: false, computedAt: AT, catalog: { internet: unverified } }).categories[0].options).toEqual([]);
+    expect(buildAnalysis(a, { includeSamples: false, computedAt: AT, catalog: { internet: unverified } }).categories[0].options.map((o) => o.kind)).toEqual(['benchmark']);
     // Monroe ZIP with an empty catalog: the pilot data must not leak in.
     const monroe = parse({ zip: '48161', categories: ['internet'], internet: internet() });
     const r = buildAnalysis(monroe, { includeSamples: false, computedAt: AT, catalog: { internet: [], internetNote: 'Coming soon note' } });
-    expect(r.categories[0].options).toEqual([]);
+    expect(r.categories[0].options.map((o) => o.offerId)).toEqual(['benchmark-internet']);
     expect(r.categories[0].notes).toContain('Coming soon note');
     expect(r.categories[0].notes.join(' ')).not.toMatch(/don’t have verified prices/);
   });
@@ -266,5 +279,52 @@ describe('price freshness warnings for the team', () => {
     expect(pricingHealth(m('November 15, 2026'), at('2026-12-20T12:00:00Z')).state).toBe('hidden');
     expect(pricingHealth(m(''), at('2026-11-16T12:00:00Z')).state).toBe('hidden');
     expect(pricingHealth(m('November 15, 2026', 'Call us'), at('2026-11-16T12:00:00Z')).state).toBe('none');
+  });
+});
+
+describe('comparison benchmarks', () => {
+  it('holds the owner-set values exactly, in cents', () => {
+    expect(BENCHMARKS).toEqual({ internetMonthly: 5500, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000 });
+    expect([benchmarkMonthly('mobile', { mobileLines: 1 }), benchmarkMonthly('mobile', { mobileLines: 4 }), benchmarkMonthly('mobile', { mobileLines: 99 }), benchmarkMonthly('mobile', {})]).toEqual([4500, 18000, 45000, 4500]);
+  });
+
+  it('gives the home-page preview the same differences as the full analysis', () => {
+    const quick = quickPreview({ internet: 9500, mobile: 19000, mobileLines: 3, tv: 12000, electricity: 26000, ownsHome: true });
+    expect(quick.rows.map((r) => [r.category, r.benchmark, r.savings])).toEqual([
+      ['internet', 5500, 4000],
+      ['mobile', 13500, 5500],
+      ['tv', 7500, 4500],
+      ['electricity', 20000, 6000],
+    ]);
+    expect([quick.currentMonthly, quick.monthlySavings, quick.annualSavings]).toEqual([66500, 20000, 240000]);
+    const full = buildAnalysis(
+      parse({
+        zip: '60601',
+        categories: ['internet', 'mobile', 'tv', 'electricity'],
+        internet: { monthlyCents: 9500 },
+        mobile: { monthlyCents: 19000, lines: 3 },
+        tv: { monthlyCents: 12000 },
+        electricity: { monthlyCents: 26000, homeownership: 'own' },
+      }),
+      { includeSamples: false, computedAt: AT, catalog: { internet: [] } },
+    );
+    expect(full.opportunities.reduce((s, o) => s + o.monthlySavings, 0)).toBe(quick.monthlySavings);
+    expect(full.opportunities.every((o) => o.kind === 'benchmark')).toBe(true);
+  });
+
+  it('never shows savings for a bill at or below the benchmark, skips empty bills, and compares solar only for owners', () => {
+    const q = quickPreview({ internet: 4000, mobile: null, tv: 0, electricity: 30000, ownsHome: false });
+    expect(q.rows).toEqual([
+      { category: 'internet', current: 4000, benchmark: 5500, savings: 0 },
+      { category: 'electricity', current: 30000, benchmark: null, savings: 0, note: 'Solar is compared for homeowners.' },
+    ]);
+    expect(q.monthlySavings).toBe(0);
+    expect(quickPreview({}).rows).toEqual([]);
+  });
+
+  it('can only ever be labelled a benchmark', () => {
+    const offer = benchmarkOffer('tv');
+    expect(publicStatus(offer, new Date(AT))).toEqual({ status: 'benchmark', reasons: ['Comparison benchmark, not an offer'] });
+    expect(publicStatus({ ...offer, provenance: { ...offer.provenance, review: 'verified' } }, new Date('2030-01-01'))).toMatchObject({ status: 'benchmark' });
   });
 });
