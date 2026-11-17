@@ -12,7 +12,7 @@ export const SERVICE_LABEL: Record<ChatService, string> = { internet: 'home inte
 
 export const QUICK_START = ['Internet', 'Phone', 'TV & Streaming', 'Electricity', 'Review all my bills'] as const;
 
-export const WELCOME = 'Hey! I’m Tucker’s AI assistant. 👋\n\nI can show how your internet, phone, TV or electric bills compare with Tucker’s illustrative prices. What would you like to look at first?';
+export const WELCOME = 'Hey! I’m Tucker’s AI assistant. 👋\n\nI can help you see if you’re overspending on internet, phone, TV or electric bills. Which one would you like to check first?';
 
 export type Step = 'start' | 'ask' | 'home' | 'extras' | 'preview' | 'handoff';
 

@@ -9,13 +9,15 @@ export const PLATFORM = {
   name: BRAND.name,
   operator: BRAND.agency,
   descriptor: 'Your home service savings broker.',
-  tagline: 'See what your household pays for internet, mobile, TV and electricity — and what you could pay instead.',
+  /** The brand line above the homepage headline. */
+  promise: 'Tuck more money away with Tucker',
+  tagline: 'See if you’re overspending on internet, mobile, TV, electricity and home security, and what you could pay instead.',
 };
 
 export const PLATFORM_META = {
-  title: `${PLATFORM.name} | Preview Potential Savings on Your Household Bills`,
+  title: `${PLATFORM.name} | See If You’re Overspending on Household Bills`,
   description:
-    'See how your internet, mobile, TV and electricity bills compare with Tucker’s illustrative benchmarks. Explore potential household savings and discover available options.',
+    'See if you’re overspending on internet, mobile, TV, electricity and home security. A free one-minute savings preview, no contact details needed. Results vary.',
 };
 
 /** Share image for Tucker's own pages (regional internet pages keep theirs). */
@@ -32,7 +34,7 @@ export const HOME_FAQ: { q: string; a: string }[] = [
   },
   {
     q: 'What are the benchmarks?',
-    a: 'Four comparison prices Tucker uses for every household: one each for home internet, mobile (per line, not counting phone payments), TV and streaming, and electricity with solar. They are planning assumptions, not quotes from any provider.',
+    a: 'Comparison prices Tucker uses for every household: one each for home internet, mobile (per line, not counting phone payments), TV and streaming, and, for homeowners who ask, electricity with solar and home security monitoring. They are planning assumptions, not quotes from any provider.',
   },
   {
     q: 'Do I need to give my contact details to see my preview?',

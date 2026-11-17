@@ -251,9 +251,9 @@ export default function Home() {
       <section className="border-b border-pf-line bg-pf-surface">
         <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1.15fr_1fr] lg:items-start lg:py-16">
           <div className="lg:pt-6">
-            <p className="font-display text-sm font-bold uppercase tracking-wide text-pf-brand">{PLATFORM.descriptor}</p>
+            <p className="font-display text-sm font-bold uppercase tracking-wide text-pf-brand">{PLATFORM.promise}</p>
             <h1 className="mt-3 font-display text-4xl font-bold leading-tight tracking-tight text-pf-ink sm:text-5xl">See if your household could save 50% or more on monthly bills.</h1>
-            <p className="mt-5 max-w-xl text-lg text-pf-muted">Internet, mobile, TV and electricity in one quick check. We compare, we help, you choose. No account, no pressure and no guaranteed-savings claims.</p>
+            <p className="mt-5 max-w-xl text-lg text-pf-muted">Tucker is your home service savings broker. Internet, mobile, TV, electricity and home security in one quick check. We compare, we help, you choose, with no account and no pressure.</p>
             <p className="mt-3 max-w-xl text-sm text-pf-subtle">Results vary and many households will save less. Figures are illustrative comparisons, not offers or guarantees.</p>
             <ul className="mt-6 space-y-2 text-pf-ink">
               {['Free, and takes about a minute', 'No contact details to see your preview', 'Every number labelled by where it came from'].map((t) => (
@@ -275,7 +275,7 @@ export default function Home() {
 
       <section aria-labelledby="cats" className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
         <h2 id="cats" className="font-display text-2xl font-bold text-pf-ink sm:text-3xl">
-          Four bills, one check
+          Every household bill, one check
         </h2>
         <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {categories(set).map((c) => (
@@ -327,6 +327,20 @@ export default function Home() {
             </div>
           ))}
         </dl>
+      </section>
+
+      <section aria-labelledby="close-t" className="border-t border-pf-line bg-pf-brand-soft">
+        <div className="mx-auto flex max-w-6xl flex-col items-start gap-4 px-4 py-12 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div>
+            <h2 id="close-t" className="font-display text-2xl font-bold text-pf-ink sm:text-3xl">
+              See if you’re overspending.
+            </h2>
+            <p className="mt-1 text-pf-muted">Free, takes about a minute, and no contact details needed.</p>
+          </div>
+          <a href="#preview" onClick={() => track('cta_click', { location: 'pf_closing' })} className="inline-flex min-h-12 items-center rounded-xl bg-pf-brand px-6 font-semibold text-white hover:bg-pf-brand-strong">
+            {PRIMARY_CTA}
+          </a>
+        </div>
       </section>
     </>
   );

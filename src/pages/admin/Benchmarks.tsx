@@ -1,5 +1,5 @@
 /**
- * National benchmarks: the four comparison prices behind every savings
+ * National benchmarks: the comparison prices behind every savings
  * preview. Publishing creates a new version; results already saved keep the
  * values they were calculated with.
  */

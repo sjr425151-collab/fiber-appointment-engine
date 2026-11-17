@@ -26,7 +26,7 @@ describe('national home', () => {
     await p.getByRole('heading', { level: 1, name: /See if your household could save 50% or more on monthly bills/ }).waitFor();
     expect(await p.locator('main').innerText()).toMatch(/Results vary and many households will save less/);
     expect(await p.getByRole('heading', { name: 'Type what you pay. We’ll find a smarter option.' }).count()).toBe(1);
-    expect(await p.title()).toBe('Tucker | Preview Potential Savings on Your Household Bills');
+    expect(await p.title()).toBe('Tucker | See If You’re Overspending on Household Bills');
     expect(await p.locator('link[rel=canonical]').getAttribute('href')).toBe(`${LIVE}/`);
     expect(await p.locator('meta[property="og:image"]').getAttribute('content')).toBe(`${LIVE}/og-tucker.jpg`);
     const text = (await p.locator('body').innerText()) ?? '';
