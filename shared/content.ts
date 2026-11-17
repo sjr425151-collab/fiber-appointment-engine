@@ -16,7 +16,7 @@ export const BRAND = {
    * Public phone number shown in the site header (tap to call), as 10 digits.
    * Empty = no number is shown. Only use a number that is answered for Tucker.
    */
-  phone: '',
+  phone: '7347311946',
 };
 
 export const CONSENT_VERSION = '2026-11-15';

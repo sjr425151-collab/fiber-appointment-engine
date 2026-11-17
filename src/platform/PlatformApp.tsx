@@ -53,7 +53,9 @@ function Shell({ children }: { children: ReactNode }) {
               </a>
             )}
             <a href="/#preview" className="inline-flex min-h-11 items-center rounded-xl bg-pf-brand px-4 text-[15px] font-semibold text-white shadow-sm transition-colors hover:bg-pf-brand-strong sm:px-5">
-              {HEADER_CTA}
+              {/* Phones: the short form, so logo, call button and this button fit even at 320px. */}
+              <span className="sm:hidden">Free review</span>
+              <span className="hidden sm:inline">{HEADER_CTA}</span>
             </a>
           </div>
         </nav>
