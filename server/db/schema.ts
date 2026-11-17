@@ -688,6 +688,89 @@ export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
       CREATE UNIQUE INDEX idx_chat_messages_client ON chat_messages(session_id, client_id) WHERE client_id IS NOT NULL;
     `,
   },
+  {
+    id: 13,
+    name: 'agent_workspace',
+    sql: `
+      -- The five separate facts about a lead (see shared/team/workspace.ts), plus
+      -- editable contact extras and a version number for safe concurrent edits.
+      ALTER TABLE leads ADD COLUMN preferred_name     TEXT NOT NULL DEFAULT '';
+      ALTER TABLE leads ADD COLUMN household_notes    TEXT NOT NULL DEFAULT '';
+      ALTER TABLE leads ADD COLUMN disposition        TEXT NOT NULL DEFAULT '';
+      ALTER TABLE leads ADD COLUMN disposition_at     TEXT;
+      ALTER TABLE leads ADD COLUMN qualification      TEXT NOT NULL DEFAULT 'unknown';
+      ALTER TABLE leads ADD COLUMN qualified_at       TEXT;
+      ALTER TABLE leads ADD COLUMN outcome            TEXT NOT NULL DEFAULT '';
+      ALTER TABLE leads ADD COLUMN outcome_at         TEXT;
+      ALTER TABLE leads ADD COLUMN do_not_contact     INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE leads ADD COLUMN next_follow_up_at  TEXT;
+      ALTER TABLE leads ADD COLUMN last_activity_at   TEXT;
+      ALTER TABLE leads ADD COLUMN version            INTEGER NOT NULL DEFAULT 1;
+      CREATE INDEX idx_leads_followup ON leads(assigned_rep_id, next_follow_up_at);
+      CREATE INDEX idx_leads_disposition ON leads(disposition);
+      CREATE INDEX idx_leads_email ON leads(email);
+
+      -- Existing leads: closed stages get a Lost outcome; qualification follows the stage and its history.
+      -- Converted or installed leads are NOT marked won: no verification was recorded for them.
+      UPDATE leads SET outcome = 'lost', outcome_at = updated_at WHERE status IN ('not_interested','unserviceable','lost');
+      UPDATE leads SET qualification = 'qualified',
+        qualified_at = COALESCE((SELECT MIN(h.created_at) FROM lead_history h WHERE h.lead_id = leads.id AND h.kind = 'status' AND h.to_value = 'qualified'), updated_at)
+        WHERE status IN ('qualified','sold','install_scheduled','installed');
+      UPDATE leads SET last_activity_at = updated_at;
+
+      -- Everything that happens to a lead that is not already in lead_history: dispositions,
+      -- contact edits, notes, follow-ups, reopenings. Append-only; request_id makes repeats harmless.
+      CREATE TABLE lead_events (
+        id          TEXT PRIMARY KEY,
+        lead_id     TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        kind        TEXT NOT NULL,
+        code        TEXT NOT NULL DEFAULT '',
+        title       TEXT NOT NULL,
+        detail      TEXT NOT NULL DEFAULT '',
+        actor       TEXT NOT NULL,
+        actor_type  TEXT NOT NULL DEFAULT 'user' CHECK (actor_type IN ('user','system')),
+        request_id  TEXT,
+        created_at  TEXT NOT NULL
+      );
+      CREATE INDEX idx_lead_events_lead ON lead_events(lead_id, created_at);
+      CREATE INDEX idx_lead_events_kind ON lead_events(kind, code, created_at);
+      CREATE UNIQUE INDEX idx_lead_events_request ON lead_events(lead_id, request_id) WHERE request_id IS NOT NULL;
+      CREATE TRIGGER lead_events_no_update BEFORE UPDATE ON lead_events BEGIN SELECT RAISE(ABORT, 'lead events are append-only'); END;
+
+      -- Notes: categories, pinning, edits and archiving (never deleted). System lines are told apart from people's notes.
+      ALTER TABLE lead_notes ADD COLUMN kind         TEXT NOT NULL DEFAULT 'note';
+      ALTER TABLE lead_notes ADD COLUMN category     TEXT NOT NULL DEFAULT 'general';
+      ALTER TABLE lead_notes ADD COLUMN pinned       INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE lead_notes ADD COLUMN edited_at    TEXT;
+      ALTER TABLE lead_notes ADD COLUMN edited_by    TEXT NOT NULL DEFAULT '';
+      ALTER TABLE lead_notes ADD COLUMN archived_at  TEXT;
+      ALTER TABLE lead_notes ADD COLUMN archived_by  TEXT NOT NULL DEFAULT '';
+      UPDATE lead_notes SET kind = 'system' WHERE author = 'system' OR body LIKE 'Status changed:%' OR body LIKE 'Assigned to %' OR body LIKE 'Not assigned %'
+        OR body LIKE 'Opportunity %' OR body LIKE 'Submitted the form again%' OR body LIKE 'Repeat submission%';
+
+      -- Follow-ups: type, priority, notes and the time zone they were scheduled in.
+      ALTER TABLE tasks ADD COLUMN kind        TEXT NOT NULL DEFAULT 'general';
+      ALTER TABLE tasks ADD COLUMN priority    TEXT NOT NULL DEFAULT 'normal';
+      ALTER TABLE tasks ADD COLUMN notes       TEXT NOT NULL DEFAULT '';
+      ALTER TABLE tasks ADD COLUMN time_zone   TEXT NOT NULL DEFAULT '';
+      ALTER TABLE tasks ADD COLUMN reschedules INTEGER NOT NULL DEFAULT 0;
+      CREATE INDEX idx_tasks_open_due ON tasks(done_at, due_at);
+
+      -- What a representative learned about each service (separate from what the customer typed into the preview).
+      CREATE TABLE lead_services (
+        lead_id        TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        category       TEXT NOT NULL CHECK (category IN ('internet','mobile','tv','electricity','security')),
+        provider       TEXT NOT NULL DEFAULT '',
+        monthly_cents  INTEGER,
+        plan           TEXT NOT NULL DEFAULT '',
+        concerns       TEXT NOT NULL DEFAULT '',
+        details        TEXT NOT NULL DEFAULT '{}',
+        updated_by     TEXT NOT NULL,
+        updated_at     TEXT NOT NULL,
+        PRIMARY KEY (lead_id, category)
+      );
+    `,
+  },
 ];
 
 /**

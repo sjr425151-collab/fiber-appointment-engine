@@ -35,6 +35,7 @@ import { OPPORTUNITY_STATUSES } from '../shared/platform/opportunity';
 import { createNotifier, listNotifications, type Notifier } from './notify';
 import { platformRouter, PlatformError } from './platform';
 import type { ChatTurner } from './ai/chatModel';
+import { ownerScope, workRole, WorkError, workspaceRoutes } from './workspace';
 import {
   createSessionToken,
   hashPassword,
@@ -365,6 +366,15 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     ['PATCH', new RegExp(`^/leads/${UUID}$`)],
     ['PATCH', new RegExp(`^/opportunities/${UUID}$`)],
     ['PATCH', /^\/reps\/me$/],
+    // Agent Workspace: each route checks the person's role and lead scope itself (server/workspace.ts).
+    ['GET', /^\/work\/[a-z-]+$/],
+    ['POST', /^\/work\/[a-z-]+(\/read)?$/],
+    ['GET', new RegExp(`^/leads/${UUID}/workspace$`)],
+    ['POST', new RegExp(`^/leads/${UUID}/(disposition|reopen|dnc/clear|notes|tasks)$`)],
+    ['PATCH', new RegExp(`^/leads/${UUID}/contact$`)],
+    ['PUT', new RegExp(`^/leads/${UUID}/services/[a-z]+$`)],
+    ['PATCH', new RegExp(`^/(notes|tasks)/${UUID}$`)],
+    ['POST', new RegExp(`^/notes/${UUID}/archive$`)],
   ];
   const crm: CrmAdapter = deps.crm ?? noCrm;
   /** The benchmark values a browser needs (no author or notes). */
@@ -397,7 +407,8 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
   /** Lead access: an admin sees every lead; a representative only the ones assigned to them (anything else looks missing). */
   const leadFor = (req: Request, id: string) => {
     const lead = repo.getLead(db, id);
-    if (!lead || (req.rep && lead.assignedRepId !== req.rep.id)) throw new HttpError(404, 'Lead not found.');
+    const scope = ownerScope(req);
+    if (!lead || (scope && !scope.includes(lead.assignedRepId ?? ''))) throw new HttpError(404, 'Lead not found.');
     return lead;
   };
   const actor = (req: Request) => req.session!.email;
@@ -412,6 +423,8 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     res.json({
       email: req.session!.email,
       role: req.rep ? 'rep' : 'admin',
+      /** rep | manager | admin: what the Agent Workspace allows (server-enforced). */
+      workRole: workRole(req),
       rep: req.rep ? { id: req.rep.id, name: req.rep.name, accepting: req.rep.accepting, openLeads: req.rep.openLeads } : null,
       emailEnabled: notifier.enabled,
       locationsWithoutTeamEmail: req.rep ? [] : missingTeam,
@@ -470,7 +483,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     );
     const { assigned, ...rest } = q;
     // A representative's list is always their own leads, whatever the query says.
-    const scope = req.rep ? { rep: req.rep.id } : assigned === 'unassigned' ? { unassigned: true } : assigned ? { rep: assigned } : {};
+    const scope = workRole(req) === 'rep' ? { rep: req.rep!.id } : assigned === 'unassigned' ? { unassigned: true } : assigned ? { rep: assigned } : {};
     res.json(repo.listLeads(db, { ...rest, ...scope }));
   });
 
@@ -513,7 +526,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     const { status } = parse(z.object({ status: z.enum(OPPORTUNITY_STATUSES) }).strict(), req.body);
     const before = repo.getOpportunity(db, String(req.params.id));
     if (!before) throw new HttpError(404, 'Opportunity not found.');
-    if (req.rep && repo.getLead(db, before.leadId)?.assignedRepId !== req.rep.id) throw new HttpError(404, 'Opportunity not found.');
+    if (workRole(req) === 'rep' && repo.getLead(db, before.leadId)?.assignedRepId !== req.rep!.id) throw new HttpError(404, 'Opportunity not found.');
     const o = repo.updateOpportunityStatus(db, before.id, status, actor(req));
     if (!o) throw new HttpError(404, 'Opportunity not found.');
     res.json({ opportunity: o, notes: repo.listNotes(db, o.leadId) });
@@ -535,7 +548,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
       chat: chats.transcriptForLead(db, lead.id),
       representative: reps.find((r) => r.id === lead.assignedRepId)?.name ?? null,
       // Only an admin can reassign, so only an admin gets the list of people.
-      representatives: req.rep ? undefined : reps.filter((r) => r.active).map((r) => ({ id: r.id, name: r.name, accepting: r.accepting, openLeads: r.openLeads })),
+      representatives: workRole(req) === 'rep' ? undefined : reps.filter((r) => r.active).map((r) => ({ id: r.id, name: r.name, accepting: r.accepting, openLeads: r.openLeads })),
     });
   });
 
@@ -544,7 +557,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     const body = parse(leadUpdateSchema, req.body);
     const lead = leadFor(req, id);
     if (body.assignRepId !== undefined) {
-      if (req.rep) throw new HttpError(403, 'Only an admin can reassign a lead.');
+      if (workRole(req) === 'rep') throw new HttpError(403, 'Only a manager or admin can reassign a lead.');
       if (body.assignRepId && !repo.getRep(db, body.assignRepId)?.active) throw new HttpError(400, 'Choose an active representative.');
       repo.assignLead(db, id, body.assignRepId, { outcome: body.assignRepId ? 'assigned' : 'queued', reason: ROUTING_REASON.manual, actor: actor(req) });
       if (body.assignRepId) repo.insertEvent(db, { name: 'rep_assigned', sessionId: '', path: lead.landingPage, props: { reason: 'manual' }, utmSource: lead.utmSource, utmCampaign: lead.utmCampaign, marketId: lead.marketId });
@@ -594,6 +607,8 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
       uniqueEmail(err);
     }
   });
+
+  workspaceRoutes(admin, { db, parse });
 
   admin.get('/handoff-funnel', (_req, res) => res.json(repo.handoffFunnel(db, 30)));
 
@@ -669,7 +684,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     const { status } = parse(appointmentUpdateSchema, req.body);
     const appt = repo.setAppointmentStatus(db, String(req.params.id), status);
     if (!appt) throw new HttpError(404, 'Appointment not found.');
-    repo.addNote(db, appt.leadId, `Appointment ${appt.startUtc} marked ${status}`, req.session!.email);
+    repo.addNote(db, appt.leadId, `Appointment ${appt.startUtc} marked ${status}`, req.session!.email, { kind: 'system' });
     res.json({ appointment: appt });
   });
 
@@ -767,6 +782,11 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
 
   // -------------------------------------------------------------- errors --
   app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
+    if (err instanceof WorkError) {
+      const { field, ...extra } = err.extra as { field?: string };
+      res.status(err.status).json({ error: err.message, fields: field ? { [field]: err.message } : undefined, ...extra });
+      return;
+    }
     if (err instanceof HttpError || err instanceof BookingError || err instanceof PlatformError) {
       res.status(err.status).json({ error: err.message, fields: err instanceof BookingError ? undefined : err.details });
       return;

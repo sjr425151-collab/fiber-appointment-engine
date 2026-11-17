@@ -111,7 +111,7 @@ export function bookAppointment(
 
     if (existing) {
       repo.setAppointmentStatus(db, existing.id, 'cancelled');
-      repo.addNote(db, input.leadId, `Rescheduled from ${existing.startUtc} to ${startUtc}`, 'system');
+      repo.addNote(db, input.leadId, `Rescheduled from ${existing.startUtc} to ${startUtc}`, 'system', { kind: 'system' });
     }
     const appt = repo.insertAppointment(db, {
       leadId: input.leadId,

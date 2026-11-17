@@ -217,6 +217,7 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier, ch
       lead.id,
       `From household assessment (${input.intent}). Asked about: ${drafts.map((d) => `${d.category} → ${d.planName}${d.kind === 'sample' ? ' [SAMPLE]' : ''}`).join('; ')}.`,
       'system',
+      { category: 'handoff' },
     );
     repo.insertEvent(db, { name: 'advisor_request', sessionId: input.sessionId, path: '/savings', props: { intent: input.intent }, utmSource: a.utmSource, utmCampaign: a.utmCampaign, marketId: market.slug });
     repo.insertEvent(db, { name: 'handoff_submit', sessionId: input.sessionId, path: '/savings', props: { from: 'results', intent: input.intent }, utmSource: a.utmSource, utmCampaign: a.utmCampaign, marketId: market.slug });
@@ -278,7 +279,7 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier, ch
     if (retried) {
       return { leadId: lead.id, bookingToken, market: lead.marketId, repeat: true, routing: routingOf(lead.id), results: results(lead.assessmentId) } satisfies HandoffResult;
     }
-    repo.addNote(db, lead.id, o.note, 'system');
+    repo.addNote(db, lead.id, o.note, 'system', { category: 'handoff' });
     o.onCreated?.(lead.id);
     repo.insertEvent(db, { name: 'handoff_submit', sessionId: h.sessionId, path, props: { from: o.from, categories: billCategories(h.bills, h.ownsHome && h.showExtras).length }, utmSource: h.utmSource, utmCampaign: h.utmCampaign, marketId: market.slug });
     const routing = route(lead.id, { marketId: market.slug, categories: billCategories(h.bills, h.ownsHome && h.showExtras), phone: lead.phone, sessionId: h.sessionId, utmSource: h.utmSource, utmCampaign: h.utmCampaign, path });

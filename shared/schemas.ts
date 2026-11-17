@@ -149,6 +149,8 @@ export const repInputSchema = z.object({
   maxOpenLeads: z.number().int().min(0).max(1000).optional().default(0),
   /** Sign-in password; leave out to keep the current one. */
   password: z.string().min(12, 'Use at least 12 characters').max(200).optional(),
+  /** Representative or sales manager (managers see and reassign every lead). Leave out to keep the current role. */
+  role: z.enum(['rep', 'manager']).optional(),
 });
 
 export interface Representative {
@@ -248,6 +250,20 @@ export interface Lead {
   consentAt: string;
   createdAt: string;
   updatedAt: string;
+  // Agent workspace (see shared/team/workspace.ts).
+  preferredName: string;
+  householdNotes: string;
+  disposition: string;
+  dispositionAt: string | null;
+  qualification: string;
+  qualifiedAt: string | null;
+  outcome: string;
+  outcomeAt: string | null;
+  doNotContact: boolean;
+  nextFollowUpAt: string | null;
+  lastActivityAt: string | null;
+  /** Goes up on every change; an edit must name the version it started from. */
+  version: number;
 }
 
 export interface Appointment {
@@ -270,4 +286,11 @@ export interface LeadNote {
   body: string;
   author: string;
   createdAt: string;
+  /** 'note' is written by a person (or a handoff summary); 'system' lines record changes. */
+  kind: 'note' | 'system';
+  category: string;
+  pinned: boolean;
+  editedAt: string | null;
+  editedBy: string;
+  archivedAt: string | null;
 }

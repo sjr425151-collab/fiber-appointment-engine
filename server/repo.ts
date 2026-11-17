@@ -62,6 +62,18 @@ function toLead(r: Row): Lead {
     consentAt: r.consent_at as string,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
+    preferredName: (r.preferred_name as string) ?? '',
+    householdNotes: (r.household_notes as string) ?? '',
+    disposition: (r.disposition as string) ?? '',
+    dispositionAt: (r.disposition_at as string) ?? null,
+    qualification: (r.qualification as string) ?? 'unknown',
+    qualifiedAt: (r.qualified_at as string) ?? null,
+    outcome: (r.outcome as string) ?? '',
+    outcomeAt: (r.outcome_at as string) ?? null,
+    doNotContact: !!r.do_not_contact,
+    nextFollowUpAt: (r.next_follow_up_at as string) ?? null,
+    lastActivityAt: (r.last_activity_at as string) ?? null,
+    version: (r.version as number) ?? 1,
   };
 }
 
@@ -301,8 +313,8 @@ export function createLead(db: DB, l: NewLead): { lead: Lead; duplicate: boolean
       );
     }
     if (existing) {
-      addNote(db, existing.id, `Submitted the form again (new lead ${id}). This record was not changed.`, 'system');
-      addNote(db, id, `Repeat submission — same contact details as lead ${existing.id}.`, 'system');
+      addNote(db, existing.id, `Submitted the form again (new lead ${id}). This record was not changed.`, 'system', { kind: 'system' });
+      addNote(db, id, `Repeat submission — same contact details as lead ${existing.id}.`, 'system', { kind: 'system' });
     }
     return { lead: getLead(db, id)!, duplicate: !!existing, retried: false, existingId: existing?.id ?? null };
   });
@@ -410,11 +422,11 @@ export function updateLeadStatus(db: DB, id: string, status: LeadStatus, author:
   const lead = getLead(db, id);
   if (!lead || lead.status === status) return;
   const ts = now();
-  db.prepare('UPDATE leads SET status = ?, updated_at = ? WHERE id = ?').run(status, ts, id);
+  db.prepare('UPDATE leads SET status = ?, updated_at = ?, last_activity_at = ?, version = version + 1 WHERE id = ?').run(status, ts, ts, id);
   // The first confirmed conversation is kept, for "time to first contact".
   if (status === 'contacted' && !lead.firstContactAt) db.prepare('UPDATE leads SET first_contact_at = ? WHERE id = ?').run(ts, id);
   addHistory(db, id, 'status', lead.status, status, '', author);
-  addNote(db, id, `Status changed: ${lead.status} → ${status}`, author);
+  addNote(db, id, `Status changed: ${lead.status} → ${status}`, author, { kind: 'system' });
 }
 
 export interface LeadHistoryRow {
@@ -500,6 +512,8 @@ export interface RepInput {
   maxOpenLeads: number;
   /** Already hashed; undefined keeps the current one. */
   passwordHash?: string;
+  /** undefined keeps the current role (new people start as representatives). */
+  role?: 'rep' | 'manager';
 }
 
 export function createRep(db: DB, i: RepInput): Representative {
@@ -510,6 +524,7 @@ export function createRep(db: DB, i: RepInput): Representative {
     `INSERT INTO representatives (id, name, email, phone, password_hash, active, accepting, markets, categories, max_open_leads, created_at, updated_at, status, rep_code)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(id, i.name, i.email, i.phone, i.passwordHash ?? '', i.active ? 1 : 0, i.accepting ? 1 : 0, JSON.stringify(i.markets), JSON.stringify(i.categories), i.maxOpenLeads, ts, ts, i.active ? 'active' : 'deactivated', `R-${n + 1}`);
+  if (i.role) db.prepare('UPDATE representatives SET role = ? WHERE id = ?').run(i.role, id);
   return getRep(db, id)!;
 }
 
@@ -521,6 +536,7 @@ export function updateRep(db: DB, id: string, i: RepInput): Representative | nul
   // Keep the newer status column in step, and end sessions when someone is switched off.
   db.prepare("UPDATE representatives SET status = CASE WHEN ? = 1 THEN (CASE WHEN status = 'invited' THEN 'invited' ELSE 'active' END) ELSE 'deactivated' END, session_epoch = session_epoch + CASE WHEN ? = 1 THEN 0 ELSE 1 END WHERE id = ?").run(i.active ? 1 : 0, i.active ? 1 : 0, id);
   if (i.passwordHash !== undefined) db.prepare('UPDATE representatives SET password_hash = ? WHERE id = ?').run(i.passwordHash, id);
+  if (i.role) db.prepare('UPDATE representatives SET role = ?, session_epoch = session_epoch + 1 WHERE id = ? AND role <> ?').run(i.role, id, i.role);
   return getRep(db, id);
 }
 
@@ -554,12 +570,21 @@ export function assignLead(db: DB, leadId: string, repId: string | null, o: { ou
   if (repId && !rep) return null;
   return transaction(db, () => {
     const ts = now();
-    db.prepare('UPDATE leads SET assigned_rep_id = ?, assigned_at = ?, routing_outcome = ?, routing_reason = ?, updated_at = ? WHERE id = ?').run(
+    db.prepare('UPDATE leads SET assigned_rep_id = ?, assigned_at = ?, routing_outcome = ?, routing_reason = ?, updated_at = ?, version = version + 1 WHERE id = ?').run(
       repId, repId ? ts : null, o.outcome, o.reason, ts, leadId,
     );
+    if (lead.assignedRepId !== repId) {
+      // Rule: open follow-ups belong to whoever owns the lead, so none are stranded by a reassignment.
+      db.prepare('UPDATE tasks SET assignee_id = ? WHERE lead_id = ? AND done_at IS NULL').run(repId ?? '', leadId);
+      if (rep) {
+        db.prepare('INSERT OR IGNORE INTO user_notifications (id, user_id, kind, title, lead_id, dedupe_key, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+          randomUUID(), rep.id, 'lead_assigned', `New lead assigned: ${lead.firstName} ${lead.lastName}`.trim(), leadId, `assigned:${leadId}:${rep.id}:${ts}`, ts,
+        );
+      }
+    }
     if (lead.assignedRepId !== repId || !lead.routingOutcome) {
       addHistory(db, leadId, 'assignment', lead.assignedRepId ?? '', repId ?? '', `${o.outcome}: ${o.reason}`, o.actor);
-      addNote(db, leadId, rep ? `Assigned to ${rep.name} (${o.reason}).` : `Not assigned — ${o.outcome === 'unsupported' ? 'needs review' : 'in the follow-up queue'} (${o.reason}).`, o.actor);
+      addNote(db, leadId, rep ? `Assigned to ${rep.name} (${o.reason}).` : `Not assigned — ${o.outcome === 'unsupported' ? 'needs review' : 'in the follow-up queue'} (${o.reason}).`, o.actor, { kind: 'system' });
     }
     if (repId && lead.status === 'new') updateLeadStatus(db, leadId, 'assigned', o.actor);
     if (!repId && lead.status === 'assigned') updateLeadStatus(db, leadId, 'new', o.actor);
@@ -606,24 +631,31 @@ export function handoffFunnel(db: DB, days = 30) {
   };
 }
 
-export function addNote(db: DB, leadId: string, body: string, author: string): LeadNote {
-  const note = { id: randomUUID(), leadId, body, author, createdAt: now() };
-  db.prepare('INSERT INTO lead_notes (id, lead_id, body, author, created_at) VALUES (?, ?, ?, ?, ?)').run(
-    note.id, leadId, body, author, note.createdAt,
+export function addNote(db: DB, leadId: string, body: string, author: string, o: { kind?: LeadNote['kind']; category?: string; pinned?: boolean } = {}): LeadNote {
+  const note: LeadNote = { id: randomUUID(), leadId, body, author, createdAt: now(), kind: o.kind ?? 'note', category: o.category ?? 'general', pinned: !!o.pinned, editedAt: null, editedBy: '', archivedAt: null };
+  db.prepare('INSERT INTO lead_notes (id, lead_id, body, author, created_at, kind, category, pinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+    note.id, leadId, body, author, note.createdAt, note.kind, note.category, note.pinned ? 1 : 0,
   );
+  if (note.kind === 'note') db.prepare('UPDATE leads SET last_activity_at = ? WHERE id = ?').run(note.createdAt, leadId);
   return note;
 }
 
+export const toNote = (r: Row): LeadNote => ({
+  id: r.id as string,
+  leadId: r.lead_id as string,
+  body: r.body as string,
+  author: r.author as string,
+  createdAt: r.created_at as string,
+  kind: ((r.kind as string) ?? 'note') as LeadNote['kind'],
+  category: (r.category as string) ?? 'general',
+  pinned: !!r.pinned,
+  editedAt: (r.edited_at as string) ?? null,
+  editedBy: (r.edited_by as string) ?? '',
+  archivedAt: (r.archived_at as string) ?? null,
+});
+
 export function listNotes(db: DB, leadId: string): LeadNote[] {
-  return (db.prepare('SELECT * FROM lead_notes WHERE lead_id = ? ORDER BY created_at DESC').all(leadId) as Row[]).map(
-    (r) => ({
-      id: r.id as string,
-      leadId: r.lead_id as string,
-      body: r.body as string,
-      author: r.author as string,
-      createdAt: r.created_at as string,
-    }),
-  );
+  return (db.prepare('SELECT * FROM lead_notes WHERE lead_id = ? AND archived_at IS NULL ORDER BY created_at DESC, rowid DESC').all(leadId) as Row[]).map(toNote);
 }
 
 export function leadStats(db: DB) {
@@ -1004,7 +1036,7 @@ export function updateOpportunityStatus(db: DB, id: string, status: OpportunityS
   if (!before) return null;
   if (before.status === status) return before;
   db.prepare('UPDATE opportunities SET status = ?, updated_at = ? WHERE id = ?').run(status, now(), id);
-  addNote(db, before.leadId, `Opportunity "${before.planName}" (${before.category}): ${OPPORTUNITY_STATUS_LABEL[before.status]} → ${OPPORTUNITY_STATUS_LABEL[status]}`, author);
+  addNote(db, before.leadId, `Opportunity "${before.planName}" (${before.category}): ${OPPORTUNITY_STATUS_LABEL[before.status]} → ${OPPORTUNITY_STATUS_LABEL[status]}`, author, { kind: 'system' });
   return getOpportunity(db, id);
 }
 
@@ -1014,7 +1046,7 @@ export function setOpportunityStage(db: DB, id: string, stage: OpportunityStage,
   if (!before) return null;
   if (before.stage === stage) return before;
   db.prepare('UPDATE opportunities SET stage = ?, status = ?, updated_at = ? WHERE id = ?').run(stage, STAGE_TO_STATUS[stage], now(), id);
-  addNote(db, before.leadId, `Opportunity "${before.planName}" (${before.category}): ${OPPORTUNITY_STAGE_LABEL[before.stage]} → ${OPPORTUNITY_STAGE_LABEL[stage]}`, author);
+  addNote(db, before.leadId, `Opportunity "${before.planName}" (${before.category}): ${OPPORTUNITY_STAGE_LABEL[before.stage]} → ${OPPORTUNITY_STAGE_LABEL[stage]}`, author, { kind: 'system' });
   return getOpportunity(db, id);
 }
 
