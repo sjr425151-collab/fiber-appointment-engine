@@ -26,10 +26,12 @@ export interface BenchmarkSet {
   tvMonthly: Cents;
   /** Electricity with solar (solar payment plus what remains of the utility bill), per month. Illustrative. */
   electricityWithSolarMonthly: Cents;
+  /** Home security monitoring, per month. Missing on sets saved before it existed (then the default applies). */
+  securityMonthly?: Cents;
 }
 
 /** The owner's starting values, used until a set is published and for results saved before versions existed. */
-export const DEFAULT_BENCHMARKS: BenchmarkSet = { version: '2026-11-17.1', internetMonthly: 5500, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000 };
+export const DEFAULT_BENCHMARKS: BenchmarkSet = { version: '2026-11-17.1', internetMonthly: 5500, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000, securityMonthly: 8000 };
 export const BENCHMARKS_VERSION = DEFAULT_BENCHMARKS.version;
 /** @deprecated the starting values; read the current set from the server or boot data instead. */
 export const BENCHMARKS = DEFAULT_BENCHMARKS;
@@ -38,7 +40,8 @@ export const BENCHMARK_FIELDS = [
   ['internetMonthly', 'Home internet', 'per month'],
   ['mobilePerLine', 'Mobile', 'per line, per month, not counting phone payments'],
   ['tvMonthly', 'TV / streaming', 'per month'],
-  ['electricityWithSolarMonthly', 'Electricity with solar', 'per month, illustrative'],
+  ['electricityWithSolarMonthly', 'Electricity with solar', 'per month, illustrative, homeowners only'],
+  ['securityMonthly', 'Home security', 'per month, homeowners only'],
 ] as const;
 
 export const BENCHMARK_DISCLOSURE =
@@ -60,6 +63,8 @@ export function benchmarkMonthly(category: PlatformCategory, ctx: BenchmarkConte
       return set.tvMonthly;
     case 'electricity':
       return set.electricityWithSolarMonthly;
+    case 'security':
+      return set.securityMonthly ?? 8000;
   }
 }
 
@@ -70,6 +75,7 @@ const NAME: Record<PlatformCategory, string> = {
   mobile: 'Tucker benchmark: mobile',
   tv: 'Tucker benchmark: TV & streaming',
   electricity: 'Tucker benchmark: electricity with solar',
+  security: 'Tucker benchmark: home security',
 };
 
 /** Plain-language basis shown next to a benchmark option. */
@@ -79,6 +85,7 @@ export function benchmarkAssumptions(category: PlatformCategory, ctx: BenchmarkC
     mobile: `Compares your bill with ${dollars(set.mobilePerLine)} a month per line (${dollars(benchmarkMonthly('mobile', ctx, set))} for your lines), not counting phone payments.`,
     tv: `Compares your bill with ${dollars(set.tvMonthly)} a month for TV and streaming.`,
     electricity: `Illustrative: compares your bill with ${dollars(set.electricityWithSolarMonthly)} a month for a solar payment plus what remains of your utility bill. A site assessment sets the real figure.`,
+    security: `Compares your monitoring bill with ${dollars(set.securityMonthly ?? 8000)} a month for home security. Equipment you already own or are still paying for is not included.`,
   };
   return [basis[category], BENCHMARK_DISCLOSURE];
 }
@@ -113,8 +120,11 @@ export interface QuickPreviewInput {
   mobileLines?: number;
   tv?: Cents | null;
   electricity?: Cents | null;
-  /** Electricity is compared with solar only for people who own their home. */
+  security?: Cents | null;
+  /** Electricity is compared with solar only for people who own their home… */
   ownsHome?: boolean;
+  /** …and ask to see extra-service pricing. Home security is priced on the same condition. */
+  showExtras?: boolean;
 }
 
 export interface QuickPreviewRow {
@@ -151,8 +161,10 @@ export function quickPreview(input: QuickPreviewInput, set: BenchmarkSet = DEFAU
   const rows: QuickPreviewRow[] = [];
   const add = (category: PlatformCategory, current: Cents | null | undefined) => {
     if (current === null || current === undefined || !Number.isSafeInteger(current) || current <= 0) return;
-    if (category === 'electricity' && !input.ownsHome) {
-      rows.push({ category, current, benchmark: null, difference: null, savings: 0, note: 'Solar is compared for homeowners.' });
+    const extras = !!input.ownsHome && !!input.showExtras;
+    if (category === 'security' && !extras) return; // not even listed until a homeowner asks
+    if (category === 'electricity' && !extras) {
+      rows.push({ category, current, benchmark: null, difference: null, savings: 0, note: input.ownsHome ? 'Tick “show extra services” to compare solar.' : 'Solar is compared for homeowners.' });
       return;
     }
     const benchmark = benchmarkMonthly(category, { mobileLines: input.mobileLines }, set);
@@ -162,6 +174,7 @@ export function quickPreview(input: QuickPreviewInput, set: BenchmarkSet = DEFAU
   add('mobile', input.mobile);
   add('tv', input.tv);
   add('electricity', input.electricity);
+  add('security', input.security);
   const monthlySavings = rows.reduce((t, r) => t + r.savings, 0);
   return {
     rows,

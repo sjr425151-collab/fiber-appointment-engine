@@ -118,7 +118,7 @@ describe('opportunities from an advisor request', () => {
     expect(picks(here)).toEqual([['internet', 'benchmark-internet'], ['mobile', 'benchmark-mobile'], ['electricity', 'keep']]);
     expect(picks(there)).toEqual(picks(here));
     expect(here.analysis.projectionBasis).toBe('benchmark');
-    expect(here.analysis.benchmarks).toEqual({ version: '2026-11-17.1', internetMonthly: 5500, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000 });
+    expect(here.analysis.benchmarks).toEqual({ version: '2026-11-17.1', internetMonthly: 5500, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000, securityMonthly: 8000 });
     // The electricity benchmark is higher than this bill: it is shown as an option that costs more, not hidden.
     const electricity = here.analysis.categories.find((c: { category: string }) => c.category === 'electricity');
     expect(electricity.options.map((o: { offerId: string; monthlyPrice: number }) => [o.offerId, o.monthlyPrice])).toEqual([['benchmark-electricity', 20000]]);
@@ -134,7 +134,7 @@ describe('opportunities from an advisor request', () => {
     setup(false);
     const agent = await admin();
     const earlier = (await submit({ zip: '60601', categories: ['internet'], internet: { monthlyCents: 9000 } }).expect(201)).body;
-    const published = await agent.post('/api/admin/benchmarks').set('X-Requested-With', 'fetch').send({ internetMonthly: 6000, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000, note: 'Internet up $5' }).expect(201);
+    const published = await agent.post('/api/admin/benchmarks').set('X-Requested-With', 'fetch').send({ internetMonthly: 6000, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000, securityMonthly: 8000, note: 'Internet up $5' }).expect(201);
     expect(published.body.current).toMatchObject({ internetMonthly: 6000, note: 'Internet up $5', publishedBy: 'admin@example.com' });
     expect(published.body.current.version).toMatch(/^\d{4}-\d{2}-\d{2}\.\d+$/);
     const later = (await submit({ zip: '60601', categories: ['internet'], internet: { monthlyCents: 9000 } }).expect(201)).body;
@@ -153,7 +153,7 @@ describe('opportunities from an advisor request', () => {
     const audit = (await agent.get('/api/admin/benchmarks/audit').expect(200)).body.events;
     expect(audit.map((e: { action: string }) => e.action)).toEqual(['benchmarks.restore', 'benchmarks.publish']);
     // Bad values are refused, and nobody can edit or delete a published version in the database.
-    await agent.post('/api/admin/benchmarks').set('X-Requested-With', 'fetch').send({ internetMonthly: 0, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000 }).expect(400);
+    await agent.post('/api/admin/benchmarks').set('X-Requested-With', 'fetch').send({ internetMonthly: 0, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000, securityMonthly: 8000 }).expect(400);
     expect(() => db.prepare('UPDATE benchmark_versions SET internet_cents = 1').run()).toThrow(/never edited/);
     await request(app).get('/api/admin/benchmarks').expect(401);
   });

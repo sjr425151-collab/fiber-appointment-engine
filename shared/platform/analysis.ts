@@ -9,7 +9,7 @@ import { analyzeHousehold, ASSUMPTIONS_V1, type Category, type CostStream, type 
 import { divRound, formatCents, type Cents } from '../finance/money';
 import { rankOffers, type Candidate, type LensResult } from '../offers/rank';
 import { offerSchema, type Offer } from '../offers/model';
-import { CATEGORY_LABEL, PROMO_MONTHS, type Assessment, type PlatformCategory } from './assessment';
+import { CATEGORY_LABEL, extraPricingAllowed, PROMO_MONTHS, type Assessment, type PlatformCategory } from './assessment';
 import { CATALOG_VERSION, offersFor } from './catalog';
 import { BENCHMARK_DISCLOSURE, BENCHMARKS_VERSION, benchmarkAssumptions, benchmarkOffer, DEFAULT_BENCHMARKS, type BenchmarkSet } from './benchmarks';
 import { SAMPLE_SOLAR_PROGRAMS, SOLAR_FACTS, SOLAR_PROGRAMS, solarAssumptions, solarOffer } from './solar';
@@ -181,6 +181,23 @@ export function currentStreamsFor(a: Assessment, c: PlatformCategory): { streams
       if (t.mustHave.length) notes.push(`Check that any alternative includes: ${t.mustHave.map((x) => x.replace('_', ' ')).join(', ')}.`);
       return { streams, notes, provider: t.provider };
     }
+    case 'security': {
+      const h = a.security!;
+      return {
+        streams: [
+          {
+            id: MAIN(c),
+            label: h.provider ? `${h.provider} security` : 'Current home security',
+            category: 'security',
+            baseMonthly: h.monthlyCents,
+            quality: 'user_reported',
+            recurring: h.equipmentFeeCents ? [{ label: 'Equipment payment', monthly: h.equipmentFeeCents }] : [],
+          },
+        ],
+        notes,
+        provider: h.provider,
+      };
+    }
     case 'electricity': {
       const e = a.electricity!;
       return {
@@ -207,6 +224,11 @@ interface CategoryOffers {
 function solarOffersFor(a: Assessment, includeSamples: boolean, set: BenchmarkSet): CategoryOffers {
   const e = a.electricity!;
   const out: CategoryOffers = { real: [], samples: [], assumptions: new Map(), notes: [] };
+  // Solar pricing is shown only to homeowners who asked to see extra-service pricing.
+  if (e.homeownership === 'own' && !e.showPricing) {
+    out.notes.push('Solar pricing is shown when you ask to see extra services for homeowners.');
+    return { ...out, solar: 'needs_info' };
+  }
   if (e.homeownership === 'rent') {
     out.notes.push('Rooftop solar usually requires owning your home, so we don’t compare solar for renters.');
     return { ...out, solar: 'not_suitable' };
@@ -245,6 +267,14 @@ function solarOffersFor(a: Assessment, includeSamples: boolean, set: BenchmarkSe
 
 function offersForCategory(c: PlatformCategory, a: Assessment, includeSamples: boolean, catalog: AreaCatalog | undefined, set: BenchmarkSet): CategoryOffers {
   if (c === 'electricity') return solarOffersFor(a, includeSamples, set);
+  if (c === 'security') {
+    // No provider prices on file: homeowners who asked are compared with the security benchmark; nobody else sees a price.
+    if (!extraPricingAllowed(a.security)) {
+      return { real: [], samples: [], assumptions: new Map(), notes: [a.security?.homeownership === 'own' ? 'Home security pricing is shown when you ask to see extra services for homeowners.' : 'Home security pricing is shown to homeowners.'] };
+    }
+    const benchmark = benchmarkOffer('security', {}, set);
+    return { real: [], samples: [], benchmark, assumptions: new Map([[benchmark.id, benchmarkAssumptions('security', {}, set)]]), notes: [] };
+  }
   const cat = offersFor(c, { zip: a.zip, mobileLines: a.mobile?.lines, mobileDataNeed: a.mobile?.dataNeed, mobileInternational: a.mobile?.international, includeSamples });
   // Where no real plan is on file, the household is compared with Tucker's benchmark
   // (not in sample-data mode, which shows demo offers instead).

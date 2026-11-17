@@ -61,6 +61,7 @@ const REQUEST = {
   bills: { internet: 9500, mobile: 19000, tv: 12000, electricity: 26000 },
   mobileLines: 3,
   ownsHome: true,
+  showExtras: true,
   utmSource: 'facebook',
   utmCampaign: 'monroe-launch',
   clickId: 'fbclid-123',
@@ -273,10 +274,35 @@ describe('requesting a pricing review from the preview', () => {
 
   it('shares its validation with the browser form', () => {
     expect(handoffSchema.safeParse({ ...REQUEST, phone: '+1 (734) 555-0177' }).success).toBe(true);
-    expect(previewFromBills({ bills: { internet: 5000, mobile: null, tv: null, electricity: 30000 }, mobileLines: 1, ownsHome: false })).toMatchObject({
+    expect(previewFromBills({ bills: { internet: 5000, mobile: null, tv: null, electricity: 30000, security: null }, mobileLines: 1, ownsHome: false, showExtras: false })).toMatchObject({
       monthlyDifferenceCents: 0,
-      rows: [{ differenceCents: -500 }, { comparisonMonthlyCents: null, differenceCents: null, comparison: 'Not compared (solar is for homeowners)' }],
+      rows: [{ differenceCents: -500 }, { comparisonMonthlyCents: null, differenceCents: null, comparison: 'Not compared (solar pricing is for homeowners who ask)' }],
     });
+  });
+
+  it('prices solar and home security only for a homeowner who asked, and never stores what was not shown', async () => {
+    const bills = { internet: 9500, mobile: null, tv: null, electricity: 26000, security: 6000 };
+    // Owner who did not ask: no solar or security figure, and no security service on the lead.
+    const quiet = await handoff({ bills, ownsHome: true, showExtras: false }).expect(201);
+    const q = lead(quiet.body.leadId).preview as { rows: { category: string; comparisonMonthlyCents: number | null }[]; monthlyDifferenceCents: number };
+    expect(q.rows.map((r) => [r.category, r.comparisonMonthlyCents])).toEqual([['internet', 5500], ['electricity', null]]);
+    expect(q.monthlyDifferenceCents).toBe(4000);
+    expect(repo.opportunitiesForLead(db, quiet.body.leadId).map((o) => o.category)).not.toContain('security');
+    // A renter who ticks "show extras" still sees nothing extra (the box only appears for owners, and the server checks too).
+    const renter = await handoff({ bills, ownsHome: false, showExtras: true, phone: '7345550144' }).expect(201);
+    expect((lead(renter.body.leadId).preview as { rows: { category: string }[] }).rows.map((r) => r.category)).toEqual(['internet', 'electricity']);
+    // Owner who asked: solar at $200 and security at $80 are compared.
+    const asked = await handoff({ bills, ownsHome: true, showExtras: true, phone: '7345550133' }).expect(201);
+    const a = lead(asked.body.leadId).preview as { rows: { category: string; comparisonMonthlyCents: number | null; differenceCents: number | null }[]; monthlyDifferenceCents: number };
+    expect(a.rows.map((r) => [r.category, r.comparisonMonthlyCents, r.differenceCents])).toEqual([
+      ['internet', 5500, 4000],
+      ['electricity', 20000, 6000],
+      ['security', 8000, -2000],
+    ]);
+    // Security at $60 is below the $80 benchmark: shown as a possible extra cost and left out of the total.
+    expect(a.monthlyDifferenceCents).toBe(10000);
+    const opps = repo.opportunitiesForLead(db, asked.body.leadId);
+    expect(opps.map((o) => o.category)).toEqual(['internet', 'electricity']);
   });
 });
 

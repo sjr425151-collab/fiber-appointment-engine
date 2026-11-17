@@ -106,7 +106,7 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
     const assessment = parse(assessmentSchema, sub.assessment);
     const computedAt = new Date().toISOString();
     const set = benchmarks();
-    const analysis = buildAnalysis(assessment, { includeSamples: config.flags.sampleData, computedAt, catalog: NATIONAL, benchmarks: { version: set.version, internetMonthly: set.internetMonthly, mobilePerLine: set.mobilePerLine, tvMonthly: set.tvMonthly, electricityWithSolarMonthly: set.electricityWithSolarMonthly } });
+    const analysis = buildAnalysis(assessment, { includeSamples: config.flags.sampleData, computedAt, catalog: NATIONAL, benchmarks: { version: set.version, internetMonthly: set.internetMonthly, mobilePerLine: set.mobilePerLine, tvMonthly: set.tvMonthly, electricityWithSolarMonthly: set.electricityWithSolarMonthly, securityMonthly: set.securityMonthly } });
     const token = newToken();
     const id = repo.insertAssessment(db, {
       tokenHash: sha256(token),
@@ -237,7 +237,7 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
     }
     const market = home();
     const set = benchmarks();
-    const benchmarkSet = { version: set.version, internetMonthly: set.internetMonthly, mobilePerLine: set.mobilePerLine, tvMonthly: set.tvMonthly, electricityWithSolarMonthly: set.electricityWithSolarMonthly };
+    const benchmarkSet = { version: set.version, internetMonthly: set.internetMonthly, mobilePerLine: set.mobilePerLine, tvMonthly: set.tvMonthly, electricityWithSolarMonthly: set.electricityWithSolarMonthly, securityMonthly: set.securityMonthly };
     const bookingToken = tokenFor('booking', h.requestKey);
     const resultsToken = tokenFor('results', h.requestKey);
     const path = h.landingPage || '/';
@@ -279,8 +279,8 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
       return;
     }
     repo.addNote(db, lead.id, 'Pricing review requested from the home page preview. Figures are a preliminary benchmark comparison, not verified pricing.', 'system');
-    repo.insertEvent(db, { name: 'handoff_submit', sessionId: h.sessionId, path, props: { from: 'home', categories: billCategories(h.bills).length }, utmSource: h.utmSource, utmCampaign: h.utmCampaign, marketId: market.slug });
-    const routing = route(lead.id, { marketId: market.slug, categories: billCategories(h.bills), phone: lead.phone, sessionId: h.sessionId, utmSource: h.utmSource, utmCampaign: h.utmCampaign, path });
+    repo.insertEvent(db, { name: 'handoff_submit', sessionId: h.sessionId, path, props: { from: 'home', categories: billCategories(h.bills, h.ownsHome && h.showExtras).length }, utmSource: h.utmSource, utmCampaign: h.utmCampaign, marketId: market.slug });
+    const routing = route(lead.id, { marketId: market.slug, categories: billCategories(h.bills, h.ownsHome && h.showExtras), phone: lead.phone, sessionId: h.sessionId, utmSource: h.utmSource, utmCampaign: h.utmCampaign, path });
     notifier.onLead(repo.getLead(db, lead.id)!, duplicate);
 
     // The lead is safe. Now attach the full analysis; if this part fails the request still succeeded.

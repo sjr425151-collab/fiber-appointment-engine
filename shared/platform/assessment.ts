@@ -8,7 +8,7 @@ import { z } from 'zod';
 
 z.config({ jitless: true });
 
-export const PLATFORM_CATEGORIES = ['internet', 'mobile', 'tv', 'electricity'] as const;
+export const PLATFORM_CATEGORIES = ['internet', 'mobile', 'tv', 'electricity', 'security'] as const;
 export type PlatformCategory = (typeof PLATFORM_CATEGORIES)[number];
 
 export const CATEGORY_LABEL: Record<PlatformCategory, string> = {
@@ -16,6 +16,7 @@ export const CATEGORY_LABEL: Record<PlatformCategory, string> = {
   mobile: 'Mobile phones',
   tv: 'TV & streaming',
   electricity: 'Electricity',
+  security: 'Home security',
 };
 
 const cents = z.number().int().min(0).max(1_000_000); // ≤ $10,000/mo
@@ -69,7 +70,21 @@ export const electricitySchema = z.object({
   rateType: z.enum(['standard', 'time_of_use', 'unknown']).default('unknown'),
   homeownership: z.enum(['own', 'rent', 'unknown']).default('unknown'),
   roofSun: z.enum(['mostly_sunny', 'some_shade', 'heavy_shade', 'unknown']).default('unknown'),
+  /** The homeowner asked to see extra-service pricing (solar). Nothing about solar is priced until they do. */
+  showPricing: z.boolean().default(false),
 });
+
+/** Home security (monitoring). Priced only for homeowners who ask to see extra-service pricing. */
+export const securitySchema = z.object({
+  provider: name,
+  monthlyCents: cents.nullable(),
+  equipmentFeeCents: optionalCents,
+  homeownership: z.enum(['own', 'rent', 'unknown']).default('unknown'),
+  showPricing: z.boolean().default(false),
+});
+
+/** Solar and home security comparisons are shown only to homeowners who asked for them. */
+export const extraPricingAllowed = (v: { homeownership?: string; showPricing?: boolean } | undefined) => !!v && v.homeownership === 'own' && v.showPricing === true;
 
 /**
  * Assessments saved before solar became the electricity alternative had a
@@ -78,8 +93,12 @@ export const electricitySchema = z.object({
 export function upgradeLegacy(input: unknown): unknown {
   if (!input || typeof input !== 'object') return input;
   const a = { ...(input as Record<string, unknown>) };
+  // Saved before homeowners had to ask for extra-service pricing: owners already saw solar, so keep showing it.
+  if (a.electricity && typeof a.electricity === 'object' && !('showPricing' in (a.electricity as object)) && (a.electricity as Record<string, unknown>).homeownership === 'own') {
+    a.electricity = { ...(a.electricity as object), showPricing: true };
+  }
   const cats = Array.isArray(a.categories) ? (a.categories as unknown[]) : null;
-  if (!cats?.includes('solar') && !('solar' in a)) return input;
+  if (!cats?.includes('solar') && !('solar' in a)) return a;
   const solar = (a.solar ?? {}) as Record<string, unknown>;
   delete a.solar;
   if (cats) a.categories = cats.filter((c) => c !== 'solar');
@@ -95,11 +114,12 @@ export const PRIORITIES = ['lower_cost', 'faster_speed', 'no_contract', 'reliabi
 const assessmentObject = z
   .object({
     zip: z.string().trim().regex(/^\d{5}$/, 'Enter a 5-digit ZIP code'),
-    categories: z.array(z.enum(PLATFORM_CATEGORIES)).min(1, 'Choose at least one service').max(4),
+    categories: z.array(z.enum(PLATFORM_CATEGORIES)).min(1, 'Choose at least one service').max(5),
     internet: internetSchema.optional(),
     mobile: mobileSchema.optional(),
     tv: tvSchema.optional(),
     electricity: electricitySchema.optional(),
+    security: securitySchema.optional(),
     priorities: z.array(z.enum(PRIORITIES)).max(5).default([]),
   })
   .superRefine((a, ctx) => {

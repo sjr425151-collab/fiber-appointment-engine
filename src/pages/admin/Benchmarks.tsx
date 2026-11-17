@@ -18,11 +18,11 @@ interface Version extends BenchmarkSet {
 type Key = (typeof BENCHMARK_FIELDS)[number][0];
 const dollars = (c: number) => (c / 100).toFixed(2);
 /** A sample household used only to show what customers would see with the draft values. */
-const SAMPLE = { internet: 9500, mobile: 19000, mobileLines: 3, tv: 12000, electricity: 26000, ownsHome: true };
+const SAMPLE = { internet: 9500, mobile: 19000, mobileLines: 3, tv: 12000, electricity: 26000, security: 6000, ownsHome: true, showExtras: true };
 
 export default function Benchmarks() {
   const [data, setData] = useState<{ current: Version; history: Version[] } | null>(null);
-  const [draft, setDraft] = useState<Record<Key, string>>({ internetMonthly: '', mobilePerLine: '', tvMonthly: '', electricityWithSolarMonthly: '' });
+  const [draft, setDraft] = useState<Record<Key, string>>({ internetMonthly: '', mobilePerLine: '', tvMonthly: '', electricityWithSolarMonthly: '', securityMonthly: '' });
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -30,7 +30,7 @@ export default function Benchmarks() {
 
   const load = (d: { current: Version; history: Version[] }) => {
     setData(d);
-    setDraft(Object.fromEntries(BENCHMARK_FIELDS.map(([k]) => [k, dollars(d.current[k])])) as Record<Key, string>);
+    setDraft(Object.fromEntries(BENCHMARK_FIELDS.map(([k]) => [k, dollars(d.current[k] ?? 8000)])) as Record<Key, string>);
     setNote('');
   };
   useEffect(() => {
@@ -46,7 +46,7 @@ export default function Benchmarks() {
     return out;
   }, [draft]);
   const valid = BENCHMARK_FIELDS.every(([k]) => parsed[k] !== null);
-  const changed = !!data && BENCHMARK_FIELDS.some(([k]) => parsed[k] !== data.current[k]);
+  const changed = !!data && BENCHMARK_FIELDS.some(([k]) => parsed[k] !== (data.current[k] ?? 8000));
   const preview = valid ? quickPreview(SAMPLE, { version: 'draft', ...(parsed as Record<Key, number>) }) : null;
 
   async function publish(e: FormEvent) {
@@ -99,7 +99,7 @@ export default function Benchmarks() {
         <h2 className="font-semibold">
           Current values <span className="text-sm font-normal text-slate-400">· version {data.current.version}</span>
         </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {BENCHMARK_FIELDS.map(([k, label, unit]) => (
             <div key={k}>
               <label className="label" htmlFor={`bm-${k}`}>
@@ -121,7 +121,7 @@ export default function Benchmarks() {
 
         <div className="rounded-xl bg-white/[0.03] p-4">
           <h3 className="text-sm font-semibold">What a customer would see</h3>
-          <p className="mt-1 text-xs text-slate-400">Example household: internet $95, mobile $190 for 3 lines, TV $120, electricity $260, owns their home.</p>
+          <p className="mt-1 text-xs text-slate-400">Example household: internet $95, mobile $190 for 3 lines, TV $120, electricity $260, home security $60, owns their home and asked for extra-service pricing.</p>
           {preview ? (
             <>
               <ul className="mt-3 space-y-1 text-sm text-slate-200">
@@ -176,6 +176,7 @@ export default function Benchmarks() {
                 <th className="px-4 py-3">Mobile / line</th>
                 <th className="px-4 py-3">TV</th>
                 <th className="px-4 py-3">Electricity + solar</th>
+                <th className="px-4 py-3">Security</th>
                 <th className="px-4 py-3">Published</th>
                 <th className="px-4 py-3">
                   <span className="sr-only">Actions</span>
@@ -193,6 +194,7 @@ export default function Benchmarks() {
                   <td className="px-4 py-3">{formatCents(v.mobilePerLine)}</td>
                   <td className="px-4 py-3">{formatCents(v.tvMonthly)}</td>
                   <td className="px-4 py-3">{formatCents(v.electricityWithSolarMonthly)}</td>
+                  <td className="px-4 py-3">{formatCents(v.securityMonthly ?? 8000)}</td>
                   <td className="px-4 py-3 text-slate-300">
                     {fmtDateTime(v.publishedAt)} · {v.publishedBy}
                     {v.note && <div className="text-xs text-slate-400">{v.note}</div>}

@@ -46,6 +46,12 @@ describe('national home', () => {
     const preview = p.locator('main [role=status]').first();
     expect(await preview.innerText()).toMatch(/\$140\/mo less[\s\S]*Solar is compared for homeowners/); // 40 + 55 + 45, no solar yet
     await p.check('#qp-own');
+    // Owning the home is not enough: solar and home security stay unpriced until the owner asks.
+    expect(await preview.innerText()).not.toMatch(/\$200|Home security/);
+    expect(await p.locator('#qp-security').count()).toBe(0);
+    await p.check('#qp-extras');
+    await p.fill('#qp-security', '75');
+    expect(await preview.innerText()).toMatch(/Home security vs \$80[\s\S]*\$5\/mo more/);
     expect(await preview.innerText()).toMatch(/\$200\/mo less[\s\S]*About \$2,400 a year[\s\S]*Benchmark/);
     expect(await p.locator('main').innerText()).toMatch(/comparison assumptions, not offers or guarantees/);
     expect(posted).toEqual([]); // nothing was sent anywhere to see the preview
@@ -56,7 +62,7 @@ describe('national home', () => {
     await p.getByRole('heading', { level: 1, name: 'Where is your home?' }).waitFor();
     await p.fill('#pf-f-zip', '60601');
     await p.getByRole('button', { name: 'Continue' }).click();
-    expect(await p.locator('input[type=checkbox]:checked').count()).toBe(4);
+    expect(await p.locator('input[type=checkbox]:checked').count()).toBe(5); // all four bills plus home security
     await p.getByRole('button', { name: 'Continue' }).click();
     expect(await p.getByLabel('Monthly internet bill').inputValue()).toBe('95.00');
     expect(errors).toEqual([]);

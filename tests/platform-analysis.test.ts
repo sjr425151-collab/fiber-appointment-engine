@@ -282,14 +282,57 @@ describe('price freshness warnings for the team', () => {
   });
 });
 
+describe('home security and homeowner-only pricing', () => {
+  const base = { zip: '60601', categories: ['electricity', 'security'] as const };
+  const run = (electricity: object, security: object) =>
+    buildAnalysis(parse({ ...base, categories: [...base.categories], electricity: { monthlyCents: 26000, ...electricity }, security: { monthlyCents: 9500, ...security } }), {
+      includeSamples: false,
+      computedAt: AT,
+      catalog: { internet: [] },
+    });
+  const opts = (r: ReturnType<typeof run>, c: string) => r.categories.find((x) => x.category === c)!.options.map((o) => [o.offerId, o.monthlyPrice]);
+
+  it('shows no solar or security price until a homeowner asks', () => {
+    const owner = run({ homeownership: 'own', showPricing: false }, { homeownership: 'own', showPricing: false });
+    expect(opts(owner, 'electricity')).toEqual([]);
+    expect(opts(owner, 'security')).toEqual([]);
+    expect(owner.categories.find((c) => c.category === 'security')!.notes.join(' ')).toMatch(/shown when you ask to see extra services/);
+    const renter = run({ homeownership: 'rent', showPricing: true }, { homeownership: 'rent', showPricing: true });
+    expect(opts(renter, 'security')).toEqual([]);
+    expect(opts(renter, 'electricity')).toEqual([]);
+  });
+
+  it('compares a homeowner who asked with the $80 security and $200 solar benchmarks', () => {
+    const asked = run({ homeownership: 'own', showPricing: true }, { homeownership: 'own', showPricing: true });
+    expect(opts(asked, 'security')).toEqual([['benchmark-security', 8000]]);
+    expect(opts(asked, 'electricity')).toEqual([['benchmark-electricity', 20000]]);
+    expect(asked.opportunities.map((o) => [o.category, o.monthlySavings])).toEqual([
+      ['electricity', 6000],
+      ['security', 1500],
+    ]);
+  });
+
+  it('keeps showing solar on results saved before owners had to ask', () => {
+    const legacy = buildAnalysis(parse({ zip: '60601', categories: ['electricity'], electricity: { monthlyCents: 26000, homeownership: 'own' } }), { includeSamples: false, computedAt: AT, catalog: { internet: [] } });
+    expect(opts(legacy, 'electricity')).toEqual([['benchmark-electricity', 20000]]);
+  });
+
+  it('applies the security benchmark from the published set, and $80 for sets saved before it existed', () => {
+    expect(quickPreview({ security: 9000, ownsHome: true, showExtras: true }).rows).toEqual([{ category: 'security', current: 9000, benchmark: 8000, difference: 1000, savings: 1000 }]);
+    expect(quickPreview({ security: 9000, ownsHome: true, showExtras: false }).rows).toEqual([]);
+    const old = { version: 'old', internetMonthly: 5500, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000 };
+    expect(quickPreview({ security: 9000, ownsHome: true, showExtras: true }, old).rows[0].benchmark).toBe(8000);
+  });
+});
+
 describe('comparison benchmarks', () => {
   it('holds the owner-set values exactly, in cents', () => {
-    expect(BENCHMARKS).toEqual({ version: '2026-11-17.1', internetMonthly: 5500, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000 });
+    expect(BENCHMARKS).toEqual({ version: '2026-11-17.1', internetMonthly: 5500, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000, securityMonthly: 8000 });
     expect([benchmarkMonthly('mobile', { mobileLines: 1 }), benchmarkMonthly('mobile', { mobileLines: 4 }), benchmarkMonthly('mobile', { mobileLines: 99 }), benchmarkMonthly('mobile', {})]).toEqual([4500, 18000, 45000, 4500]);
   });
 
   it('gives the home-page preview the same differences as the full analysis', () => {
-    const quick = quickPreview({ internet: 9500, mobile: 19000, mobileLines: 3, tv: 12000, electricity: 26000, ownsHome: true });
+    const quick = quickPreview({ internet: 9500, mobile: 19000, mobileLines: 3, tv: 12000, electricity: 26000, ownsHome: true, showExtras: true });
     expect(quick.rows.map((r) => [r.category, r.benchmark, r.savings])).toEqual([
       ['internet', 5500, 4000],
       ['mobile', 13500, 5500],

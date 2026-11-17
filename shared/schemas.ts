@@ -139,7 +139,7 @@ export const repInputSchema = z.object({
   /** Location slugs, or "*" for every served location. */
   markets: slugList.optional().default(['*']),
   /** Services handled; empty means all. */
-  categories: z.array(z.enum(['internet', 'mobile', 'tv', 'electricity'])).max(4).optional().default([]),
+  categories: z.array(z.enum(['internet', 'mobile', 'tv', 'electricity', 'security'])).max(5).optional().default([]),
   maxOpenLeads: z.number().int().min(0).max(1000).optional().default(0),
   /** Sign-in password; leave out to keep the current one. */
   password: z.string().min(12, 'Use at least 12 characters').max(200).optional(),
@@ -153,7 +153,7 @@ export interface Representative {
   active: boolean;
   accepting: boolean;
   markets: string[];
-  categories: ('internet' | 'mobile' | 'tv' | 'electricity')[];
+  categories: ('internet' | 'mobile' | 'tv' | 'electricity' | 'security')[];
   maxOpenLeads: number;
   canSignIn: boolean;
   /** admin | manager | rep | analyst (see shared/team/permissions.ts). */

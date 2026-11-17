@@ -45,3 +45,10 @@ Migration 9 already ran in production as written in `9c5b590`, so it is kept exa
 ## Update (2026-11-17): back to the simple white homepage
 
 At the owner's request the homepage returned to the earlier clean white layout (hero text beside the preview card, then categories, how it works, labels, footer). Kept from V2: national benchmarks from the server, signed differences, the owner's headings, the compensation line and no representative names. Removed: the background video, parallax and hero image (the files are archived outside the repository; the Higgsfield job ids above can recreate them).
+
+## Update (2026-11-17): home security, and extra services only on request
+
+- **Home security** is a fifth service with an **$80/month** benchmark (editable in Admin → Benchmarks; migration 11 adds it to every stored version).
+- **Solar and home security are priced only for a homeowner who asks.** On the home page the customer ticks "I own my home", then "Show extra services for homeowners: solar and home security pricing"; only then does the home security field appear and do solar or security figures show. The step-by-step assessment asks the same inside the electricity and home security steps. The server applies the same rule, so a request can never store a figure the customer was not shown.
+- Results saved before this rule keep showing solar to owners (they already saw it).
+- The homepage example result no longer includes electricity, since solar is not shown by default.

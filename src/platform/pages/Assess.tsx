@@ -23,7 +23,8 @@ const DEFAULTS: Record<PlatformCategory, unknown> = {
   internet: { provider: '', monthlyCents: null, equipmentFeeCents: null, technology: 'unknown', downloadMbps: null, dataCap: 'unknown', promoEnds: 'unknown', promoRegularCents: null, contractMonthsRemaining: 0, earlyTerminationCents: null, reliabilityConcerns: false },
   mobile: { carrier: '', monthlyCents: null, lines: 2, deviceFinancingCents: null, dataNeed: 'unlimited', international: false },
   tv: { provider: '', serviceType: 'cable', monthlyCents: null, equipmentFeeCents: null, otherStreamingCents: null, mustHave: [] },
-  electricity: { utility: '', monthlyCents: null, monthlyKwh: null, rateType: 'unknown', homeownership: 'unknown', roofSun: 'unknown' },
+  electricity: { utility: '', monthlyCents: null, monthlyKwh: null, rateType: 'unknown', homeownership: 'unknown', roofSun: 'unknown', showPricing: false },
+  security: { provider: '', monthlyCents: null, equipmentFeeCents: null, homeownership: 'unknown', showPricing: false },
 };
 
 const CAT_DESC: Record<PlatformCategory, string> = {
@@ -31,6 +32,7 @@ const CAT_DESC: Record<PlatformCategory, string> = {
   mobile: 'Cell phone plans',
   tv: 'Cable, satellite or live streaming',
   electricity: 'Your electric bill — and whether solar could lower it',
+  security: 'Home security monitoring (homeowners)',
 };
 
 const PRIORITY_LABEL: Record<(typeof PRIORITIES)[number], string> = {
@@ -46,6 +48,7 @@ const PROVIDER_SUGGESTIONS: Record<string, string[]> = {
   mobile: ['Verizon', 'AT&T', 'T-Mobile', 'Cricket', 'Metro by T-Mobile', 'Visible', 'Mint Mobile'],
   tv: ['Xfinity TV', 'DIRECTV', 'DISH', 'YouTube TV', 'Hulu + Live TV', 'Sling TV'],
   electricity: ['DTE Energy', 'Consumers Energy'],
+  security: ['ADT', 'Vivint', 'SimpliSafe', 'Ring', 'Brinks Home'],
 };
 
 /** Stable DOM id for a field, so the error summary can link to it. */
@@ -133,7 +136,7 @@ export default function Assess() {
       // Keep a format error ("Enter a dollar amount…") rather than replacing it with "Enter your bill".
       if (v.monthlyCents === null && !unknown[c] && !e[`${c}.monthlyCents`]) e[`${c}.monthlyCents`] = 'Enter your monthly bill, or choose “I don’t know”';
       if (c === 'mobile' && !(Number(v.lines) >= 1 && Number(v.lines) <= 10)) e['mobile.lines'] = 'Choose how many lines';
-      if (c === 'electricity' && (v.homeownership === 'unknown' || !v.homeownership)) e['electricity.homeownership'] = 'Choose whether you own or rent';
+      if ((c === 'electricity' || c === 'security') && (v.homeownership === 'unknown' || !v.homeownership)) e[`${c}.homeownership`] = 'Choose whether you own or rent';
       if (c === 'internet' && Number.isNaN(v.downloadMbps)) e['internet.downloadMbps'] = 'Enter a whole number, e.g. 300';
       if (c === 'electricity' && Number.isNaN(v.monthlyKwh)) e['electricity.monthlyKwh'] = 'Enter a whole number, e.g. 750';
     }
@@ -553,6 +556,34 @@ function CategoryFields({
           </Advanced>
         </div>
       );
+    case 'security':
+      return (
+        <div className="space-y-5">
+          {datalist}
+          {text('provider', 'Current security provider', { list: 'security-providers' })}
+          {monthly('Monthly monitoring bill', 'What you pay for monitoring each month, not equipment payments.')}
+          {money('equipmentFeeCents', 'Monthly equipment payment', 'If you are still paying off cameras or sensors. Kept separate.')}
+          <ChoiceCards
+            id={fid('security.homeownership')}
+            legend="Do you own or rent your home?"
+            hint="We compare home security for homeowners."
+            value={v.homeownership === 'own' || v.homeownership === 'rent' ? [v.homeownership] : []}
+            onChange={(x) => set({ homeownership: x[0] })}
+            error={errors['security.homeownership']}
+            columns="pair"
+            options={[
+              { value: 'own', label: 'Own' },
+              { value: 'rent', label: 'Rent' },
+            ]}
+          />
+          {v.homeownership === 'own' && (
+            <label className="flex items-start gap-3 text-sm text-pf-ink">
+              <input id={fid('security.showPricing')} type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--color-pf-brand)]" checked={!!v.showPricing} onChange={(e) => set({ showPricing: e.target.checked })} />
+              Show extra services for homeowners: home security pricing
+            </label>
+          )}
+        </div>
+      );
     case 'electricity':
       return (
         <div className="space-y-5">
@@ -572,7 +603,14 @@ function CategoryFields({
               { value: 'rent', label: 'Rent' },
             ]}
           />
+          {v.homeownership === 'own' && (
+            <label className="flex items-start gap-3 text-sm text-pf-ink">
+              <input id={fid('electricity.showPricing')} type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--color-pf-brand)]" checked={!!v.showPricing} onChange={(e) => set({ showPricing: e.target.checked })} />
+              Show extra services for homeowners: solar pricing
+            </label>
+          )}
           {v.homeownership === 'own' &&
+            !!v.showPricing &&
             select('roofSun', 'How much sun does your roof get?', [
               ['unknown', 'Not sure'],
               ['mostly_sunny', 'Mostly sunny'],
@@ -615,6 +653,12 @@ function Review({ answers, onEdit }: { answers: Answers; onEdit: (step: number) 
           ['Provider', String(v.provider ?? v.carrier ?? v.utility ?? '') || '—'],
           ['Monthly', fmt(v.monthlyCents)],
           ...(c === 'mobile' ? ([['Lines', String(v.lines)]] as [string, string][]) : []),
+          ...(c === 'security'
+            ? ([
+                ['Home', v.homeownership === 'own' ? 'Own' : v.homeownership === 'rent' ? 'Rent' : 'Not answered'],
+                ['Pricing', v.homeownership === 'own' && v.showPricing ? 'Show home security pricing' : 'Not requested'],
+              ] as [string, string][])
+            : []),
           ...(c === 'electricity'
             ? ([
                 ['Home', v.homeownership === 'own' ? 'Own' : v.homeownership === 'rent' ? 'Rent' : 'Not answered'],

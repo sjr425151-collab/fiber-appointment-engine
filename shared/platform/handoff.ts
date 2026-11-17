@@ -78,9 +78,11 @@ export const handoffSchema = attribution
   .extend(handoffContactShape)
   .extend({
     zip: leadInputSchema.shape.zip,
-    bills: z.object({ internet: cents, mobile: cents, tv: cents, electricity: cents }),
+    bills: z.object({ internet: cents, mobile: cents, tv: cents, electricity: cents, security: cents.optional().default(null) }),
     mobileLines: z.number().int().min(1).max(10).optional().default(1),
     ownsHome: z.boolean().optional().default(false),
+    /** Asked to see solar and home security pricing (only counts for homeowners). */
+    showExtras: z.boolean().optional().default(false),
   })
   .refine((v) => Object.values(v.bills).some((b) => (b ?? 0) > 0), { path: ['bills'], message: 'Enter at least one monthly bill first' })
   .refine((v) => v.preferredContact !== 'email' || v.email !== '', { path: ['email'], message: 'Add an email address, or choose phone or text' });
@@ -110,10 +112,10 @@ export interface HandoffPreview {
   ownsHome?: boolean;
 }
 
-const billInput = (h: Pick<Handoff, 'bills' | 'mobileLines' | 'ownsHome'>) => ({ ...h.bills, mobileLines: h.mobileLines, ownsHome: h.ownsHome });
+const billInput = (h: Pick<Handoff, 'bills' | 'mobileLines' | 'ownsHome' | 'showExtras'>) => ({ ...h.bills, mobileLines: h.mobileLines, ownsHome: h.ownsHome, showExtras: h.showExtras });
 
 /** The home-page preview, recomputed on the server from the bills and the benchmark set in use. Client-side totals are never trusted. */
-export function previewFromBills(h: Pick<Handoff, 'bills' | 'mobileLines' | 'ownsHome'>, set: BenchmarkSet = DEFAULT_BENCHMARKS): HandoffPreview {
+export function previewFromBills(h: Pick<Handoff, 'bills' | 'mobileLines' | 'ownsHome' | 'showExtras'>, set: BenchmarkSet = DEFAULT_BENCHMARKS): HandoffPreview {
   const p = quickPreview(billInput(h), set);
   return {
     source: 'home_preview',
@@ -124,7 +126,7 @@ export function previewFromBills(h: Pick<Handoff, 'bills' | 'mobileLines' | 'own
       category: r.category,
       currentMonthlyCents: r.current,
       comparisonMonthlyCents: r.benchmark,
-      comparison: r.benchmark === null ? 'Not compared (solar is for homeowners)' : 'Tucker benchmark',
+      comparison: r.benchmark === null ? 'Not compared (solar pricing is for homeowners who ask)' : 'Tucker benchmark',
       // Signed: a negative figure means the benchmark is higher than what they pay now.
       differenceCents: r.difference,
     })),
@@ -164,16 +166,19 @@ export const contactSchema = leadInputSchema
   .refine((v) => v.preferredContact !== 'email' || v.email !== '', { path: ['email'], message: 'Add an email address, or choose phone or text' });
 export type ContactInput = z.input<typeof contactSchema>;
 
-export const billCategories = (bills: Handoff['bills']): PlatformCategory[] => PLATFORM_CATEGORIES.filter((c) => (bills[c] ?? 0) > 0);
+/** Services with a bill entered. Home security only counts for a homeowner who asked to see extra-service pricing. */
+export const billCategories = (bills: Handoff['bills'], extras = true): PlatformCategory[] => PLATFORM_CATEGORIES.filter((c) => (bills[c] ?? 0) > 0 && (c !== 'security' || extras));
 
 /** The same answers as an assessment, so the lead gets a full analysis and opportunities without the customer filling in anything else. */
-export function assessmentFromBills(h: Pick<Handoff, 'bills' | 'mobileLines' | 'ownsHome' | 'zip'>): AssessmentInput {
-  const categories = billCategories(h.bills);
+export function assessmentFromBills(h: Pick<Handoff, 'bills' | 'mobileLines' | 'ownsHome' | 'showExtras' | 'zip'>): AssessmentInput {
+  const extras = h.ownsHome && h.showExtras;
+  const categories = billCategories(h.bills, extras);
   const a: AssessmentInput = { zip: h.zip, categories };
   if (h.bills.internet) a.internet = { monthlyCents: h.bills.internet };
   if (h.bills.mobile) a.mobile = { monthlyCents: h.bills.mobile, lines: h.mobileLines };
   if (h.bills.tv) a.tv = { monthlyCents: h.bills.tv };
-  if (h.bills.electricity) a.electricity = { monthlyCents: h.bills.electricity, homeownership: h.ownsHome ? 'own' : 'unknown' };
+  if (h.bills.electricity) a.electricity = { monthlyCents: h.bills.electricity, homeownership: h.ownsHome ? 'own' : 'unknown', showPricing: extras };
+  if (h.bills.security && extras) a.security = { monthlyCents: h.bills.security, homeownership: 'own', showPricing: true };
   return a;
 }
 

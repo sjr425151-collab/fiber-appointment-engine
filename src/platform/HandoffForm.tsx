@@ -54,7 +54,7 @@ export function HandoffDone({ result, contact, phone }: { result: HandoffResult;
   );
 }
 
-export function HandoffForm({ bills, mobileLines, ownsHome, onCancel }: { bills: Record<PlatformCategory, Cents | null>; mobileLines: number; ownsHome: boolean; onCancel: () => void }) {
+export function HandoffForm({ bills, mobileLines, ownsHome, showExtras, onCancel }: { bills: Record<PlatformCategory, Cents | null>; mobileLines: number; ownsHome: boolean; showExtras: boolean; onCancel: () => void }) {
   const [form, setForm] = useState({ firstName: '', phone: '', zip: '', email: '', street: '', preferredContact: 'phone', bestTime: 'anytime' });
   const [more, setMore] = useState(false);
   const [consent, setConsent] = useState(false);
@@ -77,7 +77,7 @@ export function HandoffForm({ bills, mobileLines, ownsHome, onCancel }: { bills:
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const body = { ...form, consent, marketingConsent: marketing, requestKey: requestKey.current, bills, mobileLines, ownsHome, ...attribution(), landingPage: window.location.pathname, sessionId: sessionId() };
+    const body = { ...form, consent, marketingConsent: marketing, requestKey: requestKey.current, bills, mobileLines, ownsHome, showExtras, ...attribution(), landingPage: window.location.pathname, sessionId: sessionId() };
     // The same schema the server uses, so mistakes show at once.
     const parsed = handoffSchema.safeParse(body);
     if (!parsed.success) {

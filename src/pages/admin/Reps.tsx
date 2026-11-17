@@ -13,6 +13,7 @@ const CATEGORIES = [
   ['mobile', 'Mobile'],
   ['tv', 'TV & streaming'],
   ['electricity', 'Electricity / solar'],
+  ['security', 'Home security'],
 ] as const;
 type Category = (typeof CATEGORIES)[number][0];
 

@@ -368,7 +368,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
   /** The benchmark values a browser needs (no author or notes). */
   const publicBenchmarks = () => {
     const b = repo.currentBenchmarks(db);
-    return { version: b.version, internetMonthly: b.internetMonthly, mobilePerLine: b.mobilePerLine, tvMonthly: b.tvMonthly, electricityWithSolarMonthly: b.electricityWithSolarMonthly };
+    return { version: b.version, internetMonthly: b.internetMonthly, mobilePerLine: b.mobilePerLine, tvMonthly: b.tvMonthly, electricityWithSolarMonthly: b.electricityWithSolarMonthly, securityMonthly: b.securityMonthly };
   };
 
   const admin = express.Router();
@@ -600,6 +600,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
       mobilePerLine: z.number().int().min(100).max(100_000),
       tvMonthly: z.number().int().min(100).max(100_000),
       electricityWithSolarMonthly: z.number().int().min(100).max(200_000),
+      securityMonthly: z.number().int().min(100).max(100_000),
       note: z.string().trim().max(300).optional().default(''),
     })
     .strict();

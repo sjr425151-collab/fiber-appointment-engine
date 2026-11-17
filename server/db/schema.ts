@@ -638,6 +638,14 @@ export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
       CREATE TRIGGER benchmark_versions_no_delete BEFORE DELETE ON benchmark_versions BEGIN SELECT RAISE(ABORT, 'benchmark versions are never deleted'); END;
     `,
   },
+  {
+    id: 11,
+    name: 'benchmark_security',
+    sql: `
+      -- Home security joins the benchmarks. Existing versions get the owner's $80 starting value.
+      ALTER TABLE benchmark_versions ADD COLUMN security_cents INTEGER NOT NULL DEFAULT 8000;
+    `,
+  },
 ];
 
 /**

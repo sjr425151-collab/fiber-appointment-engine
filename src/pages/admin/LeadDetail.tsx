@@ -73,7 +73,7 @@ interface HistoryRow {
   createdAt: string;
 }
 
-const CATEGORY: Record<string, string> = { internet: 'Home internet', mobile: 'Mobile', tv: 'TV & streaming', electricity: 'Electricity / solar', household: 'Whole household' };
+const CATEGORY: Record<string, string> = { internet: 'Home internet', mobile: 'Mobile', tv: 'TV & streaming', electricity: 'Electricity / solar', security: 'Home security', household: 'Whole household' };
 const CONTACT: Record<string, string> = { phone: 'Phone call', text: 'Text message', email: 'Email' };
 const SOURCE: Record<string, string> = { platform_handoff: 'Home page preview', platform_assessment: 'Full savings preview', landing_page: 'Regional internet page' };
 const mo = (c: number | null) => (c === null ? '—' : `${formatCents(c)}/mo`);

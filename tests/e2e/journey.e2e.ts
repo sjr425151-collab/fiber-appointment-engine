@@ -76,6 +76,7 @@ describe('household journey (staging, phone)', () => {
     // Ownership is required for the solar comparison.
     expect(await p.locator('#pf-error-summary').textContent()).toMatch(/own or rent/);
     await p.getByLabel('Own', { exact: true }).check();
+    await p.getByLabel('Show extra services for homeowners: solar pricing').check();
     await p.getByLabel('How much sun does your roof get?').selectOption('mostly_sunny');
     await continueTo(p, /What matters most/);
     await continueTo(p, /Check your answers/);

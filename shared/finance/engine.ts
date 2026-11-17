@@ -27,7 +27,7 @@ const nonNegCents = cents.refine((v) => v >= 0, 'Must not be negative');
 const month = z.number().int().min(0).max(600);
 const months = z.number().int().min(1).max(600);
 
-export const CATEGORIES = ['internet', 'mobile', 'tv', 'electricity', 'solar', 'other'] as const;
+export const CATEGORIES = ['internet', 'mobile', 'tv', 'electricity', 'solar', 'security', 'other'] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 /** How trustworthy a number is. Drives labelling in the UI. */

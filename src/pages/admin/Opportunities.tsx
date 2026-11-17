@@ -22,7 +22,7 @@ export interface OpportunityRow {
   updatedAt: string;
 }
 
-const CATEGORY_LABEL: Record<string, string> = { internet: 'Home internet', mobile: 'Mobile', tv: 'TV & streaming', electricity: 'Electricity / solar', household: 'Whole household' };
+const CATEGORY_LABEL: Record<string, string> = { internet: 'Home internet', mobile: 'Mobile', tv: 'TV & streaming', electricity: 'Electricity / solar', security: 'Home security', household: 'Whole household' };
 const KIND_LABEL: Record<OpportunityKind, string> = {
   verified: 'Verified offer',
   pending_address: 'Real plan · address not confirmed',

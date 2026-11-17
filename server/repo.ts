@@ -193,6 +193,7 @@ const toBenchmark = (r: Row): BenchmarkVersion => ({
   mobilePerLine: r.mobile_per_line_cents as number,
   tvMonthly: r.tv_cents as number,
   electricityWithSolarMonthly: r.electricity_solar_cents as number,
+  securityMonthly: (r.security_cents as number) ?? 8000,
   note: r.note as string,
   publishedBy: r.published_by as string,
   publishedAt: r.published_at as string,
@@ -211,8 +212,8 @@ export function publishBenchmarks(db: DB, v: Omit<BenchmarkSet, 'version'>, note
     const day = ts.slice(0, 10);
     const { n } = db.prepare("SELECT COUNT(*) AS n FROM benchmark_versions WHERE version LIKE ? || '.%'").get(day) as { n: number };
     db.prepare(
-      'INSERT INTO benchmark_versions (version, internet_cents, mobile_per_line_cents, tv_cents, electricity_solar_cents, note, published_by, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    ).run(`${day}.${n + 1}`, v.internetMonthly, v.mobilePerLine, v.tvMonthly, v.electricityWithSolarMonthly, note, by, ts);
+      'INSERT INTO benchmark_versions (version, internet_cents, mobile_per_line_cents, tv_cents, electricity_solar_cents, security_cents, note, published_by, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(`${day}.${n + 1}`, v.internetMonthly, v.mobilePerLine, v.tvMonthly, v.electricityWithSolarMonthly, v.securityMonthly ?? 8000, note, by, ts);
     return currentBenchmarks(db);
   });
 }
