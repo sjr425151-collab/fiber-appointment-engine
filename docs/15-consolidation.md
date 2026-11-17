@@ -1,6 +1,6 @@
 # 15 — Legacy website retirement and consolidation under Tucker
 
-**Status (2026-11-17): built and tested, not deployed.** The live site still runs `50d7982` (Monroe fiber homepage at `/`, savings pages at `/savings`). This change reaches customers at the next approved deploy.
+**Status (2026-11-17): built and tested, not deployed.** The live site runs `b8b6c50` (Tucker name, trytucker.com canonical, Monroe fiber homepage at `/`, savings pages at `/savings`). This change reaches customers at the next deploy, **including any saved Render setting** (for example switching `LEGACY_REDIRECTS` on).
 
 **Restore point:** commit `b8b6c50` is the last commit before this change. Reverting the consolidation commit (or redeploying `b8b6c50` from Render → Manual Deploy → pick commit) brings back the old homepage and URLs. No data or schema changed, so a rollback needs no database work.
 

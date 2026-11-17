@@ -1,6 +1,6 @@
 # 14 — Domain migration: livefiberconnect.com → trytucker.com
 
-**Status (2026-11-17): code built and tested, not deployed.** The URL structure changed after this page was first written; `15-consolidation.md` has the full old-to-new URL map. Both domains already reach the same Render service over HTTPS. This is a domain and name change only: same service, same database, same features.
+**Status (2026-11-17): live as `b8b6c50` with the new canonical domain; old-domain redirects still off.** Saving `LEGACY_REDIRECTS=true` in Render will also deploy the newest pushed commit (the consolidation in `15-consolidation.md`). The URL structure changed after this page was first written; `15-consolidation.md` has the full old-to-new URL map. Both domains already reach the same Render service over HTTPS. This is a domain and name change only: same service, same database, same features.
 
 ## What the code now does
 
