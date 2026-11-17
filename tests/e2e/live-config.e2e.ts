@@ -24,11 +24,11 @@ describe('national home', () => {
     p.on('request', (r) => r.method() === 'POST' && !r.url().includes('/api/events') && posted.push(new URL(r.url()).pathname));
     await p.goto(LIVE);
     await p.getByRole('heading', { level: 1, name: /See what your household could save/ }).waitFor();
-    expect(await p.title()).toBe('Tucker — Your home service savings broker');
+    expect(await p.title()).toBe('Tucker | Preview Potential Savings on Your Household Bills');
     expect(await p.locator('link[rel=canonical]').getAttribute('href')).toBe(`${LIVE}/`);
     expect(await p.locator('meta[property="og:image"]').getAttribute('content')).toBe(`${LIVE}/og-tucker.jpg`);
     const text = (await p.locator('body').innerText()) ?? '';
-    expect(text).not.toMatch(/Monroe|Omni|Michigan|LiveFiberConnect|Fiber Connect|Sample|Preview\b(?! appears)/);
+    expect(text).not.toMatch(/Monroe|Omni|Michigan|LiveFiberConnect|Fiber Connect|Sample|Staging preview|fiber/i);
     for (const name of ['Home Internet / Wi-Fi', 'Mobile', 'TV / Streaming', 'Electricity / Solar']) expect(await p.getByRole('heading', { level: 3, name, exact: true }).count()).toBe(1);
     expect(await overflow(p)).toBe(0);
 
@@ -47,7 +47,7 @@ describe('national home', () => {
     expect(await axe(p)).toEqual([]);
 
     // The numbers carry into the full preview.
-    await p.getByRole('button', { name: 'Get my full preview' }).click();
+    await p.getByRole('button', { name: 'Preview My Savings' }).click();
     await p.getByRole('heading', { level: 1, name: 'Where is your home?' }).waitFor();
     await p.fill('#pf-f-zip', '60601');
     await p.getByRole('button', { name: 'Continue' }).click();

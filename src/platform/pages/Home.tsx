@@ -4,7 +4,7 @@ import type { Cents } from '../../../shared/finance/money';
 import { formatCents } from '../../../shared/finance/money';
 import type { AssessmentInput, PlatformCategory } from '../../../shared/platform/assessment';
 import { BENCHMARK_DISCLOSURE, BENCHMARKS, quickPreview } from '../../../shared/platform/benchmarks';
-import { PLATFORM, PLATFORM_META } from '../../../shared/platform/brand';
+import { PLATFORM, PLATFORM_META, PRIMARY_CTA } from '../../../shared/platform/brand';
 import { track } from '../../lib/analytics';
 import { Button, Card, CurrencyInput, Field, Money, Select, StatusChip } from '../ds';
 import { editHandoff } from '../lib';
@@ -120,7 +120,7 @@ function QuickPreview() {
           )}
         </div>
         <Button type="submit" size="lg" className="w-full">
-          {any ? 'Get my full preview' : 'Start my savings preview'}
+          {PRIMARY_CTA}
         </Button>
         <p className="text-xs text-pf-subtle">Illustrative only. {BENCHMARK_DISCLOSURE}</p>
       </form>

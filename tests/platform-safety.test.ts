@@ -47,7 +47,7 @@ describe('production configuration', () => {
   it('serves Tucker’s national home at the root, indexable, with no location or provider in its metadata', async () => {
     const a = app(PROD);
     const home = await request(a).get('/').expect(200);
-    expect(home.text).toContain('<title>Tucker — Your home service savings broker</title>');
+    expect(home.text).toContain('<title>Tucker | Preview Potential Savings on Your Household Bills</title>');
     expect(home.text).toContain('content="index, follow"');
     expect(home.text).toContain('"sampleData":false');
     expect(home.text.replace(/<script type="application\/json" id="boot-data">.*?<\/script>/s, '')).not.toMatch(/Monroe|Omni|Fiber/);
@@ -97,7 +97,7 @@ describe('staging', () => {
     const a = app(STAGING);
     const page = await request(a).get('/').expect(200);
     expect(page.text).toContain('content="noindex, nofollow"');
-    expect(page.text).toContain('Tucker — Your home service savings broker');
+    expect(page.text).toContain('Tucker | Preview Potential Savings on Your Household Bills');
     expect((await request(a).get('/internet/monroe').expect(200)).text).toContain('content="noindex, nofollow"');
     expect((await request(a).get('/robots.txt')).text).toBe('User-agent: *\nDisallow: /\n');
   });

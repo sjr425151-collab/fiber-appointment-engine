@@ -24,6 +24,8 @@ export async function pickFirstSlot(p: Page) {
   if (await failed.isVisible()) throw new Error(`Contact failed: ${await failed.textContent()}`);
   const times = p.getByRole('group', { name: 'Choose a time' });
   const none = p.getByText(/No times left that day/);
+  // The group renders before its dates arrive; wait for the first one.
+  await dates.getByRole('button').first().waitFor();
   const n = await dates.getByRole('button').count();
   for (let i = 0; i < n; i++) {
     const button = dates.getByRole('button').nth(i);
@@ -52,7 +54,7 @@ describe('household journey (staging, phone)', () => {
     expect(await p.title()).toMatch(/Tucker/);
 
     // 2. Start the assessment.
-    await p.getByRole('link', { name: 'Find My Savings' }).first().click();
+    await p.getByRole('link', { name: 'Preview My Savings' }).first().click();
     await p.getByRole('heading', { level: 1, name: 'Where is your home?' }).waitFor();
     await p.getByLabel('ZIP code').fill('48161');
     await continueTo(p, /What do you pay for/);

@@ -92,14 +92,14 @@ No path returns 410: every retired page has a relevant replacement, and unknown 
 
 | Item | Now |
 |---|---|
-| Home title and description | "Tucker — Your home service savings broker", national description, no city or provider |
+| Home title and description | "Tucker | Preview Potential Savings on Your Household Bills", national description, no city or provider |
 | Canonical | Always `SITE_URL` + the page's own path; regional pages are canonical at `/internet/<location>` |
 | Structured data | Home: Organization + WebSite. Regional page: adds Service + FAQ for that location. Other pages: none |
 | Share image | `/og-tucker.jpg` on Tucker pages; the location's own image on regional pages |
 | Sitemap | `/`, `/savings/assess`, `/internet/<each active location>`, `/privacy` |
 | Robots | Allows the site, disallows `/admin` and `/api/`; private results and the style guide are `noindex` |
 | Favicon and touch icon | Provisional Tucker mark derived from the approved wordmark (final mark is a brand gate, `brand/README.md`) |
-| Web app manifest | None exists; nothing to rename |
+| Web app manifest | `/site.webmanifest`, named Tucker |
 | Navigation and footer | Tucker only; regional page header uses the Tucker wordmark |
 
 ## Test evidence (2026-11-17)

@@ -13,12 +13,15 @@ export const PLATFORM = {
 };
 
 export const PLATFORM_META = {
-  title: `${PLATFORM.name} — Your home service savings broker`,
+  title: `${PLATFORM.name} | Preview Potential Savings on Your Household Bills`,
   description:
-    'See what your household could save on internet, mobile, TV and electricity. Enter your bills for a free savings preview in about a minute. No account, no contact details.',
+    'See how your internet, mobile, TV and electricity bills compare with Tucker’s illustrative benchmarks. Explore potential household savings and discover available options.',
 };
 
 /** Share image for Tucker's own pages (regional internet pages keep theirs). */
+/** The one primary call to action, used in the header, the home page and the not-found page. */
+export const PRIMARY_CTA = 'Preview My Savings';
+
 export const PLATFORM_OG_IMAGE = '/og-tucker.jpg';
 
 /** National structured data for the homepage: the business and the website, with no location or provider. */

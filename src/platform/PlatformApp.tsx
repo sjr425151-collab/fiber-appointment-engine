@@ -1,7 +1,7 @@
 import './platform.css';
 import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { Link, Navigate, Route, Routes } from 'react-router-dom';
-import { PLATFORM } from '../../shared/platform/brand';
+import { PLATFORM, PRIMARY_CTA } from '../../shared/platform/brand';
 import { bootFlags } from '../lib/market';
 import { Mark, Wordmark } from '../components/ui';
 
@@ -37,7 +37,7 @@ function Shell({ children }: { children: ReactNode }) {
               Our data
             </a>
             <Link to="/savings/assess" className="inline-flex min-h-11 items-center rounded-xl bg-pf-brand px-3 font-semibold sm:px-4 text-white hover:bg-pf-brand-strong">
-              Find My Savings
+              {PRIMARY_CTA}
             </Link>
           </div>
         </nav>
@@ -84,7 +84,7 @@ function NotFound() {
           Go to the home page
         </Link>
         <Link to="/savings/assess" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-pf-field px-5 font-semibold text-pf-ink hover:bg-pf-surface">
-          Start my savings preview
+          {PRIMARY_CTA}
         </Link>
       </div>
     </div>

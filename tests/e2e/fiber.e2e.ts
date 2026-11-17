@@ -76,7 +76,7 @@ describe('regional internet page in production', () => {
     const r = await p.goto(`${PROD}/this-page-does-not-exist`);
     expect(r?.status()).toBe(404);
     await p.getByRole('heading', { level: 1, name: 'We can’t find that page' }).waitFor();
-    await p.getByRole('link', { name: 'Start my savings preview' }).click();
+    await p.locator('main').getByRole('link', { name: 'Preview My Savings' }).click();
     await p.getByRole('heading', { level: 1, name: 'Where is your home?' }).waitFor();
     expect(errors).toEqual([]);
     await ctx.close();
