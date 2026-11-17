@@ -92,16 +92,18 @@ describe('configuration', () => {
 });
 
 describe('hero photo preload', () => {
-  it('is sent only on regional internet pages, never on the national home', async () => {
+  it('is sent only on the home page, which is the only page that shows the hero image', async () => {
     const { renderHtml } = await import('../server/html');
     const { readFileSync } = await import('node:fs');
     const { MONROE } = await import('../shared/market');
     const template = readFileSync('index.html', 'utf8');
     const boot = { market: MONROE, markets: [], defaultSlug: 'monroe', flags: { env: 'production' as const, platform: true, sampleData: false } };
-    const home = renderHtml(template, { siteUrl: 'https://trytucker.com', canonicalPath: '/', boot });
-    const regional = renderHtml(template, { siteUrl: 'https://trytucker.com', canonicalPath: '/internet/monroe', heroPreload: true, boot });
-    expect(home).not.toMatch(/poster-|hero-preload/);
-    expect(regional.match(/rel="preload" as="image"/g)).toHaveLength(2);
-    expect(home).toContain('<script type="application/json" id="boot-data">');
+    const other = renderHtml(template, { siteUrl: 'https://trytucker.com', canonicalPath: '/privacy', boot });
+    const home = renderHtml(template, { siteUrl: 'https://trytucker.com', canonicalPath: '/', heroPreload: true, boot });
+    expect(other).not.toMatch(/tucker-hero|hero-preload/);
+    expect(home.match(/rel="preload" as="image"/g)).toHaveLength(1);
+    expect(home).toContain('/media/tucker-hero-1280.webp');
+    expect(other).toContain('<script type="application/json" id="boot-data">');
   });
+
 });

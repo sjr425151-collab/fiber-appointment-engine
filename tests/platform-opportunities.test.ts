@@ -61,27 +61,27 @@ const admin = async () => {
 describe('opportunities from an advisor request', () => {
   it('records the options the customer selected, not our defaults', async () => {
     const { body: a } = await submit().expect(201);
-    expect(a.analysis.categories.find((c: { category: string }) => c.category === 'internet').selected).toBe('monroe-1-gig');
-    // Customer switches internet to 2 Gig and keeps their mobile plan.
-    const c = await contact(a, { selections: { internet: 'monroe-2-gig', mobile: 'keep' } }).expect(201);
+    const internet = a.analysis.categories.find((c: { category: string }) => c.category === 'internet');
+    // The customer picks a different option from the one we pre-selected, and keeps their mobile plan.
+    const picked = internet.options.find((o: { offerId: string }) => o.offerId !== internet.selected);
+    const c = await contact(a, { selections: { internet: picked.offerId, mobile: 'keep' } }).expect(201);
     const opps = repo.opportunitiesForLead(db, c.body.leadId);
     expect(opps.map((o) => [o.category, o.offerId, o.kind, o.status])).toEqual([
-      ['internet', 'monroe-2-gig', 'pending_address', 'new'],
+      ['internet', picked.offerId, 'sample', 'new'],
       ['electricity', 'sample-solar-ppa', 'sample', 'new'],
     ]);
-    const net = opps[0];
-    // 2 Gig is $70 against $105 now (bill + equipment): figures come from the engine.
-    expect(net).toMatchObject({ currentMonthlyCents: 10500, proposedMonthlyCents: 7000, monthlySavingsCents: 3500, estimate: false });
+    // Figures come from the engine: $105 now (bill + equipment) against the picked option's price.
+    expect(opps[0]).toMatchObject({ currentMonthlyCents: 10500, proposedMonthlyCents: picked.monthlyPrice, monthlySavingsCents: 10500 - picked.monthlyPrice });
     expect(opps[1]).toMatchObject({ estimate: true, proposedMonthlyCents: 11360 });
-    expect(repo.listNotes(db, c.body.leadId).map((n) => n.body).join(" | ")).toMatch(/internet → 2 Gig; electricity → Sample Solar Agreement \(25 years\) \[SAMPLE\]/);
+    expect(repo.listNotes(db, c.body.leadId).map((n) => n.body).join(' | ')).toMatch(/electricity → Sample Solar Agreement \(25 years\) \[SAMPLE\]/);
   });
 
   it('ignores forged or unknown selections and never takes prices from the request', async () => {
     const { body: a } = await submit().expect(201);
     const c = await contact(a, { selections: { internet: 'not-a-real-offer', mobile: 'sample-unlimited' }, monthlySavingsCents: 999999, proposedMonthlyCents: 1 }).expect(201);
     const opps = repo.opportunitiesForLead(db, c.body.leadId);
-    // Unknown id → our default (1 Gig); valid sample id is honoured.
-    expect(opps.find((o) => o.category === 'internet')!.offerId).toBe('monroe-1-gig');
+    // Unknown id → our default selection; a valid sample id is honoured.
+    expect(opps.find((o) => o.category === 'internet')!.offerId).toBe(a.analysis.categories.find((c: { category: string }) => c.category === 'internet').selected);
     expect(opps.find((o) => o.category === 'mobile')!.offerId).toBe('sample-unlimited');
     expect(opps.every((o) => (o.monthlySavingsCents ?? 0) < 999999)).toBe(true);
     // Unknown categories in selections are rejected outright.
@@ -108,47 +108,54 @@ describe('opportunities from an advisor request', () => {
     expect((await agent.get('/api/admin/opportunities')).body.stats.new).toEqual({ count: 1, monthlySavingsCents: 0 });
   });
 
-  it('uses real plans where they exist and benchmarks elsewhere (production-like data)', async () => {
+  it('compares every household with the national benchmarks, whatever its ZIP (production-like data)', async () => {
     setup(false);
-    const { body: a } = await submit().expect(201);
-    // Monroe has real internet plans; mobile ($160 for 2 lines vs $90) uses the benchmark; electricity ($160) is below the $200 solar benchmark.
-    expect(a.analysis.categories.map((c: { category: string; selected: string }) => [c.category, c.selected])).toEqual([
-      ['internet', 'monroe-1-gig'],
-      ['mobile', 'benchmark-mobile'],
-      ['electricity', 'keep'],
-    ]);
-    expect(a.analysis.projectionBasis).toBe('benchmark');
-    const c = await contact(a, { street: '12 W Front St', city: 'Monroe' }).expect(201);
+    // A ZIP that used to have its own plans and one that never did now get exactly the same comparison.
+    const here = (await submit().expect(201)).body;
+    const there = (await submit({ ...HOUSEHOLD, zip: '10001' }).expect(201)).body;
+    const picks = (a: { analysis: { categories: { category: string; selected: string }[] } }) => a.analysis.categories.map((c) => [c.category, c.selected]);
+    // Internet $105 vs $55 and mobile $160 for 2 lines vs $90 use the benchmark; electricity ($160) is below the $200 solar benchmark.
+    expect(picks(here)).toEqual([['internet', 'benchmark-internet'], ['mobile', 'benchmark-mobile'], ['electricity', 'keep']]);
+    expect(picks(there)).toEqual(picks(here));
+    expect(here.analysis.projectionBasis).toBe('benchmark');
+    expect(here.analysis.benchmarks).toEqual({ version: '2026-11-17.1', internetMonthly: 5500, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000 });
+    // The electricity benchmark is higher than this bill: it is shown as an option that costs more, not hidden.
+    const electricity = here.analysis.categories.find((c: { category: string }) => c.category === 'electricity');
+    expect(electricity.options.map((o: { offerId: string; monthlyPrice: number }) => [o.offerId, o.monthlyPrice])).toEqual([['benchmark-electricity', 20000]]);
+    const c = await contact(here, { street: '12 W Front St', city: 'Monroe' }).expect(201);
     expect(repo.opportunitiesForLead(db, c.body.leadId).map((o) => [o.category, o.planName, o.kind, o.monthlySavingsCents])).toEqual([
-      ['internet', '1 Gig', 'pending_address', 5500],
+      ['internet', 'Tucker benchmark: home internet', 'advisor', 5000],
       ['mobile', 'Tucker benchmark: mobile', 'advisor', 7000],
     ]);
-    expect(repo.getLead(db, c.body.leadId)).toMatchObject({ street: '12 W Front St', city: 'Monroe' });
-    // The customer can keep a service out of the request.
-    const { body: b } = await submit().expect(201);
-    const d = await contact(b, { selections: { mobile: 'keep' }, email: 'other@example.com' }).expect(201);
-    expect(repo.opportunitiesForLead(db, d.body.leadId).map((o) => o.category)).toEqual(['internet']);
+    expect(repo.getLead(db, c.body.leadId)).toMatchObject({ street: '12 W Front St', city: 'Monroe', routingOutcome: 'queued' });
   });
 
-  it('uses each location’s own plans, and explains "coming soon" areas', async () => {
+  it('uses newly published benchmarks for new previews and never rewrites a saved one', async () => {
     setup(false);
-    // 48166 (Newport) is seeded as coming soon.
-    const soon = (await submit({ zip: '48166', categories: ['internet'], internet: HOUSEHOLD.internet }).expect(201)).body;
-    expect(soon.analysis.categories[0].options.map((o: { kind: string }) => o.kind)).toEqual(['benchmark']);
-    expect(soon.analysis.categories[0].notes.join(' ')).toMatch(/Omni Fiber is coming to Newport but isn’t available to order yet/);
-    // A ZIP nobody serves: no offers, generic note.
-    const none = (await submit({ zip: '10001', categories: ['internet'], internet: HOUSEHOLD.internet }).expect(201)).body;
-    expect(none.analysis.categories[0].options.map((o: { offerId: string }) => o.offerId)).toEqual(['benchmark-internet']);
-    // Changing a location's prices in the admin changes new analyses, with no code change.
-    const monroe = repo.getMarket(db, 'monroe')!;
-    repo.saveMarket(db, { ...monroe, plans: [{ name: '1 Gig', speed: 'Fiber', price: '$60/mo', highlights: [] }] });
-    const updated = (await submit({ zip: '48161', categories: ['internet'], internet: HOUSEHOLD.internet }).expect(201)).body;
-    expect(updated.analysis.categories[0].options.map((o: { planName: string; monthlyPrice: number }) => [o.planName, o.monthlyPrice])).toEqual([['1 Gig', 6000]]);
-    // …while an earlier customer's stored snapshot keeps the prices they saw.
-    const earlier = (await submit().expect(201)).body;
-    repo.saveMarket(db, { ...monroe, plans: [] });
+    const agent = await admin();
+    const earlier = (await submit({ zip: '60601', categories: ['internet'], internet: { monthlyCents: 9000 } }).expect(201)).body;
+    const published = await agent.post('/api/admin/benchmarks').set('X-Requested-With', 'fetch').send({ internetMonthly: 6000, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000, note: 'Internet up $5' }).expect(201);
+    expect(published.body.current).toMatchObject({ internetMonthly: 6000, note: 'Internet up $5', publishedBy: 'admin@example.com' });
+    expect(published.body.current.version).toMatch(/^\d{4}-\d{2}-\d{2}\.\d+$/);
+    const later = (await submit({ zip: '60601', categories: ['internet'], internet: { monthlyCents: 9000 } }).expect(201)).body;
+    expect(later.analysis.opportunities[0].monthlySavings).toBe(3000);
+    expect(later.analysis.benchmarks.version).toBe(published.body.current.version);
+    // The earlier customer's saved result, and the request they make from it, keep the $55 they were shown.
+    const again = (await request(app).get(`/api/platform/assessments/${earlier.id}?t=${earlier.token}`).expect(200)).body;
+    expect(again.analysis.opportunities[0].monthlySavings).toBe(3500);
     const c = await contact(earlier).expect(201);
-    expect(repo.opportunitiesForLead(db, c.body.leadId)[0]).toMatchObject({ planName: '1 Gig', proposedMonthlyCents: 6000 });
+    expect(repo.opportunitiesForLead(db, c.body.leadId)[0]).toMatchObject({ proposedMonthlyCents: 5500, monthlySavingsCents: 3500 });
+    // Restoring brings the old values back as a new version; history and the audit trail keep every step.
+    const first = published.body.history.at(-1);
+    const restored = await agent.post(`/api/admin/benchmarks/${first.id}/restore`).set('X-Requested-With', 'fetch').expect(201);
+    expect(restored.body.current).toMatchObject({ internetMonthly: 5500 });
+    expect(restored.body.history).toHaveLength(3);
+    const audit = (await agent.get('/api/admin/benchmarks/audit').expect(200)).body.events;
+    expect(audit.map((e: { action: string }) => e.action)).toEqual(['benchmarks.restore', 'benchmarks.publish']);
+    // Bad values are refused, and nobody can edit or delete a published version in the database.
+    await agent.post('/api/admin/benchmarks').set('X-Requested-With', 'fetch').send({ internetMonthly: 0, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000 }).expect(400);
+    expect(() => db.prepare('UPDATE benchmark_versions SET internet_cents = 1').run()).toThrow(/never edited/);
+    await request(app).get('/api/admin/benchmarks').expect(401);
   });
 
   it('records a general review when the customer keeps everything', async () => {
@@ -185,9 +192,9 @@ describe('admin management of opportunities', () => {
     const list = (await agent.get('/api/admin/opportunities').expect(200)).body;
     expect(list.total).toBe(3);
     expect(list.opportunities[0].leadName).toBe('Ana Lopez');
-    // Pipeline savings count only real offers (internet pending-address), never samples.
+    // Pipeline savings count only real offers, never samples: with samples only, that is zero.
     const net = list.opportunities.find((o: { category: string }) => o.category === 'internet');
-    expect(list.stats.new).toEqual({ count: 3, monthlySavingsCents: net.monthlySavingsCents });
+    expect(list.stats.new).toEqual({ count: 3, monthlySavingsCents: 0 });
 
     const r = await agent.patch(`/api/admin/opportunities/${net.id}`).set('X-Requested-With', 'fetch').send({ status: 'contacted' }).expect(200);
     expect(r.body.opportunity.status).toBe('contacted');

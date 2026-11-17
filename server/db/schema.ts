@@ -503,18 +503,6 @@ export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
         WHEN 'quoted' THEN 'offer_presented' WHEN 'contacted' THEN 'qualification_pending' ELSE 'identified' END;
       CREATE INDEX idx_opportunities_stage ON opportunities(stage, created_at);
 
-      -- Commission rules gain effective dates, targets and the payout split.
-      -- (The table existed unused since the first release; rows are never edited once used.)
-      ALTER TABLE commission_rules ADD COLUMN category                TEXT NOT NULL DEFAULT '';
-      ALTER TABLE commission_rules ADD COLUMN provider_id             TEXT;
-      ALTER TABLE commission_rules ADD COLUMN product_id              TEXT;
-      ALTER TABLE commission_rules ADD COLUMN rep_amount_cents        INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE commission_rules ADD COLUMN rep_share_bps           INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE commission_rules ADD COLUMN manager_override_cents  INTEGER NOT NULL DEFAULT 0;
-      ALTER TABLE commission_rules ADD COLUMN effective_from          TEXT NOT NULL DEFAULT '2000-01-01';
-      ALTER TABLE commission_rules ADD COLUMN effective_to            TEXT;
-      ALTER TABLE commission_rules ADD COLUMN created_by              TEXT NOT NULL DEFAULT '';
-
       CREATE TABLE orders (
         id                       TEXT PRIMARY KEY,
         order_no                 TEXT NOT NULL UNIQUE,
@@ -534,11 +522,6 @@ export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
         completed_at             TEXT,
         cancellation_reason      TEXT NOT NULL DEFAULT '',
         provider_confirmed       INTEGER NOT NULL DEFAULT 0,
-        rule_id                  TEXT,
-        expected_provider_cents  INTEGER,
-        received_provider_cents  INTEGER,
-        received_at              TEXT,
-        received_ref             TEXT NOT NULL DEFAULT '',
         idempotency_key          TEXT,
         version                  INTEGER NOT NULL DEFAULT 0,
         created_by               TEXT NOT NULL,
@@ -565,53 +548,30 @@ export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
       );
       CREATE INDEX idx_order_events ON order_events(order_id, created_at);
 
-      -- Payout batches. A batch is approved and then recorded as paid by a person;
-      -- the system never moves money.
-      CREATE TABLE payout_batches (
-        id                 TEXT PRIMARY KEY,
-        batch_no           TEXT NOT NULL UNIQUE,
-        period_from        TEXT NOT NULL,
-        period_to          TEXT NOT NULL,
-        status             TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','approved','paid','void')),
-        total_cents        INTEGER NOT NULL DEFAULT 0,
-        approved_by        TEXT NOT NULL DEFAULT '',
-        approved_at        TEXT,
-        paid_at            TEXT,
-        payment_reference  TEXT NOT NULL DEFAULT '',
-        created_by         TEXT NOT NULL,
-        created_at         TEXT NOT NULL,
-        updated_at         TEXT NOT NULL
+    `,
+  },
+  {
+    id: 10,
+    name: 'benchmark_versions',
+    sql: `
+      -- The national comparison benchmarks, one row per published set. The newest
+      -- row is the one in use. Rows are never edited: restoring an old set
+      -- publishes it again as a new row, so history stays complete.
+      CREATE TABLE benchmark_versions (
+        id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+        version                  TEXT NOT NULL UNIQUE,
+        internet_cents           INTEGER NOT NULL,
+        mobile_per_line_cents    INTEGER NOT NULL,
+        tv_cents                 INTEGER NOT NULL,
+        electricity_solar_cents  INTEGER NOT NULL,
+        note                     TEXT NOT NULL DEFAULT '',
+        published_by             TEXT NOT NULL,
+        published_at             TEXT NOT NULL
       );
-
-      -- Earnings ledger: one row per amount owed to (or taken back from) a person.
-      -- Amounts are never edited; corrections are new rows.
-      CREATE TABLE earnings (
-        id              TEXT PRIMARY KEY,
-        order_id        TEXT REFERENCES orders(id),
-        beneficiary_id  TEXT NOT NULL,
-        kind            TEXT NOT NULL CHECK (kind IN ('rep_commission','manager_override','bonus','adjustment','chargeback')),
-        rule_id         TEXT,
-        amount_cents    INTEGER NOT NULL,
-        state           TEXT NOT NULL CHECK (state IN ('projected','pending','earned','approved','payable','paid','reversed')),
-        reverses_id     TEXT,
-        payout_id       TEXT REFERENCES payout_batches(id),
-        note            TEXT NOT NULL DEFAULT '',
-        created_by      TEXT NOT NULL,
-        created_at      TEXT NOT NULL,
-        updated_at      TEXT NOT NULL
-      );
-      CREATE INDEX idx_earnings_beneficiary ON earnings(beneficiary_id, state);
-      CREATE INDEX idx_earnings_order ON earnings(order_id);
-      CREATE INDEX idx_earnings_payout ON earnings(payout_id);
-      -- One commission and one override per order per person: reprocessing can never double an earning.
-      CREATE UNIQUE INDEX idx_earnings_once ON earnings(order_id, beneficiary_id, kind) WHERE kind IN ('rep_commission','manager_override');
-      -- A paid commission can be charged back once.
-      CREATE UNIQUE INDEX idx_earnings_chargeback ON earnings(reverses_id) WHERE reverses_id IS NOT NULL;
-      -- An estimate ("projected") may follow the order's price; once it is pending or later the amount is fixed.
-      CREATE TRIGGER earnings_amount_immutable BEFORE UPDATE OF amount_cents, order_id, beneficiary_id, kind ON earnings
-        WHEN OLD.state <> 'projected' OR NEW.order_id IS NOT OLD.order_id OR NEW.beneficiary_id <> OLD.beneficiary_id OR NEW.kind <> OLD.kind
-        BEGIN SELECT RAISE(ABORT, 'earning amounts are immutable; add an adjustment instead'); END;
-      CREATE TRIGGER earnings_no_delete BEFORE DELETE ON earnings BEGIN SELECT RAISE(ABORT, 'earnings are never deleted'); END;
+      INSERT INTO benchmark_versions (version, internet_cents, mobile_per_line_cents, tv_cents, electricity_solar_cents, note, published_by, published_at)
+        VALUES ('2026-11-17.1', 5500, 4500, 7500, 20000, 'Starting values set by the owner', 'system', strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+      CREATE TRIGGER benchmark_versions_no_update BEFORE UPDATE ON benchmark_versions BEGIN SELECT RAISE(ABORT, 'benchmark versions are never edited'); END;
+      CREATE TRIGGER benchmark_versions_no_delete BEFORE DELETE ON benchmark_versions BEGIN SELECT RAISE(ABORT, 'benchmark versions are never deleted'); END;
     `,
   },
 ];

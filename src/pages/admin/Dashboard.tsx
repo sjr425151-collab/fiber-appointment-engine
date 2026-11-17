@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { LEAD_STATUSES, type Lead, type Representative } from '../../../shared/schemas';
 import { api, fmtDateTime, fmtPhone, STATUS_LABELS } from '../../lib/api';
 import { Spinner, StatusBadge } from '../../components/ui';
@@ -125,7 +125,7 @@ interface Stats {
   upcomingAppointments: number;
 }
 
-export default function Dashboard() {
+function Dashboard({ view }: { view: 'overview' | 'leads' }) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [leads, setLeads] = useState<Lead[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -136,6 +136,7 @@ export default function Dashboard() {
   const [reps, setReps] = useState<Representative[]>([]);
   const team = useTeam();
   const isRep = team.role === 'rep';
+  const overview = view === 'overview' && !isRep;
   const { data: md, bySlug } = useAdminMarkets(!isRep);
   const markets = md?.markets ?? [];
   const multi = markets.length > 1;
@@ -174,7 +175,8 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8">
-      <div className={isRep ? 'hidden' : 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4'}>
+      {overview && <h1 className="font-display text-2xl font-bold">Overview</h1>}
+      <div className={overview ? 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4' : 'hidden'}>
         {tiles.map((t) => (
           <div key={t.label} className="glass p-5">
             <p className="text-sm text-slate-400">{t.label}</p>
@@ -189,10 +191,10 @@ export default function Dashboard() {
           <MarketFilter markets={markets} value={market} onChange={setMarket} />
         </div>
       )}
-      {!isRep && <HandoffPanel />}
-      {!isRep && <ConversionPanel market={market} />}
+      {overview && <HandoffPanel />}
+      {overview && <ConversionPanel market={market} />}
 
-      <div className="glass overflow-hidden">
+      <div className={overview ? 'hidden' : 'glass overflow-hidden'}>
         <div className="flex flex-wrap items-center gap-3 border-b border-white/10 p-4">
           <h1 className="mr-auto font-display text-lg font-bold">
             {isRep ? 'My leads' : 'Leads'} <span className="text-slate-500">({total})</span>
@@ -279,4 +281,13 @@ export default function Dashboard() {
       </div>
     </div>
   );
+}
+
+/** Admin → Overview: totals and funnels. A representative has no overview and goes straight to their leads. */
+export default function Overview() {
+  const team = useTeam();
+  return team.role === 'rep' ? <Navigate to="/admin/leads" replace /> : <Dashboard view="overview" />;
+}
+export function Leads() {
+  return <Dashboard view="leads" />;
 }

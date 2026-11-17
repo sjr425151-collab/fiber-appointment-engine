@@ -98,7 +98,7 @@ describe('staging', () => {
     const page = await request(a).get('/').expect(200);
     expect(page.text).toContain('content="noindex, nofollow"');
     expect(page.text).toContain('Tucker | Preview Potential Savings on Your Household Bills');
-    expect((await request(a).get('/internet/monroe').expect(200)).text).toContain('content="noindex, nofollow"');
+    expect((await request(a).get('/savings/assess').expect(200)).text).toContain('content="noindex, nofollow"');
     expect((await request(a).get('/robots.txt')).text).toBe('User-agent: *\nDisallow: /\n');
   });
 });
@@ -123,8 +123,6 @@ describe('platform resource hints', () => {
     const pre = platformPreloader(file);
     expect(pre('/')).toEqual({ scripts: ['/assets/PlatformApp-c.js', '/assets/Home-d.js', '/assets/ds-b.js'], styles: ['/assets/PlatformApp-c.css'] });
     expect(pre('/savings/unknown').scripts).toEqual(['/assets/PlatformApp-c.js']);
-    // A regional internet page gets its own chunk and never the savings app.
-    expect(pre('/internet/monroe')).toEqual({ scripts: ['/assets/RegionalPage-e.js'], styles: [] });
     expect(platformPreloader(join(dir, 'missing.json'))('/')).toEqual({ scripts: [], styles: [] });
   });
 

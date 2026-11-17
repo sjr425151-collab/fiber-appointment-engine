@@ -193,7 +193,7 @@ export default function LeadDetail() {
 
   return (
     <div className="space-y-6">
-      <Link to="/admin" className="text-sm text-slate-400 hover:text-white">
+      <Link to="/admin/leads" className="text-sm text-slate-400 hover:text-white">
         ← All leads
       </Link>
       <div className="flex flex-wrap items-center gap-4">

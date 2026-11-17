@@ -1,3 +1,4 @@
+import { DEFAULT_BENCHMARKS, type BenchmarkSet } from '../../shared/platform/benchmarks';
 import { createContext, useContext, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import type { Market, MarketSummary } from '../../shared/market';
 import { api } from './api';
@@ -7,6 +8,7 @@ interface Boot {
   markets: MarketSummary[];
   defaultSlug: string;
   flags?: { env: 'development' | 'staging' | 'production'; platform: boolean; sampleData: boolean };
+  benchmarks?: BenchmarkSet;
 }
 
 /** Location data the server embedded in the page (see server/html.ts). */
@@ -30,6 +32,8 @@ export const defaultMarketSlug = () => boot?.defaultSlug ?? '';
 /** Feature flags rendered by the server (all off in production). */
 export const bootFlags = () => boot?.flags ?? { env: 'production' as const, platform: true, sampleData: false };
 export const bootDefaultMarket = () => boot?.market ?? null;
+/** The national comparison benchmarks the server is using (falls back to the starting values). */
+export const bootBenchmarks = (): BenchmarkSet => boot?.benchmarks ?? DEFAULT_BENCHMARKS;
 
 type State = { status: 'ready'; market: Market } | { status: 'loading' } | { status: 'notfound' };
 

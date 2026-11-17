@@ -7,6 +7,7 @@ import { OPPORTUNITY_STATUSES, OPPORTUNITY_STATUS_LABEL, type OpportunityDraft, 
 import { OPPORTUNITY_STAGE_LABEL, STAGE_TO_STATUS, type OpportunityStage } from '../shared/team/pipeline';
 import { CLOSED_LEAD_STATUSES, OPEN_LEAD_STATUSES, type Appointment, type AreaStatus, type Lead, type LeadNote, type LeadStatus, type Representative } from '../shared/schemas';
 import { marketSchema, type Market, type MarketSummary } from '../shared/market';
+import type { BenchmarkSet } from '../shared/platform/benchmarks';
 import { transaction, type DB } from './db';
 
 type Row = Record<string, unknown>;
@@ -176,6 +177,44 @@ export function saveMarket(db: DB, m: Market): Market {
 export function getSettings(db: DB): Record<string, string> {
   const rows = db.prepare('SELECT key, value FROM settings').all() as { key: string; value: string }[];
   return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+}
+
+// -------------------------------------------------------------- benchmarks --
+export interface BenchmarkVersion extends BenchmarkSet {
+  id: number;
+  note: string;
+  publishedBy: string;
+  publishedAt: string;
+}
+const toBenchmark = (r: Row): BenchmarkVersion => ({
+  id: r.id as number,
+  version: r.version as string,
+  internetMonthly: r.internet_cents as number,
+  mobilePerLine: r.mobile_per_line_cents as number,
+  tvMonthly: r.tv_cents as number,
+  electricityWithSolarMonthly: r.electricity_solar_cents as number,
+  note: r.note as string,
+  publishedBy: r.published_by as string,
+  publishedAt: r.published_at as string,
+});
+export function listBenchmarkVersions(db: DB): BenchmarkVersion[] {
+  return (db.prepare('SELECT * FROM benchmark_versions ORDER BY id DESC LIMIT 100').all() as Row[]).map(toBenchmark);
+}
+/** The set in use: the newest published row. */
+export function currentBenchmarks(db: DB): BenchmarkVersion {
+  return toBenchmark(db.prepare('SELECT * FROM benchmark_versions ORDER BY id DESC LIMIT 1').get() as Row);
+}
+/** Publish a new set. The version is the date plus a counter for that day, e.g. 2026-11-18.2. */
+export function publishBenchmarks(db: DB, v: Omit<BenchmarkSet, 'version'>, note: string, by: string): BenchmarkVersion {
+  return transaction(db, () => {
+    const ts = now();
+    const day = ts.slice(0, 10);
+    const { n } = db.prepare("SELECT COUNT(*) AS n FROM benchmark_versions WHERE version LIKE ? || '.%'").get(day) as { n: number };
+    db.prepare(
+      'INSERT INTO benchmark_versions (version, internet_cents, mobile_per_line_cents, tv_cents, electricity_solar_cents, note, published_by, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(`${day}.${n + 1}`, v.internetMonthly, v.mobilePerLine, v.tvMonthly, v.electricityWithSolarMonthly, note, by, ts);
+    return currentBenchmarks(db);
+  });
 }
 
 // ------------------------------------------------------------------- leads --

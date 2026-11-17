@@ -14,7 +14,8 @@
 | [10-milestone-m1.md](10-milestone-m1.md) | Milestone M1 stages, acceptance criteria and validation results |
 | [11-creative-production.md](11-creative-production.md) | Higgsfield production package: art direction, storyboard, prompts, delivery, performance and accessibility limits, budget gates (proposed) |
 | [../brand/README.md](../brand/README.md) | **TUCKER brand system**: decision log, Phase 0 audit, brand strategy, three creative territories, mascot production plan (proposed; awaiting founder approval) |
-| [16-handoff.md](16-handoff.md) | **Representative handoff**: the "Get My Exact Pricing" request, routing, lead lifecycle, representative sign-in, consent, what is and is not integrated |
+| [17-v2-national.md](17-v2-national.md) | **Current.** National benchmarks (versioned, Admin → Benchmarks), locations removed, new homepage and hero video, central lead alerts, no commission data |
+| [16-handoff.md](16-handoff.md) | Representative handoff: the pricing-review request, routing, lead lifecycle, representative sign-in, consent |
 | [15-consolidation.md](15-consolidation.md) | **Current structure.** Legacy site retirement: inventory (retain / refactor / archive / remove), URL map and redirects, benchmarks, SEO, test evidence, known gaps, deploy checklist |
 | [14-domain-migration.md](14-domain-migration.md) | Move to trytucker.com: what the code does, dependency audit, owner's manual steps, verification checklists, rollback |
 | [13-transition.md](13-transition.md) | Short map of the move from fiber appointment engine to the LiveFiberConnect platform: reusable, adapted, still fiber-specific, next |
@@ -32,7 +33,8 @@
 | Location-driven internet offers, free bill-review requests, bill insights, address capture, price-freshness warning | **Live** as `50d7982` (found live on 2026-11-17; deployed by a Render action, not by a push — see `08-operations.md` on `[skip render]`). Smoke-checked read-only: home, `/savings`, assessment and admin login load with no errors |
 | Site name **Tucker** everywhere (titles, wordmark with the nose period, emails, calendar files, share images) | **Live** as `b8b6c50` (found live on 2026-11-17, deployed from Render) |
 | Domain migration to **trytucker.com** (canonical URLs, sitemap, `www` handling, switchable 301s from the old domain) | **Live** as `b8b6c50` with `SITE_URL=https://trytucker.com`; checked read-only on 2026-11-17: canonical links, robots and sitemap use trytucker.com, `www` redirects. Old-domain redirects are still **off** (`LEGACY_REDIRECTS`) |
-| Consolidation under Tucker: national home with an instant benchmark preview at `/`, fiber page moved to `/internet/<location>`, retired URLs redirected, benchmarks in results | **Live** as `13882f8` (deployed and verified 2026-11-17). Restore point `b8b6c50` |
+| Consolidation under Tucker (national home, retired URLs) | **Live** as `13882f8` |
+| V2: national benchmarks, locations removed, new homepage and video, representative handoff, central alerts | **Built & tested, not deployed** (`16-handoff.md`, `17-v2-national.md`). Migrations 8–10, additive, rehearsed |
 | Representative handoff: short "Get My Exact Pricing" request, routing to representatives, representative sign-in, lead lifecycle and history, funnel | **Built & tested, not deployed** (`16-handoff.md`). Adds migration 8 (additive, rehearsed on the live commit's database) |
 | Real solar, mobile and TV offer terms | **Missing**: those categories show labelled benchmarks ($200 solar for homeowners, $45 per mobile line, $75 TV), never a quoted price |
 | Staging service, monitoring/alerting, off-site backups | Proposed — need approval |
@@ -41,5 +43,5 @@
 
 ## Tests
 
-`npm run check` runs typecheck, lint and all unit/API/DB tests (198 at the time of writing); `npm run test:e2e` builds and runs the browser suite (21 tests: journey, edge cases, responsive, axe-core, production settings, regional page and retired URLs). Files:
+`npm run check` runs typecheck, lint and all unit/API/DB tests (199 at the time of writing); `npm run test:e2e` builds and runs the browser suite (21 tests: journey, edge cases, responsive, axe-core, production settings, regional page and retired URLs). Files:
 `tests/api.test.ts` (API, security regressions, locations), `tests/notify.test.ts` (email outbox), `tests/finance.test.ts` (cost engine), `tests/offers.test.ts` (provenance, eligibility, ranking, adapters), `tests/platform-safety.test.ts` (flags, production isolation), `tests/platform-analysis.test.ts` (assessment → analysis), `tests/platform-api.test.ts` (assessment, results token, contact → lead, admin), `tests/platform-opportunities.test.ts` (opportunities, authorization), `tests/db-migrations.test.ts` (upgrade of a production-shaped DB, backups), `tests/infra.test.ts` (health, logs, config), `tests/e2e/*` (browser).

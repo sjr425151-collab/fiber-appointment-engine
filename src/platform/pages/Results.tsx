@@ -69,7 +69,7 @@ export default function Results() {
   const analysis: PlatformAnalysis | null = useMemo(() => {
     if (!data) return null;
     if (!Object.keys(selections).length) return data.analysis;
-    return buildAnalysis(assessmentSchema.parse(data.assessment), { includeSamples: data.analysis.includeSamples, computedAt: data.analysis.computedAt, selections, catalog: data.analysis.catalog });
+    return buildAnalysis(assessmentSchema.parse(data.assessment), { includeSamples: data.analysis.includeSamples, computedAt: data.analysis.computedAt, selections, catalog: data.analysis.catalog, benchmarks: data.analysis.benchmarks });
   }, [data, selections]);
 
   // Screen-reader summary of recalculated totals, announced (debounced) only when
@@ -387,7 +387,7 @@ export default function Results() {
             <li key={n}>{n}</li>
           ))}
           <li>Amounts are in exact cents; one-time costs (installation, equipment, early cancellation) are counted in the month they happen.</li>
-          <li>We may be paid by providers when a household switches. Payment never affects which option ranks first — the ranking rules are shown on each service.</li>
+          <li>Tucker may receive compensation from providers. The order options are shown in follows the ranking rules on each service.</li>
         </ul>
         <p className="mt-3 text-xs text-pf-subtle">
           Assumptions {analysis.assumptionsVersion} · Engine {analysis.version}

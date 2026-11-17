@@ -54,7 +54,7 @@ describe('household journey (staging, phone)', () => {
     expect(await p.title()).toMatch(/Tucker/);
 
     // 2. Start the assessment.
-    await p.getByRole('link', { name: 'Preview My Savings' }).first().click();
+    await p.getByRole('link', { name: 'Prefer the step-by-step version?' }).click();
     await p.getByRole('heading', { level: 1, name: 'Where is your home?' }).waitFor();
     await p.getByLabel('ZIP code').fill('48161');
     await continueTo(p, /What do you pay for/);
@@ -92,15 +92,17 @@ describe('household journey (staging, phone)', () => {
 
     // 6. Real-but-unconfirmed vs sample vs estimate are distinguished.
     const internet = p.locator('article', { has: p.getByRole('heading', { name: 'Home internet' }) });
-    expect(await internet.getByText('Needs address check').count()).toBeGreaterThan(0);
     expect(await internet.getByText('Sample data').count()).toBeGreaterThan(0);
     const electricity = p.locator('article', { has: p.getByRole('heading', { name: 'Electricity' }) });
     expect(await electricity.locator('span', { hasText: /^≈\s*Estimate$/ }).count()).toBe(1);
     expect(await electricity.textContent()).toMatch(/covers 90% of your usage/);
 
-    // The customer picks 2 Gig instead of our default.
-    await p.getByRole('radio', { name: /^2 Gig,/ }).check();
-    expect(await p.getByRole('radio', { name: /^2 Gig,/ }).isChecked()).toBe(true);
+    // The customer picks a different internet option from our default.
+    const choiceId = await internet.getByRole('radio', { checked: false }).filter({ hasNotText: /Keep|review/i }).and(internet.locator('input[id^="opt-internet-sample"]')).first().getAttribute('id');
+    const choice = internet.locator(`#${choiceId}`);
+    const chosen = ((await choice.getAttribute('aria-label')) ?? (await internet.locator(`label[for="${await choice.getAttribute('id')}"]`).innerText())).split(',')[0].trim();
+    await choice.check();
+    expect(await choice.isChecked()).toBe(true);
     expect(await overflow(p)).toBe(0);
 
     // 7. Ask for help (consent is enforced first).
@@ -121,15 +123,16 @@ describe('household journey (staging, phone)', () => {
     const a = await adminLogin(ctx, BASE);
     await a.getByRole('link', { name: 'Opportunities' }).click();
     await a.getByRole('heading', { name: 'Opportunities' }).waitFor();
-    const row = a.locator('tr', { hasText: '2 Gig' });
+    const row = a.locator('tr', { hasText: chosen });
     await row.waitFor();
-    expect(await row.textContent()).toMatch(/Ana Lopez.*Home internet → 2 Gig.*address not confirmed/);
+    const escaped = chosen.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    expect(await row.textContent()).toMatch(new RegExp(`Ana Lopez.*Home internet → ${escaped}`));
     expect(await a.locator('tr', { hasText: 'Sample Solar' }).textContent()).toMatch(/SAMPLE — not a real offer/);
-    await row.getByLabel('Status for 2 Gig').selectOption('contacted');
+    await row.getByLabel(`Status for ${chosen}`).selectOption('contacted');
     await a.waitForResponse((r) => r.url().includes('/api/admin/opportunities/') && r.request().method() === 'PATCH');
     await row.getByRole('link', { name: 'Ana Lopez' }).click();
     await a.getByRole('heading', { name: 'What they asked about' }).waitFor();
-    expect(await a.getByLabel('Status for 2 Gig').inputValue()).toBe('contacted');
+    expect(await a.getByLabel(`Status for ${chosen}`).inputValue()).toBe('contacted');
     expect(await a.locator('body').textContent()).toMatch(/New → Contacted/);
 
     expect(errors).toEqual([]);

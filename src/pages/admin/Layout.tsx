@@ -3,17 +3,18 @@ import { NavLink, Outlet, useNavigate, useOutletContext } from 'react-router-dom
 import { api, ApiError } from '../../lib/api';
 import { Logo, Spinner } from '../../components/ui';
 
-const ADMIN_NAV = [
-  { to: '/admin', label: 'Leads', end: true },
+const ADMIN_NAV: { to: string; label: string; end?: boolean }[] = [
+  { to: '/admin', label: 'Overview', end: true },
+  { to: '/admin/leads', label: 'Leads' },
   { to: '/admin/appointments', label: 'Appointments' },
   { to: '/admin/opportunities', label: 'Opportunities' },
   { to: '/admin/assessments', label: 'Assessments' },
   { to: '/admin/reps', label: 'Representatives' },
-  { to: '/admin/locations', label: 'Locations' },
-  { to: '/admin/areas', label: 'Service areas' },
+  { to: '/admin/benchmarks', label: 'Benchmarks' },
+  { to: '/admin/settings', label: 'Settings' },
 ];
 /** A representative sees only their own leads. */
-const REP_NAV = [{ to: '/admin', label: 'My leads', end: true }];
+const REP_NAV: { to: string; label: string; end?: boolean }[] = [{ to: '/admin/leads', label: 'My leads' }];
 
 export interface TeamContext {
   role: 'admin' | 'rep';
@@ -116,8 +117,8 @@ export default function AdminLayout() {
       {(!emailStatus.enabled || emailStatus.missing.length > 0) && (
         <div role="status" className="border-b border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-center text-sm text-amber-100 sm:px-6">
           {!emailStatus.enabled
-            ? 'Email notifications are off — lead alerts and customer confirmations are logged but not sent. Add RESEND_API_KEY to turn them on.'
-            : `No team alert email set for: ${emailStatus.missing.join(', ')}. Add one in Locations so new leads aren’t missed.`}
+            ? 'Email notifications are off — lead alerts and customer confirmations are logged but not sent. They turn on when the email service key is added in the hosting settings.'
+            : 'No alert email is set, so nobody is emailed when a new lead arrives. Add one in Settings.'}
         </div>
       )}
       {pricing.length > 0 && (

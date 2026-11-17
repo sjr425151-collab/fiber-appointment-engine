@@ -29,14 +29,10 @@ export const PERMISSIONS = [
   'leads.claim', // take an unassigned lead (when claiming is switched on)
   'orders.write', // record and progress orders on leads in your scope
   'orders.confirm', // confirm activation, completion or reversal with evidence
-  'earnings.read', // see earnings in your scope
   'team.read', // team performance in your scope
   'analytics.read', // business overview and funnel
-  'catalog.read', // providers, products and commission rules
+  'catalog.read', // providers and products
   'catalog.manage', // change providers and products
-  'commissions.manage', // change commission rules, approve earnings, record provider payments
-  'payouts.prepare', // build payout batches
-  'payouts.approve', // approve a payout batch and record that it was paid
   'users.manage', // invite and manage representatives, managers and analysts
   'users.manage_admins', // invite and manage admins
   'settings.manage', // locations, service areas, routing settings
@@ -47,17 +43,17 @@ export type Permission = (typeof PERMISSIONS)[number];
 /** Which records a role sees when it has a read or write permission on them. */
 export type Scope = 'all' | 'team' | 'own';
 
-const REP: Permission[] = ['leads.read', 'leads.write', 'leads.create', 'leads.claim', 'orders.write', 'earnings.read', 'catalog.read'];
+const REP: Permission[] = ['leads.read', 'leads.write', 'leads.create', 'leads.claim', 'orders.write', 'catalog.read'];
 const MANAGER: Permission[] = [...REP, 'leads.assign', 'orders.confirm', 'team.read'];
-const ANALYST: Permission[] = ['leads.read', 'earnings.read', 'team.read', 'analytics.read', 'catalog.read'];
-const ADMIN: Permission[] = [...new Set<Permission>([...MANAGER, ...ANALYST, 'leads.export', 'catalog.manage', 'commissions.manage', 'payouts.prepare', 'users.manage', 'settings.manage', 'audit.read'])];
+const ANALYST: Permission[] = ['leads.read', 'team.read', 'analytics.read', 'catalog.read'];
+const ADMIN: Permission[] = [...new Set<Permission>([...MANAGER, ...ANALYST, 'leads.export', 'catalog.manage', 'users.manage', 'settings.manage', 'audit.read'])];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   rep: REP,
   manager: MANAGER,
   analyst: ANALYST,
   admin: ADMIN,
-  // Approving payouts and managing admins need the owner.
+  // Managing admins needs the owner.
   super_admin: PERMISSIONS,
 };
 

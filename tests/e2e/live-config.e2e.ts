@@ -23,12 +23,19 @@ describe('national home', () => {
     const posted: string[] = [];
     p.on('request', (r) => r.method() === 'POST' && !r.url().includes('/api/events') && posted.push(new URL(r.url()).pathname));
     await p.goto(LIVE);
-    await p.getByRole('heading', { level: 1, name: /See what your household could save/ }).waitFor();
+    await p.getByRole('heading', { level: 1, name: /See if your household could save 50% or more on monthly bills/ }).waitFor();
+    expect(await p.locator('main').innerText()).toMatch(/Results vary and many households will save less/);
+    expect(await p.getByText('Type what you pay. We’ll find a smarter option.').count()).toBe(1);
     expect(await p.title()).toBe('Tucker | Preview Potential Savings on Your Household Bills');
     expect(await p.locator('link[rel=canonical]').getAttribute('href')).toBe(`${LIVE}/`);
     expect(await p.locator('meta[property="og:image"]').getAttribute('content')).toBe(`${LIVE}/og-tucker.jpg`);
     const text = (await p.locator('body').innerText()) ?? '';
-    expect(text).not.toMatch(/Monroe|Omni|Michigan|LiveFiberConnect|Fiber Connect|Sample|Staging preview|fiber/i);
+    expect(text).not.toMatch(/Monroe|Omni|Michigan|LiveFiberConnect|Fiber Connect|Sample|Staging preview|fiber|commission|paid by provider/i);
+    expect(text).toMatch(/Tucker may receive compensation from providers\./);
+    // The hero video plays muted, inline and looping, behind a still that paints first.
+    await p.locator('video').waitFor({ state: 'attached' });
+    const video = await p.evaluate(() => { const v = document.querySelector('video'); return v && { muted: v.muted, loop: v.loop, inline: v.playsInline, controls: v.controls }; });
+    expect(video).toEqual({ muted: true, loop: true, inline: true, controls: false });
     for (const name of ['Home Internet / Wi-Fi', 'Mobile', 'TV / Streaming', 'Electricity / Solar']) expect(await p.getByRole('heading', { level: 3, name, exact: true }).count()).toBe(1);
     expect(await overflow(p)).toBe(0);
 
@@ -71,11 +78,8 @@ describe('results in production settings', () => {
     expect(await p.locator('meta[name=robots]').getAttribute('content')).toBe('noindex, nofollow'); // private results are never indexed
     await p.getByText('This is an illustrative preview').waitFor();
 
-    // Internet: Monroe's real plans, pending an address check. No benchmark where a real plan exists.
-    expect(await p.getByRole('radio', { name: /^1 Gig, \$50/ }).isChecked()).toBe(true);
-    const internet = p.locator('article', { has: p.getByRole('heading', { name: 'Home internet' }) });
-    expect(await internet.getByText('Needs address check').count()).toBe(3);
-    expect(await internet.getByText('Benchmark', { exact: true }).count()).toBe(0);
+    // Internet: every household is compared with the national $55 benchmark; there are no location plans any more.
+    expect(await p.getByRole('radio', { name: /^Tucker benchmark: home internet, \$55/ }).isChecked()).toBe(true);
     // Mobile: no real plan on file → $45 × 3 lines benchmark, selected because it is lower than $190.
     const mobile = p.locator('article', { has: p.getByRole('heading', { name: 'Mobile phones' }) });
     expect(await p.getByRole('radio', { name: /^Tucker benchmark: mobile, \$135/ }).isChecked()).toBe(true);
@@ -91,8 +95,6 @@ describe('results in production settings', () => {
     await p.getByLabel('Last name').fill('Reyes');
     await p.getByLabel('Mobile phone', { exact: true }).fill('7345550177');
     await p.fill('#pf-contact-email', 'dana.e2e@example.com');
-    await p.fill('#pf-contact-street', '12 W Front St');
-    await p.fill('#pf-contact-city', 'Monroe');
     await p.getByRole('checkbox', { name: /By checking this box/ }).check();
     await p.getByRole('button', { name: 'Request my pricing review' }).click();
     await p.getByRole('heading', { name: 'Your Pricing Review Has Been Requested' }).waitFor();
@@ -101,11 +103,11 @@ describe('results in production settings', () => {
     await a.goto(`${LIVE}/admin/opportunities`);
     await a.locator('tr', { hasText: 'Dana Reyes' }).first().waitFor();
     const rows = await a.locator('tbody tr').allTextContents();
-    expect(rows.some((r) => /Home internet → 1 Gig.*address not confirmed/.test(r))).toBe(true);
+    expect(rows.some((r) => /Home internet → Tucker benchmark: home internet.*Needs an advisor quote · estimate/.test(r))).toBe(true);
     expect(rows.some((r) => /Mobile → Tucker benchmark: mobile.*Needs an advisor quote · estimate/.test(r))).toBe(true);
     expect(rows.some((r) => /Electricity/.test(r))).toBe(false); // kept as is
     await a.getByRole('link', { name: 'Dana Reyes' }).first().click();
-    await a.getByText('12 W Front St').first().waitFor();
+    await a.getByRole('heading', { name: 'What they previewed' }).waitFor();
     expect(errors).toEqual([]);
     await ctx.close();
   });
@@ -158,7 +160,7 @@ describe('representative handoff', () => {
     await done.waitFor();
     expect(await p.evaluate(() => document.activeElement?.getAttribute('role'))).toBe('status');
     const text = await done.innerText();
-    expect(text).toMatch(/With:\s*The Tucker Team \(Spotlight Marketing LLC\)/); // nobody is assigned yet, so no name is invented
+    expect(text).toMatch(/With:\s*The Tucker Team \(Spotlight Marketing LLC\)/); // the representative's name is never shown // nobody is assigned yet, so no name is invented
     expect(text).toMatch(/Contact by:\s*Phone call, \(734\) 555-0166/);
     expect(text).not.toMatch(/within|minutes|hours|today|shortly|guarantee/i);
     expect(posted.filter((u) => u === '/api/platform/handoff')).toHaveLength(2); // the failed try and the retry
@@ -172,6 +174,7 @@ describe('representative handoff', () => {
     // Admin: the request waits in the queue, marked as a preliminary comparison.
     const a = await adminLogin(ctx, LIVE);
     await a.setViewportSize({ width: 1280, height: 900 });
+    await a.goto(`${LIVE}/admin/leads`);
     await a.getByLabel('Assigned to').selectOption('unassigned');
     const row = a.locator('tr', { hasText: 'Jordan' });
     await row.waitFor();
@@ -198,6 +201,7 @@ describe('representative handoff', () => {
     await a.locator('tr', { hasText: 'Alex Rivera' }).getByText('Accepting leads').waitFor();
     expect(await axe(a)).toEqual([]);
     await a.getByRole('link', { name: 'Leads', exact: true }).click();
+    await a.getByRole('heading', { name: /^Leads/ }).waitFor();
     await a.getByRole('link', { name: 'Jordan' }).click();
     await a.getByLabel('Assign this lead').selectOption({ label: 'Alex Rivera · 0 open' });
     await a.getByText('Assigned to Alex Rivera (Assigned by hand).').waitFor();

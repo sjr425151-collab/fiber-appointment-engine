@@ -36,9 +36,9 @@ function Shell({ children }: { children: ReactNode }) {
             <a href="/#data" className="hidden rounded-lg px-2 py-2 text-pf-muted hover:text-pf-ink md:inline">
               Our data
             </a>
-            <Link to="/savings/assess" className="inline-flex min-h-11 items-center rounded-xl bg-pf-brand px-3 font-semibold sm:px-4 text-white hover:bg-pf-brand-strong">
+            <a href="/#preview" className="inline-flex min-h-11 items-center rounded-xl bg-pf-brand px-3 font-semibold sm:px-4 text-white hover:bg-pf-brand-strong">
               {PRIMARY_CTA}
-            </Link>
+            </a>
           </div>
         </nav>
       </header>
@@ -56,8 +56,7 @@ function Shell({ children }: { children: ReactNode }) {
       <footer className="border-t border-pf-line bg-pf-surface px-4 py-8 text-sm text-pf-muted sm:px-6">
         <div className="mx-auto max-w-6xl space-y-3">
           <p>
-            <strong className="text-pf-ink">{PLATFORM.name}</strong> is operated by {PLATFORM.operator}. We may be paid by providers when a
-            household switches; payment never changes how options are ranked, and every price shows where it came from and when it was checked.
+            <strong className="text-pf-ink">{PLATFORM.name}</strong> is operated by {PLATFORM.operator}. Tucker may receive compensation from providers. Every price shows where it came from and when it was checked.
           </p>
           <p>Savings shown are estimates based on what you tell us and the prices on file. Future price increases are hypothetical scenarios, not predictions.</p>
           <p>
@@ -83,9 +82,9 @@ function NotFound() {
         <Link to="/" className="inline-flex min-h-11 items-center justify-center rounded-xl bg-pf-brand px-5 font-semibold text-white hover:bg-pf-brand-strong">
           Go to the home page
         </Link>
-        <Link to="/savings/assess" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-pf-field px-5 font-semibold text-pf-ink hover:bg-pf-surface">
+        <a href="/#preview" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-pf-field px-5 font-semibold text-pf-ink hover:bg-pf-surface">
           {PRIMARY_CTA}
-        </Link>
+        </a>
       </div>
     </div>
   );

@@ -23,7 +23,7 @@ export function HandoffDone({ result, contact, phone }: { result: HandoffResult;
   const ref = useRef<HTMLDivElement>(null);
   // The form was replaced by this message: move focus here so it is announced and not lost.
   useEffect(() => ref.current?.focus(), []);
-  const { outcome, representative } = result.routing;
+  const { outcome } = result.routing;
   return (
     <div ref={ref} tabIndex={-1} role="status" className="rounded-xl bg-pf-save-soft p-4 outline-none">
       <h3 className="font-display text-xl font-bold text-pf-ink">{HANDOFF_COPY.doneTitle}</h3>
@@ -31,7 +31,7 @@ export function HandoffDone({ result, contact, phone }: { result: HandoffResult;
       <dl className="mt-3 space-y-1 text-sm text-pf-ink">
         <div className="flex gap-2">
           <dt className="font-semibold">With:</dt>
-          <dd>{representative ? `${representative}, on the Tucker Team (${BRAND.agency})` : `The Tucker Team (${BRAND.agency})`}</dd>
+          <dd>{`The Tucker Team (${BRAND.agency})`}</dd>
         </div>
         <div className="flex gap-2">
           <dt className="font-semibold">Contact by:</dt>

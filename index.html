@@ -28,11 +28,9 @@
     <meta name="twitter:description" content="%%DESCRIPTION%%" />
     <meta name="twitter:image" content="%%OG_IMAGE%%" />
 
-    <!--hero-preload: regional internet pages only (must match <picture> in HeroMedia)-->
-    <link rel="preload" as="image" type="image/avif" fetchpriority="high" media="(max-width: 767px) and (orientation: portrait)"
-      imagesrcset="/media/poster-mobile-480.avif 480w, /media/poster-mobile.avif 720w" imagesizes="100vw" />
-    <link rel="preload" as="image" type="image/avif" fetchpriority="high" media="(min-width: 768px), (orientation: landscape)"
-      imagesrcset="/media/poster-768.avif 768w, /media/poster-1280.avif 1280w, /media/poster-1920.avif 1920w" imagesizes="100vw" />
+    <!--hero-preload: home page only (must match <picture> in the home page hero)-->
+    <link rel="preload" as="image" type="image/webp" fetchpriority="high"
+      imagesrcset="/media/tucker-hero-768.webp 768w, /media/tucker-hero-1280.webp 1280w, /media/tucker-hero-1920.webp 1920w" imagesizes="100vw" />
     <!--/hero-preload-->
     <!--%%HEAD_DATA%%-->
   </head>

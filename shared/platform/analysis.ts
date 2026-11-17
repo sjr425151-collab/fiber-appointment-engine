@@ -11,7 +11,7 @@ import { rankOffers, type Candidate, type LensResult } from '../offers/rank';
 import { offerSchema, type Offer } from '../offers/model';
 import { CATEGORY_LABEL, PROMO_MONTHS, type Assessment, type PlatformCategory } from './assessment';
 import { CATALOG_VERSION, offersFor } from './catalog';
-import { BENCHMARK_DISCLOSURE, BENCHMARKS_VERSION, benchmarkAssumptions, benchmarkOffer } from './benchmarks';
+import { BENCHMARK_DISCLOSURE, BENCHMARKS_VERSION, benchmarkAssumptions, benchmarkOffer, DEFAULT_BENCHMARKS, type BenchmarkSet } from './benchmarks';
 import { SAMPLE_SOLAR_PROGRAMS, SOLAR_FACTS, SOLAR_PROGRAMS, solarAssumptions, solarOffer } from './solar';
 
 export const ANALYSIS_VERSION = `analysis-4/${CATALOG_VERSION}/b${BENCHMARKS_VERSION}`;
@@ -37,6 +37,8 @@ export interface AnalysisOptions {
    * snapshots made before this existed (they fall back to the built-in pilot data).
    */
   catalog?: AreaCatalog;
+  /** The benchmark set to compare with. Defaults to the starting values (what results saved before versions used). */
+  benchmarks?: BenchmarkSet;
 }
 
 export interface AreaCatalog {
@@ -114,6 +116,8 @@ export interface PlatformAnalysis {
   opportunities: { category: PlatformCategory; label: string; monthlySavings: Cents; kind: OptionKind }[];
   /** The area catalog used (see AnalysisOptions.catalog). */
   catalog?: AreaCatalog;
+  /** The benchmark values this analysis compared with, kept so the result never changes when benchmarks do. */
+  benchmarks?: BenchmarkSet;
   notes: string[];
 }
 
@@ -200,7 +204,7 @@ interface CategoryOffers {
 }
 
 /** Electricity → household-specific rooftop-solar alternatives. */
-function solarOffersFor(a: Assessment, includeSamples: boolean): CategoryOffers {
+function solarOffersFor(a: Assessment, includeSamples: boolean, set: BenchmarkSet): CategoryOffers {
   const e = a.electricity!;
   const out: CategoryOffers = { real: [], samples: [], assumptions: new Map(), notes: [] };
   if (e.homeownership === 'rent') {
@@ -229,8 +233,8 @@ function solarOffersFor(a: Assessment, includeSamples: boolean): CategoryOffers 
   if (e.roofSun === 'unknown') out.notes.push('We assumed your roof gets enough sun; a site assessment will confirm it.');
   // No program terms on file: compare against the solar benchmark (illustrative), unless demo samples are shown.
   if (!out.real.length && !includeSamples) {
-    out.benchmark = benchmarkOffer('electricity');
-    out.assumptions.set(out.benchmark.id, benchmarkAssumptions('electricity'));
+    out.benchmark = benchmarkOffer('electricity', {}, set);
+    out.assumptions.set(out.benchmark.id, benchmarkAssumptions('electricity', {}, set));
     return { ...out, solar: 'estimated' };
   }
   if (!out.real.length && !out.samples.length) {
@@ -239,14 +243,14 @@ function solarOffersFor(a: Assessment, includeSamples: boolean): CategoryOffers 
   return { ...out, solar: out.real.length || out.samples.length ? 'estimated' : 'advisor' };
 }
 
-function offersForCategory(c: PlatformCategory, a: Assessment, includeSamples: boolean, catalog: AreaCatalog | undefined): CategoryOffers {
-  if (c === 'electricity') return solarOffersFor(a, includeSamples);
+function offersForCategory(c: PlatformCategory, a: Assessment, includeSamples: boolean, catalog: AreaCatalog | undefined, set: BenchmarkSet): CategoryOffers {
+  if (c === 'electricity') return solarOffersFor(a, includeSamples, set);
   const cat = offersFor(c, { zip: a.zip, mobileLines: a.mobile?.lines, mobileDataNeed: a.mobile?.dataNeed, mobileInternational: a.mobile?.international, includeSamples });
   // Where no real plan is on file, the household is compared with Tucker's benchmark
   // (not in sample-data mode, which shows demo offers instead).
   const ctx = { mobileLines: a.mobile?.lines };
-  const bench = includeSamples ? {} : { benchmark: benchmarkOffer(c, ctx) };
-  const assumptions = new Map(bench.benchmark ? [[bench.benchmark.id, benchmarkAssumptions(c, ctx)]] : []);
+  const bench = includeSamples ? {} : { benchmark: benchmarkOffer(c, ctx, set) };
+  const assumptions = new Map(bench.benchmark ? [[bench.benchmark.id, benchmarkAssumptions(c, ctx, set)]] : []);
   // With an area catalog, real internet offers come from it (never from the built-in pilot data).
   if (catalog && c === 'internet') return { real: catalog.internet, samples: cat.samples, ...bench, assumptions, notes: !catalog.internet.length && catalog.internetNote ? [catalog.internetNote] : [] };
   return { ...cat, real: catalog ? [] : cat.real, ...bench, assumptions, notes: [] };
@@ -259,6 +263,7 @@ const KIND_RANK: Record<OptionKind, number> = { verified: 3, pending_address: 2,
 
 export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAnalysis {
   const now = new Date(opts.computedAt);
+  const set = opts.benchmarks ?? DEFAULT_BENCHMARKS;
   const scenario = ASSUMPTIONS_V1.escalationScenarios[0];
   const missing: string[] = [];
   const globalNotes: string[] = [];
@@ -275,7 +280,7 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
     let options: CategoryOption[] = [];
     let lenses: LensResult[] = [];
     let lensKind: OptionKind | null = null;
-    const cat = offersForCategory(c, a, opts.includeSamples, opts.catalog);
+    const cat = offersForCategory(c, a, opts.includeSamples, opts.catalog, set);
     notes.push(...cat.notes);
     const offerById = new Map([...cat.real, ...(cat.benchmark ? [cat.benchmark] : []), ...cat.samples].map((o) => [o.id, offerSchema.parse(o)]));
     {
@@ -384,6 +389,7 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
       projectionBasis,
       opportunities: [],
       ...(opts.catalog ? { catalog: opts.catalog } : {}),
+      benchmarks: set,
       notes: globalNotes,
     };
   }
@@ -412,6 +418,7 @@ export function buildAnalysis(a: Assessment, opts: AnalysisOptions): PlatformAna
     projectionBasis,
     opportunities,
     ...(opts.catalog ? { catalog: opts.catalog } : {}),
+      benchmarks: set,
     notes: [...globalNotes, ...household.notes],
   };
 }

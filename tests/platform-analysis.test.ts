@@ -284,7 +284,7 @@ describe('price freshness warnings for the team', () => {
 
 describe('comparison benchmarks', () => {
   it('holds the owner-set values exactly, in cents', () => {
-    expect(BENCHMARKS).toEqual({ internetMonthly: 5500, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000 });
+    expect(BENCHMARKS).toEqual({ version: '2026-11-17.1', internetMonthly: 5500, mobilePerLine: 4500, tvMonthly: 7500, electricityWithSolarMonthly: 20000 });
     expect([benchmarkMonthly('mobile', { mobileLines: 1 }), benchmarkMonthly('mobile', { mobileLines: 4 }), benchmarkMonthly('mobile', { mobileLines: 99 }), benchmarkMonthly('mobile', {})]).toEqual([4500, 18000, 45000, 4500]);
   });
 
@@ -315,9 +315,17 @@ describe('comparison benchmarks', () => {
   it('never shows savings for a bill at or below the benchmark, skips empty bills, and compares solar only for owners', () => {
     const q = quickPreview({ internet: 4000, mobile: null, tv: 0, electricity: 30000, ownsHome: false });
     expect(q.rows).toEqual([
-      { category: 'internet', current: 4000, benchmark: 5500, savings: 0 },
-      { category: 'electricity', current: 30000, benchmark: null, savings: 0, note: 'Solar is compared for homeowners.' },
+      // The benchmark is higher than this bill: shown as a possible extra cost (negative difference), never hidden.
+      { category: 'internet', current: 4000, benchmark: 5500, difference: -1500, savings: 0 },
+      { category: 'electricity', current: 30000, benchmark: null, difference: null, savings: 0, note: 'Solar is compared for homeowners.' },
     ]);
+    expect([q.monthlySavings, q.monthlyHigher, q.benchmarksVersion]).toEqual([0, 1500, '2026-11-17.1']);
+    // A published set changes the preview; the default values are untouched.
+    const set = { version: '2027-01-01.1', internetMonthly: 3000, mobilePerLine: 4000, tvMonthly: 7000, electricityWithSolarMonthly: 18000 };
+    expect(quickPreview({ internet: 4000, mobile: 10000, mobileLines: 2 }, set)).toMatchObject({ monthlySavings: 3000, benchmarkMonthly: 11000, benchmarksVersion: '2027-01-01.1' });
+    const withSet = buildAnalysis(parse({ zip: '60601', categories: ['internet'], internet: { monthlyCents: 4000 } }), { includeSamples: false, computedAt: AT, catalog: { internet: [] }, benchmarks: set });
+    expect(withSet.benchmarks).toEqual(set);
+    expect(withSet.opportunities[0]).toMatchObject({ kind: 'benchmark', monthlySavings: 1000 });
     expect(q.monthlySavings).toBe(0);
     expect(quickPreview({}).rows).toEqual([]);
   });

@@ -32,7 +32,6 @@ import { renderHtml, type BootData } from './html';
 import { platformPreloader } from './preload';
 import { PLATFORM_META, PLATFORM_OG_IMAGE, platformStructuredData } from '../shared/platform/brand';
 import { OPPORTUNITY_STATUSES } from '../shared/platform/opportunity';
-import { pricingHealth } from '../shared/platform/market-offers';
 import { createNotifier, listNotifications, type Notifier } from './notify';
 import { platformRouter, PlatformError } from './platform';
 import {
@@ -49,6 +48,7 @@ import {
   type Session,
 } from './lib/auth';
 import * as repo from './repo';
+import * as team from './repo-team';
 import { errorFields, log } from './lib/log';
 import { availableSlots, bookableDates, bookAppointment, BookingError } from './scheduling';
 
@@ -144,8 +144,9 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
   const retiredPath = (rawPath: string): string | null => {
     const path = rawPath.replace(/\/+$/, '') || '/';
     if (path === '/savings' || path === '/internet') return '/';
-    const slug = /^\/([a-z0-9-]{2,40})$/.exec(path)?.[1];
-    if (slug && repo.getMarket(db, slug)?.active) return `/internet/${slug}`;
+    // Regional internet pages were retired with the location system: their old addresses lead to the national home.
+    const slug = /^\/(?:internet\/)?([a-z0-9-]{2,40})$/.exec(path)?.[1];
+    if (slug && repo.getMarket(db, slug)) return '/';
     return null;
   };
   app.use((req, res, next) => {
@@ -364,6 +365,11 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     ['PATCH', /^\/reps\/me$/],
   ];
   const crm: CrmAdapter = deps.crm ?? noCrm;
+  /** The benchmark values a browser needs (no author or notes). */
+  const publicBenchmarks = () => {
+    const b = repo.currentBenchmarks(db);
+    return { version: b.version, internetMonthly: b.internetMonthly, mobilePerLine: b.mobilePerLine, tvMonthly: b.tvMonthly, electricityWithSolarMonthly: b.electricityWithSolarMonthly };
+  };
 
   const admin = express.Router();
   admin.use((req, res, next) => {
@@ -397,12 +403,10 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
   const marketQuery = z.object({ market: z.string().trim().max(40).optional() });
 
   admin.get('/me', (req, res) => {
-    const missingTeam = repo.listMarkets(db, { activeOnly: true }).filter((m) => !notifier.teamTo(m).length).map((m) => m.name);
+    const missingTeam = notifier.teamTo(repo.getDefaultMarket(db)).length ? [] : ['new leads'];
     // Prices that are (about to be) hidden from the savings comparison because nobody re-verified them.
-    const pricing = repo
-        .listMarkets(db, { activeOnly: true })
-        .map((m) => ({ name: m.name, ...pricingHealth(m, new Date()) }))
-        .filter((p) => p.state === 'expiring' || p.state === 'hidden');
+    // Location plan prices are no longer shown to customers, so there is nothing to warn about.
+    const pricing: { name: string; state: 'expiring' | 'hidden'; daysLeft: number | null }[] = [];
     res.json({
       email: req.session!.email,
       role: req.rep ? 'rep' : 'admin',
@@ -589,6 +593,45 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
 
   admin.get('/handoff-funnel', (_req, res) => res.json(repo.handoffFunnel(db, 30)));
 
+  // National benchmarks: one current set, every change a new version with its author.
+  const benchmarkBody = z
+    .object({
+      internetMonthly: z.number().int().min(100).max(100_000),
+      mobilePerLine: z.number().int().min(100).max(100_000),
+      tvMonthly: z.number().int().min(100).max(100_000),
+      electricityWithSolarMonthly: z.number().int().min(100).max(200_000),
+      note: z.string().trim().max(300).optional().default(''),
+    })
+    .strict();
+  admin.get('/benchmarks', (_req, res) => res.json({ current: repo.currentBenchmarks(db), history: repo.listBenchmarkVersions(db) }));
+  admin.post('/benchmarks', (req, res) => {
+    const { note, ...values } = parse(benchmarkBody, req.body);
+    const before = repo.currentBenchmarks(db);
+    const current = repo.publishBenchmarks(db, values, note, actor(req));
+    team.addAudit(db, { actor: actor(req), role: 'super_admin', action: 'benchmarks.publish', resourceType: 'benchmarks', resourceId: current.version, detail: { from: before.version, values, note }, ip: req.ip ?? '' });
+    res.status(201).json({ current, history: repo.listBenchmarkVersions(db) });
+  });
+  admin.post('/benchmarks/:id/restore', (req, res) => {
+    const old = repo.listBenchmarkVersions(db).find((v) => v.id === Number(req.params.id));
+    if (!old) throw new HttpError(404, 'Version not found.');
+    const current = repo.publishBenchmarks(db, old, `Restored the values of ${old.version}`, actor(req));
+    team.addAudit(db, { actor: actor(req), role: 'super_admin', action: 'benchmarks.restore', resourceType: 'benchmarks', resourceId: current.version, detail: { restored: old.version }, ip: req.ip ?? '' });
+    res.status(201).json({ current, history: repo.listBenchmarkVersions(db) });
+  });
+  admin.get('/benchmarks/audit', (_req, res) => res.json(team.listAudit(db, { resourceType: 'benchmarks', limit: 50 })));
+
+  // Central settings: where new-lead alerts go (replaces the per-location alert email).
+  const emailList = z.array(z.string().trim().toLowerCase().email('Enter valid email addresses')).max(10);
+  admin.get('/settings', (_req, res) => {
+    res.json({ teamEmails: notifier.centralTeamEmails(), fallbackTeamEmails: config.email.teamEmails, emailEnabled: notifier.enabled, emailFrom: config.email.from });
+  });
+  admin.put('/settings', (req, res) => {
+    const { teamEmails } = parse(z.object({ teamEmails: emailList }).strict(), req.body);
+    team.setSetting(db, 'notify.teamEmails', JSON.stringify(teamEmails));
+    team.addAudit(db, { actor: actor(req), role: 'super_admin', action: 'settings.update', resourceType: 'settings', resourceId: 'notify.teamEmails', detail: { count: teamEmails.length }, ip: req.ip ?? '' });
+    res.json({ teamEmails: notifier.centralTeamEmails(), fallbackTeamEmails: config.email.teamEmails, emailEnabled: notifier.enabled, emailFrom: config.email.from });
+  });
+
   admin.get('/appointments', (req, res) => {
     const { from, market } = parse(z.object({ from: z.string().datetime().optional(), market: z.string().trim().max(40).optional() }), req.query);
     const fromUtc = from ?? new Date(Date.now() - 7 * 86400000).toISOString();
@@ -633,8 +676,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\n\nSitemap: ${config.siteUrl}/sitemap.xml\n`);
   });
   app.get('/sitemap.xml', (_req, res) => {
-    // National pages first, then each active location's regional internet page.
-    const paths = ['/', '/savings/assess', ...repo.marketSummaries(db).map((m) => `/internet/${m.slug}`), '/privacy'];
+    const paths = ['/', '/savings/assess', '/privacy'];
     const urls = paths.map((p) => `  <url><loc>${config.siteUrl}${p}</loc></url>`).join('\n');
     res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
   });
@@ -659,6 +701,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
         markets: repo.marketSummaries(db),
         defaultSlug: def.slug,
         flags: config.flags,
+        benchmarks: publicBenchmarks(),
       });
       const send = (status: number, html: string) => res.status(status).set('Cache-Control', 'no-cache').type('html').send(html);
       const path = req.path.replace(/\/+$/, '') || '/';
@@ -667,7 +710,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
       const tucker = { title: PLATFORM_META.title, description: PLATFORM_META.description, ogImage: PLATFORM_OG_IMAGE, ogImageAlt: `${BRAND.name}. Your home service savings broker.`, omitStructuredData: true };
       // Tucker's national home.
       if (path === '/') {
-        return send(200, renderHtml(template, { ...base, ...tucker, canonicalPath: '/', structuredData: platformStructuredData(config.siteUrl), preload: platformPreloads(path), boot: boot(def) }));
+        return send(200, renderHtml(template, { ...base, ...tucker, canonicalPath: '/', heroPreload: true, structuredData: platformStructuredData(config.siteUrl), preload: platformPreloads(path), boot: boot(def) }));
       }
       if (path === '/privacy') {
         return send(200, renderHtml(template, { ...base, ...tucker, canonicalPath: '/privacy', title: `Privacy Notice — ${BRAND.name}`, preload: platformPreloads(path), boot: boot(def) }));
@@ -688,11 +731,6 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
         );
       }
       // Regional internet pages (optional local campaigns), one per active location.
-      const region = /^\/internet\/([a-z0-9-]{2,40})$/.exec(path)?.[1];
-      if (region) {
-        const m = repo.getMarket(db, region);
-        if (m?.active) return send(200, renderHtml(template, { ...base, canonicalPath: `/internet/${region}`, heroPreload: true, preload: platformPreloads(path), boot: boot(m) }));
-      }
       if (path === '/admin' || path.startsWith('/admin/')) {
         return send(200, renderHtml(template, { ...base, ...tucker, canonicalPath: '/', noindex: true, title: `${BRAND.name} — Team`, boot: boot(def) }));
       }

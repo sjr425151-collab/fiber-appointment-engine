@@ -110,11 +110,11 @@ describe('requesting a pricing review from the preview', () => {
   it('needs only a first name, phone, ZIP and consent, and saves everything the customer already told us', async () => {
     const alex = addRep();
     const r = await handoff({ requestKey: KEY }).expect(201);
-    expect(r.body).toMatchObject({ repeat: false, market: 'monroe', routing: { outcome: 'assigned', representative: 'Alex' } });
+    expect(r.body).toMatchObject({ repeat: false, market: 'monroe', routing: { outcome: 'assigned', representative: null } });
 
     const l = lead(r.body.leadId);
     expect(l).toMatchObject({
-      firstName: 'Dana', lastName: '', email: '', phone: '7345550177', zip: '48161', city: 'Monroe', street: '',
+      firstName: 'Dana', lastName: '', email: '', phone: '7345550177', zip: '48161', city: '', street: '',
       source: 'platform_handoff', status: 'assigned', assignedRepId: alex.id, routingOutcome: 'assigned',
       utmSource: 'facebook', utmCampaign: 'monroe-launch', clickId: 'fbclid-123', landingPage: '/', marketingConsent: false, bestTime: 'anytime',
     });
@@ -212,17 +212,30 @@ describe('requesting a pricing review from the preview', () => {
     expect(queue.body.leads.map((l: Lead) => l.id)).toEqual([r.body.leadId]);
   });
 
-  it('records a request from an unserved ZIP for review and does not claim service is available', async () => {
-    addRep();
+  it('treats every ZIP the same: no location record is needed to preview, request or be assigned', async () => {
+    const alex = addRep();
     const r = await handoff({ zip: '60601' }).expect(201);
-    expect(r.body.routing).toEqual({ outcome: 'unsupported', representative: null });
+    expect(r.body.routing).toEqual({ outcome: 'assigned', representative: null });
     const l = lead(r.body.leadId);
-    expect(l).toMatchObject({ assignedRepId: null, routingOutcome: 'unsupported', areaStatus: 'unknown', status: 'new', city: '' });
-    // Every category is a benchmark estimate there: nothing is priced.
-    expect(repo.opportunitiesForLead(db, l.id).every((o) => o.kind === 'advisor')).toBe(true);
-    // The team is still alerted so the request is not missed.
+    expect(l).toMatchObject({ assignedRepId: alex.id, routingOutcome: 'assigned', areaStatus: 'unknown', zip: '60601' });
+    // Every category is a benchmark comparison: work for a representative, never a priced offer.
+    expect(repo.opportunitiesForLead(db, l.id).every((o) => o.kind === 'advisor' && o.estimate)).toBe(true);
+    // Removing every service area and switching the old location record off changes nothing.
+    db.prepare('DELETE FROM service_areas').run();
+    const again = await handoff({ zip: '99501', phone: '7345550155' }).expect(201);
+    expect(again.body.routing.outcome).toBe('assigned');
+  });
+
+  it('sends alerts to the central address list from Settings, and reports when none is set', async () => {
+    const admin = await signIn();
+    const before = (await admin.get('/api/admin/settings').expect(200)).body;
+    expect(before).toMatchObject({ teamEmails: [], fallbackTeamEmails: ['team@example.com'] });
+    expect((await admin.put('/api/admin/settings').set(post).send({ teamEmails: ['not-an-email'] }).expect(400)).body.fields).toBeTruthy();
+    await admin.put('/api/admin/settings').set(post).send({ teamEmails: ['Ops@Example.com', 'owner@example.com'] }).expect(200);
+    await handoff().expect(201);
     await notifier.processDue();
-    expect(mailer.sent[0].text).toMatch(/Assigned to: Nobody — ZIP needs review/);
+    expect(mailer.sent[0].to).toEqual(['ops@example.com', 'owner@example.com']);
+    expect((await admin.get('/api/admin/me').expect(200)).body.locationsWithoutTeamEmail).toEqual([]);
   });
 
   it('never loses a lead when the email provider fails, and records the failure for retry', async () => {
@@ -262,7 +275,7 @@ describe('requesting a pricing review from the preview', () => {
     expect(handoffSchema.safeParse({ ...REQUEST, phone: '+1 (734) 555-0177' }).success).toBe(true);
     expect(previewFromBills({ bills: { internet: 5000, mobile: null, tv: null, electricity: 30000 }, mobileLines: 1, ownsHome: false })).toMatchObject({
       monthlyDifferenceCents: 0,
-      rows: [{ differenceCents: 0 }, { comparisonMonthlyCents: null, differenceCents: null, comparison: 'Not compared (solar is for homeowners)' }],
+      rows: [{ differenceCents: -500 }, { comparisonMonthlyCents: null, differenceCents: null, comparison: 'Not compared (solar is for homeowners)' }],
     });
   });
 });
@@ -275,7 +288,7 @@ describe('results page request', () => {
       .post(`/api/platform/assessments/${a.body.id}/contact`)
       .send({ firstName: 'Lee', phone: '7345550123', consent: true, intent: 'callback', token: a.body.token, requestKey: KEY })
       .expect(201);
-    expect(r.body.routing).toEqual({ outcome: 'assigned', representative: 'Alex' });
+    expect(r.body.routing).toEqual({ outcome: 'assigned', representative: null });
     const l = lead(r.body.leadId);
     expect(l).toMatchObject({ lastName: '', email: '', source: 'platform_assessment', assignedRepId: alex.id, status: 'assigned' });
     expect(l.preview).toMatchObject({ source: 'results', illustrative: true, verified: false });

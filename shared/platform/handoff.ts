@@ -12,7 +12,7 @@ import type { Cents } from '../finance/money';
 import { CONTACT_METHODS, leadInputSchema } from '../schemas';
 import type { AssessmentInput, PlatformCategory } from './assessment';
 import { PLATFORM_CATEGORIES } from './assessment';
-import { BENCHMARKS_VERSION, quickPreview } from './benchmarks';
+import { BENCHMARKS_VERSION, DEFAULT_BENCHMARKS, quickPreview, type BenchmarkSet } from './benchmarks';
 import type { OpportunityDraft } from './opportunity';
 
 z.config({ jitless: true });
@@ -112,20 +112,21 @@ export interface HandoffPreview {
 
 const billInput = (h: Pick<Handoff, 'bills' | 'mobileLines' | 'ownsHome'>) => ({ ...h.bills, mobileLines: h.mobileLines, ownsHome: h.ownsHome });
 
-/** The home-page preview, recomputed on the server from the bills. Client-side totals are never trusted. */
-export function previewFromBills(h: Pick<Handoff, 'bills' | 'mobileLines' | 'ownsHome'>): HandoffPreview {
-  const p = quickPreview(billInput(h));
+/** The home-page preview, recomputed on the server from the bills and the benchmark set in use. Client-side totals are never trusted. */
+export function previewFromBills(h: Pick<Handoff, 'bills' | 'mobileLines' | 'ownsHome'>, set: BenchmarkSet = DEFAULT_BENCHMARKS): HandoffPreview {
+  const p = quickPreview(billInput(h), set);
   return {
     source: 'home_preview',
     illustrative: true,
     verified: false,
-    benchmarksVersion: BENCHMARKS_VERSION,
+    benchmarksVersion: set.version,
     rows: p.rows.map((r) => ({
       category: r.category,
       currentMonthlyCents: r.current,
       comparisonMonthlyCents: r.benchmark,
       comparison: r.benchmark === null ? 'Not compared (solar is for homeowners)' : 'Tucker benchmark',
-      differenceCents: r.benchmark === null ? null : r.savings,
+      // Signed: a negative figure means the benchmark is higher than what they pay now.
+      differenceCents: r.difference,
     })),
     currentMonthlyCents: p.currentMonthly,
     monthlyDifferenceCents: p.monthlySavings,

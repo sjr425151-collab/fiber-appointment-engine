@@ -34,7 +34,6 @@ function collect(manifest: Manifest, key: string, out: Preloads, seen: Set<strin
 const SHELL = 'src/platform/PlatformApp.tsx';
 /** Pages that render outside the savings app shell: only their own chunk is hinted. */
 const STANDALONE_PAGES: [RegExp, string][] = [
-  [/^\/internet\/[a-z0-9-]+$/, 'src/internet/RegionalPage.tsx'],
   [/^\/privacy$/, 'src/pages/Privacy.tsx'],
 ];
 const PLATFORM_PAGES: [RegExp, string][] = [

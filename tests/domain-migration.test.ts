@@ -42,7 +42,6 @@ describe('canonical domain', () => {
     const app = make(false);
     for (const [path, canonical] of [
       ['/', 'https://trytucker.com/'],
-      ['/internet/monroe', 'https://trytucker.com/internet/monroe'],
       ['/savings/assess', 'https://trytucker.com/savings/assess'],
       ['/privacy', 'https://trytucker.com/privacy'],
     ]) {
@@ -56,10 +55,9 @@ describe('canonical domain', () => {
     const home = await get(app, 'trytucker.com', '/');
     expect(home.text).toContain('"url":"https://trytucker.com/"');
     expect(home.text).toContain('content="https://trytucker.com/og-tucker.jpg"'); // Tucker's own share image, not the fiber one
-    expect((await get(app, 'trytucker.com', '/internet/monroe')).text).toContain('content="https://trytucker.com/og-monroe.jpg"');
     expect((await get(app, 'trytucker.com', '/robots.txt')).text).toContain('Sitemap: https://trytucker.com/sitemap.xml');
     const sitemap = (await get(app, 'trytucker.com', '/sitemap.xml')).text;
-    expect(sitemap.match(/<loc>[^<]+<\/loc>/g)).toEqual(['<loc>https://trytucker.com/</loc>', '<loc>https://trytucker.com/savings/assess</loc>', '<loc>https://trytucker.com/internet/monroe</loc>', '<loc>https://trytucker.com/privacy</loc>']);
+    expect(sitemap.match(/<loc>[^<]+<\/loc>/g)).toEqual(['<loc>https://trytucker.com/</loc>', '<loc>https://trytucker.com/savings/assess</loc>', '<loc>https://trytucker.com/privacy</loc>']);
   });
 
   it('sends www to the bare domain, keeping the path and query', async () => {
@@ -71,7 +69,7 @@ describe('canonical domain', () => {
   it('never redirects the canonical host, so there can be no loop', async () => {
     for (const on of [false, true]) {
       const app = make(on);
-      for (const path of ['/', '/savings/assess', '/internet/monroe', '/privacy', '/admin/login', '/robots.txt', '/sitemap.xml', '/api/health']) {
+      for (const path of ['/', '/savings/assess', '/privacy', '/admin/login', '/robots.txt', '/sitemap.xml', '/api/health']) {
         const r = await get(app, 'trytucker.com', path);
         expect({ path, status: r.status, location: r.headers.location }).toEqual({ path, status: 200, location: undefined });
       }
@@ -97,8 +95,9 @@ describe('previous domain after the switch', () => {
     const MAP: [string, string][] = [
       ['/', '/'], // old homepage → Tucker homepage
       ['/?utm_source=facebook&utm_campaign=monroe_launch', '/?utm_source=facebook&utm_campaign=monroe_launch'],
-      ['/monroe', '/internet/monroe'], // old location page → regional internet page
-      ['/monroe/?fbclid=X1', '/internet/monroe?fbclid=X1'],
+      ['/monroe', '/'], // old location page → Tucker homepage (regional pages are retired)
+      ['/monroe/?fbclid=X1', '/?fbclid=X1'],
+      ['/internet/monroe?utm_source=ad', '/?utm_source=ad'],
       ['/savings', '/'], // old savings home → Tucker homepage
       ['/savings/assess?utm_source=facebook&fbclid=X1', '/savings/assess?utm_source=facebook&fbclid=X1'],
       ['/savings/results/abc-123', '/savings/results/abc-123'], // private results links keep working
@@ -157,8 +156,9 @@ describe('retired URLs on the new domain', () => {
   it('moves old paths to their replacements and gives a real 404 for everything else', async () => {
     const a = make(false);
     const moved: [string, string][] = [
-      ['/monroe', '/internet/monroe'],
-      ['/monroe?utm_source=x&b=2', '/internet/monroe?utm_source=x&b=2'],
+      ['/monroe', '/'],
+      ['/monroe?utm_source=x&b=2', '/?utm_source=x&b=2'],
+      ['/internet/monroe', '/'],
       ['/savings', '/'],
       ['/savings/?ref=ad', '/?ref=ad'],
       ['/internet', '/'],
@@ -173,9 +173,9 @@ describe('retired URLs on the new domain', () => {
       expect({ path, status: r.status }).toEqual({ path, status: 404 });
       expect(r.text).toContain('content="noindex, nofollow"');
     }
-    const regional = await get(a, 'trytucker.com', '/internet/monroe').expect(200);
-    expect(regional.text).toContain('<link rel="canonical" href="https://trytucker.com/internet/monroe" />');
-    expect(regional.text).toMatch(/<title>Omni Fiber Internet in Monroe, MI/); // regional SEO kept on the regional page only
+    // No page anywhere carries location-specific search metadata any more.
+    const head = (await get(a, 'trytucker.com', '/')).text.split('id="boot-data"')[0];
+    expect(head).not.toMatch(/Omni Fiber|Monroe/);
   });
 
   it('never redirects form posts or the API on retired paths', async () => {

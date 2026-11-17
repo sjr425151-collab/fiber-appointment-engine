@@ -7,7 +7,6 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { Representative } from '../../../shared/schemas';
 import { api, ApiError, fmtDateTime } from '../../lib/api';
 import { Spinner } from '../../components/ui';
-import { useAdminMarkets } from './useMarkets';
 
 const CATEGORIES = [
   ['internet', 'Home internet'],
@@ -51,8 +50,6 @@ export default function Reps() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const { data: md } = useAdminMarkets();
-  const markets = md?.markets ?? [];
 
   const load = () => api<{ representatives: Representative[] }>('/admin/reps').then((r) => setReps(r.representatives));
   useEffect(() => {
@@ -70,7 +67,7 @@ export default function Reps() {
       phone: draft.phone,
       active: draft.active,
       accepting: draft.active && draft.accepting,
-      markets: draft.allMarkets ? ['*'] : draft.markets,
+      markets: ['*'],
       categories: draft.categories,
       maxOpenLeads: Number(draft.maxOpenLeads) || 0,
       ...(draft.password ? { password: draft.password } : {}),
@@ -104,7 +101,7 @@ export default function Reps() {
         </button>
       </div>
       <p className="max-w-3xl text-sm text-slate-400">
-        New pricing-review requests go to an active representative who is accepting leads, covers the customer’s location and service, and has the fewest open leads. A returning household stays with the person already helping
+        New pricing-review requests go to an active representative who is accepting leads, handles the service the customer asked about, and has the fewest open leads. A returning household stays with the person already helping
         it. If nobody matches, the request waits in the follow-up queue (Leads → Unassigned).
       </p>
       {accepting === 0 && (
@@ -133,19 +130,7 @@ export default function Reps() {
               </div>
             ))}
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <fieldset>
-              <legend className="label">Locations covered</legend>
-              <label className="flex items-center gap-2 text-sm text-slate-200">
-                <input type="checkbox" checked={draft.allMarkets} onChange={(e) => setDraft({ ...draft, allMarkets: e.target.checked })} /> Every location we serve
-              </label>
-              {!draft.allMarkets &&
-                markets.map((m) => (
-                  <label key={m.slug} className="mt-1 flex items-center gap-2 text-sm text-slate-200">
-                    <input type="checkbox" checked={draft.markets.includes(m.slug)} onChange={() => setDraft({ ...draft, markets: toggle(draft.markets, m.slug) })} /> {m.name}, {m.state}
-                  </label>
-                ))}
-            </fieldset>
+          <div>
             <fieldset>
               <legend className="label">Services handled</legend>
               <p className="mb-1 text-xs text-slate-400">Leave all unchecked for every service.</p>
@@ -226,8 +211,7 @@ export default function Reps() {
                       {r.active && !r.canSignIn && <div className="text-xs text-slate-400">No password set</div>}
                     </td>
                     <td className="px-4 py-3 text-slate-300">
-                      <div>{r.markets.includes('*') ? 'All locations' : r.markets.map((m) => markets.find((x) => x.slug === m)?.name ?? m).join(', ') || 'No location'}</div>
-                      <div className="text-xs text-slate-400">{r.categories.length ? r.categories.map((c) => CATEGORIES.find(([v]) => v === c)?.[1] ?? c).join(', ') : 'All services'}</div>
+                      <div>{r.categories.length ? r.categories.map((c) => CATEGORIES.find(([v]) => v === c)?.[1] ?? c).join(', ') : 'All services'}</div>
                     </td>
                     <td className="px-4 py-3 text-slate-300">
                       {r.openLeads}

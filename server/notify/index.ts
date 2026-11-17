@@ -85,7 +85,20 @@ export function createNotifier(db: DB, config: AppConfig, mailer: Mailer = maile
     ).run(randomUUID(), kind, leadId, appointmentId, marketId, 'pending', sendAfter.toISOString(), ts, ts);
   }
 
-  const teamTo = (m: Market) => (m.notifyEmails.length ? m.notifyEmails : config.email.teamEmails);
+  /** Alert addresses set in Admin → Settings. */
+  const centralTeamEmails = (): string[] => {
+    const r = db.prepare("SELECT value FROM settings WHERE key = 'notify.teamEmails'").get() as { value: string } | undefined;
+    try {
+      return r ? (JSON.parse(r.value) as string[]) : [];
+    } catch {
+      return [];
+    }
+  };
+  /** Where new-lead alerts go: the central list, else the older per-record list, else TEAM_NOTIFY_EMAIL. */
+  const teamTo = (m: Market) => {
+    const central = centralTeamEmails();
+    return central.length ? central : m.notifyEmails.length ? m.notifyEmails : config.email.teamEmails;
+  };
   const adminUrl = (lead: Lead) => `${config.siteUrl}/admin/leads/${lead.id}`;
 
   /** Build the email for a row from *current* data, or explain why it shouldn't be sent. */
@@ -216,6 +229,7 @@ export function createNotifier(db: DB, config: AppConfig, mailer: Mailer = maile
     mailer,
     enabled: mailer.enabled,
     teamTo,
+    centralTeamEmails,
     processDue,
 
     onLead(lead: Lead, duplicate: boolean) {

@@ -9,7 +9,6 @@ import { z } from 'zod';
 import { PLATFORM_CONSENT_VERSION, platformConsentText } from '../shared/content';
 import { assessmentSchema, submissionSchema, type PlatformCategory } from '../shared/platform/assessment';
 import { buildAnalysis, type AreaCatalog, type PlatformAnalysis } from '../shared/platform/analysis';
-import { offersFromMarket } from '../shared/platform/market-offers';
 import {
   assessmentFromBills,
   billCategories,
@@ -55,20 +54,15 @@ function parse<T extends z.ZodType>(schema: T, data: unknown): z.output<T> {
 const potentialSavings = (a: PlatformAnalysis) => a.opportunities.reduce((s, o) => s + o.monthlySavings, 0);
 
 export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
-  /** Real offers for a ZIP, from the location that serves it (admin → Locations and Service areas). */
-  const areaCatalog = (zip: string): AreaCatalog => {
-    const area = repo.getServiceArea(db, zip);
-    const market = area ? repo.getMarket(db, area.marketId) : null;
-    if (!area || !market?.active) return { internet: [] };
-    if (area.status === 'available' || area.status === 'verify') return { internet: offersFromMarket(market, [zip]) };
-    if (area.status === 'coming_soon') {
-      return {
-        internet: [],
-        internetNote: `${market.provider} is coming to ${area.city} but isn’t available to order yet. An advisor can review your current internet bill now and let you know when it arrives.`,
-      };
-    }
-    return { internet: [] };
-  };
+  /**
+   * Previews are national: every household is compared with the current
+   * benchmark set, whatever its ZIP. No location or service-area record is
+   * consulted, so nothing geographic can block a preview.
+   */
+  const NATIONAL: AreaCatalog = { internet: [] };
+  const benchmarks = () => repo.currentBenchmarks(db);
+  /** The one internal record that holds the organisation's calendar and alert settings (every lead is filed under it). */
+  const home = () => repo.getDefaultMarket(db);
   const r = express.Router();
   const isTest = process.env.NODE_ENV === 'test';
   const limiter = (limit: number) => rateLimit({ windowMs: 15 * 60_000, limit, standardHeaders: 'draft-8', legacyHeaders: false, skip: () => isTest });
@@ -78,13 +72,6 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
     const hash = typeof token === 'string' && token.length >= 16 ? repo.getAssessmentTokenHash(db, id) : null;
     if (!hash || !safeEqual(hash, sha256(token as string))) throw new PlatformError(404, 'Results not found.');
     return repo.getAssessment(db, id)!;
-  };
-
-  /** The served location a ZIP belongs to, or null when we do not serve it (so nothing is implied about availability). */
-  const served = (zip: string) => {
-    const area = repo.getServiceArea(db, zip);
-    const market = area && area.status !== 'not_serviceable' ? repo.getMarket(db, area.marketId) : null;
-    return { area, market: market?.active ? market : null };
   };
 
   /**
@@ -99,7 +86,8 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
     const rep = lead.assignedRepId ? repo.getRep(db, lead.assignedRepId) : null;
     const outcome = lead.routingOutcome === 'assigned' || lead.routingOutcome === 'unsupported' ? lead.routingOutcome : 'queued';
     // First name only: enough to tell the customer who will be in touch.
-    return { outcome: rep ? 'assigned' : outcome === 'assigned' ? 'queued' : outcome, representative: rep ? rep.name.split(/\s+/)[0] : null };
+    // Who is assigned is internal: customers are only told the Tucker Team has their request.
+    return { outcome: rep ? 'assigned' : outcome === 'assigned' ? 'queued' : outcome, representative: null };
   };
 
   /** Decide who gets a new lead, record why, and report the outcome. Deterministic (shared/platform/routing.ts). */
@@ -117,13 +105,13 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
     const sub = parse(submissionSchema, req.body);
     const assessment = parse(assessmentSchema, sub.assessment);
     const computedAt = new Date().toISOString();
-    const analysis = buildAnalysis(assessment, { includeSamples: config.flags.sampleData, computedAt, catalog: areaCatalog(assessment.zip) });
-    const area = repo.getServiceArea(db, assessment.zip);
+    const set = benchmarks();
+    const analysis = buildAnalysis(assessment, { includeSamples: config.flags.sampleData, computedAt, catalog: NATIONAL, benchmarks: { version: set.version, internetMonthly: set.internetMonthly, mobilePerLine: set.mobilePerLine, tvMonthly: set.tvMonthly, electricityWithSolarMonthly: set.electricityWithSolarMonthly } });
     const token = newToken();
     const id = repo.insertAssessment(db, {
       tokenHash: sha256(token),
       zip: assessment.zip,
-      marketId: area?.marketId ?? '',
+      marketId: '',
       categories: assessment.categories,
       answers: assessment,
       analysis,
@@ -147,7 +135,7 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
       props: { status: analysis.status, categories: assessment.categories.length, basis: analysis.projectionBasis },
       utmSource: sub.utmSource,
       utmCampaign: sub.utmCampaign,
-      marketId: area?.marketId ?? '',
+      marketId: '',
     });
     res.status(201).json({ id, token, analysis, assessment });
   });
@@ -166,9 +154,7 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
       res.status(201).json({ leadId: crypto.randomUUID(), bookingToken: newToken(), market: repo.getDefaultMarket(db).slug });
       return;
     }
-    const area = repo.getServiceArea(db, assessment.zip);
-    const areaMarket = area ? repo.getMarket(db, area.marketId) : null;
-    const market = areaMarket?.active ? areaMarket : repo.getDefaultMarket(db);
+    const market = home();
     // Re-run the deterministic analysis with the customer's selections, anchored to
     // the snapshot's time and data scope. Prices are never taken from the request;
     // unknown option ids fall back to the default selection.
@@ -179,6 +165,8 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
       selections: input.selections,
       // The offers the customer saw, exactly as stored (older snapshots have none and use the pilot data).
       catalog: snapshot.catalog,
+      // …and the benchmark values that were in force then, so a later change never alters what they saw.
+      benchmarks: snapshot.benchmarks,
     });
     const drafts = opportunitiesFrom(chosen);
     const bookingToken = tokenFor('booking', input.requestKey);
@@ -193,7 +181,7 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
       zip: assessment.zip,
       preferredContact: input.preferredContact,
       currentProvider: assessment.internet?.provider ?? '',
-      areaStatus: area?.status ?? 'unknown',
+      areaStatus: 'unknown',
       source: 'platform_assessment',
       utmSource: a.utmSource,
       utmMedium: '',
@@ -229,7 +217,7 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
     );
     repo.insertEvent(db, { name: 'advisor_request', sessionId: input.sessionId, path: '/savings', props: { intent: input.intent }, utmSource: a.utmSource, utmCampaign: a.utmCampaign, marketId: market.slug });
     repo.insertEvent(db, { name: 'handoff_submit', sessionId: input.sessionId, path: '/savings', props: { from: 'results', intent: input.intent }, utmSource: a.utmSource, utmCampaign: a.utmCampaign, marketId: market.slug });
-    const routing = route(lead.id, { marketId: served(assessment.zip).market?.slug ?? null, categories: assessment.categories, phone: lead.phone, sessionId: input.sessionId, utmSource: a.utmSource, utmCampaign: a.utmCampaign, path: '/savings' });
+    const routing = route(lead.id, { marketId: market.slug, categories: assessment.categories, phone: lead.phone, sessionId: input.sessionId, utmSource: a.utmSource, utmCampaign: a.utmCampaign, path: '/savings' });
     notifier.onLead(repo.getLead(db, lead.id)!, duplicate);
     res.status(201).json({ leadId: lead.id, bookingToken, market: market.slug, repeat: false, routing } satisfies HandoffResult);
   });
@@ -247,9 +235,9 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
       res.status(201).json({ leadId: crypto.randomUUID(), bookingToken: newToken(), market: repo.getDefaultMarket(db).slug, repeat: false, routing: { outcome: 'queued', representative: null } } satisfies HandoffResult);
       return;
     }
-    const { area, market: servedMarket } = served(h.zip);
-    // Every lead belongs to a location for alerts; an unserved ZIP is flagged by routing, never treated as served.
-    const market = servedMarket ?? repo.getDefaultMarket(db);
+    const market = home();
+    const set = benchmarks();
+    const benchmarkSet = { version: set.version, internetMonthly: set.internetMonthly, mobilePerLine: set.mobilePerLine, tvMonthly: set.tvMonthly, electricityWithSolarMonthly: set.electricityWithSolarMonthly };
     const bookingToken = tokenFor('booking', h.requestKey);
     const resultsToken = tokenFor('results', h.requestKey);
     const path = h.landingPage || '/';
@@ -260,11 +248,11 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
       phone: h.phone,
       street: h.street,
       unit: '',
-      city: area?.city ?? '',
+      city: '',
       zip: h.zip,
       preferredContact: h.preferredContact,
       currentProvider: '',
-      areaStatus: area?.status ?? 'unknown',
+      areaStatus: 'unknown',
       source: 'platform_handoff',
       utmSource: h.utmSource,
       utmMedium: h.utmMedium,
@@ -280,7 +268,7 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
       consentText: `[${HANDOFF_CONSENT_VERSION}] ${handoffConsentText()}`,
       consentIp: req.ip ?? '',
       consentUserAgent: String(req.headers['user-agent'] ?? '').slice(0, 300),
-      preview: previewFromBills(h),
+      preview: previewFromBills(h, benchmarkSet),
       bestTime: h.bestTime,
       marketingConsentText: h.marketingConsent ? `[${MARKETING_CONSENT_VERSION}] ${marketingConsentText()}` : undefined,
       requestKey: h.requestKey ?? null,
@@ -292,18 +280,18 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
     }
     repo.addNote(db, lead.id, 'Pricing review requested from the home page preview. Figures are a preliminary benchmark comparison, not verified pricing.', 'system');
     repo.insertEvent(db, { name: 'handoff_submit', sessionId: h.sessionId, path, props: { from: 'home', categories: billCategories(h.bills).length }, utmSource: h.utmSource, utmCampaign: h.utmCampaign, marketId: market.slug });
-    const routing = route(lead.id, { marketId: servedMarket?.slug ?? null, categories: billCategories(h.bills), phone: lead.phone, sessionId: h.sessionId, utmSource: h.utmSource, utmCampaign: h.utmCampaign, path });
+    const routing = route(lead.id, { marketId: market.slug, categories: billCategories(h.bills), phone: lead.phone, sessionId: h.sessionId, utmSource: h.utmSource, utmCampaign: h.utmCampaign, path });
     notifier.onLead(repo.getLead(db, lead.id)!, duplicate);
 
     // The lead is safe. Now attach the full analysis; if this part fails the request still succeeded.
     let assessmentId: string | null = null;
     try {
       const assessment = assessmentSchema.parse(assessmentFromBills(h));
-      const analysis = buildAnalysis(assessment, { includeSamples: config.flags.sampleData, computedAt: new Date().toISOString(), catalog: areaCatalog(h.zip) });
+      const analysis = buildAnalysis(assessment, { includeSamples: config.flags.sampleData, computedAt: new Date().toISOString(), catalog: NATIONAL, benchmarks: benchmarkSet });
       assessmentId = repo.insertAssessment(db, {
         tokenHash: sha256(resultsToken),
         zip: h.zip,
-        marketId: area?.marketId ?? '',
+        marketId: '',
         categories: assessment.categories,
         answers: assessment,
         analysis,

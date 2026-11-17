@@ -3,15 +3,15 @@ import { Route, Routes, useLocation } from 'react-router-dom';
 import { Spinner } from './components/ui';
 
 // Every page is its own chunk, so a visitor only downloads the one they open.
-const RegionalPage = lazy(() => import('./internet/RegionalPage'));
 const Privacy = lazy(() => import('./pages/Privacy'));
 const AdminLogin = lazy(() => import('./pages/admin/Login'));
 const AdminLayout = lazy(() => import('./pages/admin/Layout'));
 const Dashboard = lazy(() => import('./pages/admin/Dashboard'));
 const LeadDetail = lazy(() => import('./pages/admin/LeadDetail'));
 const Appointments = lazy(() => import('./pages/admin/Appointments'));
-const ServiceAreas = lazy(() => import('./pages/admin/ServiceAreas'));
-const Locations = lazy(() => import('./pages/admin/Locations'));
+const AdminBenchmarks = lazy(() => import('./pages/admin/Benchmarks'));
+const AdminSettings = lazy(() => import('./pages/admin/Settings'));
+const AdminLeads = lazy(() => import('./pages/admin/Dashboard').then((m) => ({ default: m.Leads })));
 const PlatformApp = lazy(() => import('./platform/PlatformApp'));
 const AdminAssessments = lazy(() => import('./pages/admin/Assessments'));
 const AdminOpportunities = lazy(() => import('./pages/admin/Opportunities'));
@@ -44,14 +44,13 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="leads/:id" element={<LeadDetail />} />
           <Route path="appointments" element={<Appointments />} />
-          <Route path="areas" element={<ServiceAreas />} />
-          <Route path="locations" element={<Locations />} />
+          <Route path="leads" element={<AdminLeads />} />
+          <Route path="benchmarks" element={<AdminBenchmarks />} />
+          <Route path="settings" element={<AdminSettings />} />
           <Route path="assessments" element={<AdminAssessments />} />
           <Route path="opportunities" element={<AdminOpportunities />} />
           <Route path="reps" element={<AdminReps />} />
         </Route>
-        {/* Optional regional internet campaigns, one per active location. */}
-        <Route path="/internet/:market" element={<RegionalPage />} />
         {/* Tucker: home at the root, the savings preview under /savings, and the not-found page. */}
         <Route path="/*" element={<PlatformApp />} />
       </Routes>

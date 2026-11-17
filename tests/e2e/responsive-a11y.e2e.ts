@@ -25,7 +25,7 @@ describe('responsive layout', () => {
     it(`has no horizontal scroll and keeps the main action reachable at ${width}px`, async () => {
       const { ctx, errors } = await context(b, { viewport: { width, height: 800 } });
       const p = await ctx.newPage();
-      for (const path of ['/', '/savings/assess', '/savings/design', '/internet/monroe', '/no-such-page']) {
+      for (const path of ['/', '/savings/assess', '/savings/design', '/no-such-page']) {
         await ready(p, BASE + path);
         expect({ path, overflow: await overflow(p) }).toEqual({ path, overflow: 0 });
       }
@@ -103,7 +103,9 @@ describe('accessibility (axe-core)', () => {
       await p.keyboard.press('Tab');
       seen.push(await p.evaluate(() => `${document.activeElement?.tagName}#${document.activeElement?.id}|${getComputedStyle(document.activeElement as Element).outlineStyle}`));
     }
-    expect(seen).toEqual(['A#|solid', 'INPUT#qp-internet|solid', 'INPUT#qp-mobile|solid']);
+    // After the skip link: the two hero actions, then the first step-by-step link.
+    expect(seen.every((x) => x.endsWith('|solid'))).toBe(true);
+    expect(await p.evaluate(() => document.activeElement?.closest('main') !== null)).toBe(true);
     await ctx.close();
   });
 

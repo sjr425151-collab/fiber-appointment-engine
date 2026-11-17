@@ -1,6 +1,7 @@
 import { BRAND, siteMeta, structuredData } from '../shared/content';
 import type { Market, MarketSummary } from '../shared/market';
 import type { Flags } from './config';
+import type { BenchmarkSet } from '../shared/platform/benchmarks';
 
 /** Data embedded in every page so the client renders the right market with no extra request. */
 export interface BootData {
@@ -8,6 +9,8 @@ export interface BootData {
   markets: MarketSummary[];
   defaultSlug: string;
   flags: Flags;
+  /** The national comparison benchmarks in use, so the home page preview matches the server. */
+  benchmarks?: BenchmarkSet;
 }
 
 const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -32,7 +35,7 @@ export interface RenderOptions {
   ogImage?: string;
   /** Text alternative for the share image. */
   ogImageAlt?: string;
-  /** Keep the hero photo preload (regional internet pages, the only pages that show it). */
+  /** Keep the hero image preload (the home page, the only page that shows it). */
   heroPreload?: boolean;
   /** Same-origin build assets to fetch early (lazy chunks of this page). */
   preload?: { scripts: string[]; styles: string[] };

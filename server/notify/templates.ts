@@ -66,7 +66,7 @@ const consult = (lead: Lead) => (isSavings(lead) ? 'savings review' : 'fiber con
 
 function customerFooter(m: Market, lead?: Lead) {
   if (lead && isSavings(lead)) {
-    return `${esc(BRAND.name)} is operated by ${esc(BRAND.agency)}. We may be paid by providers when a household switches; that never changes how options are ranked. You’re receiving this because you asked us to review your household bills.`;
+    return `${esc(BRAND.name)} is operated by ${esc(BRAND.agency)}. Tucker may receive compensation from providers. You’re receiving this because you asked us to review your household bills.`;
   }
   return `${esc(BRAND.name)} is operated by ${esc(BRAND.agency)}, an independent marketing partner of ${esc(m.provider)}. You’re receiving this because you requested information about fiber internet service at your address.`;
 }
