@@ -26,7 +26,7 @@ export interface AppConfig {
   email: {
     /** Resend API key. Without it, emails are logged instead of sent. */
     resendApiKey: string;
-    /** Sender, e.g. "Fiber Connect <hello@mail.livefiberconnect.com>" — must be on a domain verified in Resend. */
+    /** Sender, e.g. "Tucker <hello@mail.livefiberconnect.com>" — must be on a domain verified in Resend. */
     from: string;
     /** Fallback team inboxes when a location has none configured. */
     teamEmails: string[];
@@ -91,7 +91,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     siteUrl: (env.SITE_URL ?? 'http://localhost:' + (env.PORT ?? 3001)).replace(/\/+$/, ''),
     email: {
       resendApiKey: env.RESEND_API_KEY ?? '',
-      from: env.EMAIL_FROM || `LiveFiberConnect <notifications@${new URL(env.SITE_URL || 'http://localhost').hostname}>`,
+      from: env.EMAIL_FROM || `Tucker <notifications@${new URL(env.SITE_URL || 'http://localhost').hostname}>`,
       teamEmails: (env.TEAM_NOTIFY_EMAIL ?? '')
         .split(',')
         .map((e) => e.trim().toLowerCase())

@@ -30,7 +30,7 @@ export function buildIcs(e: {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//LiveFiberConnect//Appointments//EN',
+    'PRODID:-//Tucker//Appointments//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',

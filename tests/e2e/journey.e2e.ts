@@ -49,7 +49,7 @@ describe('household journey (staging, phone)', () => {
     // 1. Enter the site.
     await p.goto(`${BASE}/savings?utm_source=e2e&utm_campaign=journey`);
     await p.getByRole('heading', { level: 1 }).waitFor();
-    expect(await p.title()).toMatch(/LiveFiberConnect/);
+    expect(await p.title()).toMatch(/Tucker/);
 
     // 2. Start the assessment.
     await p.getByRole('link', { name: 'Find My Savings' }).first().click();

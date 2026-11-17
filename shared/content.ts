@@ -8,8 +8,8 @@ import type { Market } from './market';
 import { listJoin, plansFrom } from './market-utils';
 
 export const BRAND = {
-  /** Public site name: the household savings and service brokerage brand (same as the domain). */
-  name: 'LiveFiberConnect',
+  /** The only public name of the site and the business (founder decision, 2026-11-17). Wordmark: lowercase "tucker." */
+  name: 'Tucker',
   /** Legal operator of the site and the contacting party. */
   agency: 'Spotlight Marketing LLC',
 };

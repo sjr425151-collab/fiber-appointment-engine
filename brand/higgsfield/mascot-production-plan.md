@@ -1,6 +1,6 @@
 # Mascot production plan (starts after Gate G1)
 
-Nothing here has been generated. No credits have been spent.
+Round 1 was generated on 2026-11-17 after Gate G1 (hybrid territory C; 12 stills, 24 credits). Results and review: `../production/round-1.md`. The plan below is kept as written.
 
 ## Round 1 — concept stills (the first asset set)
 

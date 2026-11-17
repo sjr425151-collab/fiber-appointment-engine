@@ -94,7 +94,7 @@ describe('staging', () => {
     const a = app(STAGING);
     const page = await request(a).get('/savings').expect(200);
     expect(page.text).toContain('content="noindex, nofollow"');
-    expect(page.text).toContain('LiveFiberConnect — Lower your household bills');
+    expect(page.text).toContain('Tucker — Your home service savings broker');
     expect((await request(a).get('/').expect(200)).text).toContain('content="noindex, nofollow"');
     expect((await request(a).get('/robots.txt')).text).toBe('User-agent: *\nDisallow: /\n');
   });

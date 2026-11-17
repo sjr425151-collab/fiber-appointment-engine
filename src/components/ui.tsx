@@ -1,6 +1,20 @@
 import type { ReactNode } from 'react';
 import { STATUS_COLORS, STATUS_LABELS } from '../lib/api';
 
+/**
+ * The wordmark: lowercase "tucker" with a period shaped like the bear's nose.
+ * Screen readers get the name once; the nose is decorative.
+ */
+export function Wordmark({ noseClassName = 'bg-current' }: { noseClassName?: string }) {
+  return (
+    <span className="inline-flex items-baseline">
+      <span className="sr-only">Tucker</span>
+      <span aria-hidden>tucker</span>
+      <span aria-hidden className={`ml-[0.07em] inline-block h-[0.24em] w-[0.3em] rounded-[46%_46%_50%_50%/38%_38%_62%_62%] ${noseClassName}`} />
+    </span>
+  );
+}
+
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <span className="inline-flex shrink-0 items-center gap-2.5">
@@ -17,7 +31,7 @@ export function Logo({ compact = false }: { compact?: boolean }) {
       </svg>
       {!compact && (
         <span className="whitespace-nowrap font-display text-base font-bold tracking-tight sm:text-lg">
-          LiveFiber<span className="text-gradient">Connect</span>
+          <Wordmark noseClassName="bg-fiber-400" />
         </span>
       )}
     </span>

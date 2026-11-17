@@ -106,4 +106,4 @@ Scores are my judgement of each direction's potential, 1–10.
 
 **Tradeoffs.** C must keep two finishes in sync, and done badly it becomes neither. The fix is to lock the flat geometry first and derive the dimensional version from it. A is cheaper and sharper at small sizes but thinner in video. B has the highest ceiling for film and the highest risk of looking like a generic generated bear. A hybrid is reasonable: C's patch system with A's short-sentence headlines.
 
-**This is not final.** The mascot is only chosen after round-1 images are reviewed (G2).
+**Founder decision (2026-11-17):** Territory C with A's nose-shaped period, keeping C's typeface. The mascot itself is chosen after round-1 images are reviewed (G2).

@@ -39,7 +39,7 @@ const config = (teamEmails: string[] = []): AppConfig => ({
   timezone: 'America/Detroit',
   siteUrl: 'https://livefiberconnect.com',
   isProduction: false,
-  email: { resendApiKey: '', from: 'Fiber Connect <hello@mail.livefiberconnect.com>', teamEmails, dailyCustomerLimit: 80, nonProductionAllowlist: [] },
+  email: { resendApiKey: '', from: 'Tucker <hello@mail.livefiberconnect.com>', teamEmails, dailyCustomerLimit: 80, nonProductionAllowlist: [] },
 });
 
 const lead = {
@@ -86,7 +86,7 @@ describe('team alerts', () => {
     expect(alert.replyTo).toEqual(['jamie@example.com']);
     expect(alert.html).toContain(`https://livefiberconnect.com/admin/leads/${r.body.leadId}`);
     expect(alert.text).toContain('Phone: (734) 555-0142');
-    expect(alert.from).toBe('Fiber Connect <hello@mail.livefiberconnect.com>');
+    expect(alert.from).toBe('Tucker <hello@mail.livefiberconnect.com>');
   });
 
   it('labels resubmissions as returning leads and does not re-send the customer follow-up', async () => {
@@ -250,7 +250,7 @@ describe('delivery & retries', () => {
 
 describe('Resend client', () => {
   const email: OutgoingEmail = {
-    from: 'Fiber Connect <hello@mail.livefiberconnect.com>',
+    from: 'Tucker <hello@mail.livefiberconnect.com>',
     to: ['a@example.com'],
     subject: 'Hi',
     html: '<p>Hi</p>',

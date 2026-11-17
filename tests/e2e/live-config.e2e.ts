@@ -24,7 +24,7 @@ describe('production configuration with the platform on', () => {
     await p.goto(url);
     await p.getByRole('heading', { level: 1, name: 'Your household snapshot' }).waitFor();
     const page = (await p.locator('body').textContent()) ?? '';
-    expect(page).not.toMatch(/Sample|Staging preview|working name|Preview/);
+    expect(page).not.toMatch(/Sample|Staging preview|working name|Preview|LiveFiberConnect|Fiber Connect|Household Savings/);
     expect(await p.title()).toBe('Your household results');
     expect(await p.locator('meta[name=robots]').getAttribute('content')).toBe('noindex, nofollow'); // private results are never indexed
 
@@ -75,11 +75,11 @@ describe('production configuration with the platform on', () => {
     await p.goto(LIVE);
     await p.locator('#hero-title').waitFor();
     expect(await overflow(p)).toBe(0); // the longer wordmark still fits the narrowest header
-    expect(await p.locator('header').first().textContent()).toMatch(/LiveFiberConnect/);
+    expect(await p.locator('header').first().textContent()).toMatch(/tucker/i);
     await p.getByRole('link', { name: 'Analyze my household bills' }).click();
     await p.getByRole('heading', { level: 1 }).waitFor();
-    expect(await p.title()).toBe('LiveFiberConnect — Lower your household bills');
-    expect(await p.locator('header').first().textContent()).toMatch(/LiveFiberConnect/);
+    expect(await p.title()).toBe('Tucker — Your home service savings broker');
+    expect(await p.locator('header').first().textContent()).toMatch(/tucker/i);
     expect(await overflow(p)).toBe(0);
     expect(errors).toEqual([]);
     await ctx.close();

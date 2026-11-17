@@ -18,23 +18,23 @@ Central record for the TUCKER brand system (Master Brand Directive v3.0). Status
 - Mascot: a **brown bear**, the Working Bear, in a trucker-inspired cap and clean workwear. No human trucker, no other species.
 - Campaign line (experimental, selected advertising only): **One money-saving mother trucker.**
 - TUCKER is not a trucking company and never claims guaranteed savings.
+- **Tucker is the only public name** (founder, 2026-11-17). The site, emails and calendar files are renamed in code (built and tested); the change reaches the live site at the next approved deploy. "LiveFiberConnect" and "Fiber Connect" are retired. The legal operator (Spotlight Marketing LLC) still appears in consent and disclosure text.
+- **Territory: C · Name Patch, with A's nose-shaped period**, keeping C's typeface (founder, 2026-11-17). A's typeface is not used.
+- **Gate G1 passed** with a 300-credit cap for round 1.
 
-## Proposed (awaiting Gate G1)
+## In progress (awaiting Gate G2)
 
-- Creative territory: **C · Name Patch** (Balanced Working Bear), produced flat-master-first. See the territories doc.
-- Ownable devices: the stitched name patch as the logo lockup; the period as Tucker's nose.
-- Mascot guardrails (distance from existing characters): see territories doc §2.
+- Round 1 mascot stills are generated: 12 images, 24 credits. See [production/round-1.md](production/round-1.md). The founder picks one candidate to refine.
+- Until G3, the site shows only the name and an interim wordmark (lowercase "tucker" with the nose period, in the site's existing typeface and colors). The patch, palette and typeface arrive at G3.
 
 ## Open decisions
 
 | # | Decision | Why it matters |
 |---|---|---|
-| O1 | Pick a territory (G1) | Unlocks mascot generation |
 | O2 | Domain. `tucker.com`, `gettucker.com`, `heytucker.com`, `asktucker.com`, `hellotucker.com`, `tuckerhome.com` are registered; `tuckersaves.com` and `tucker.co` returned no registration record on 2026-11-17 (not a guarantee of availability) | Launch name, email sender, redirects from livefiberconnect.com |
 | O3 | Trademark clearance by counsel. "Tucker" is a common surname (surname marks can be refused registration without acquired distinctiveness) and a common word; "mother trucker" is a phrase other businesses use | Founder's assessment is project context, not legal clearance |
 | O4 | Slogan channel policy (ad platforms restrict profanity, including disguised forms) | Where "mother trucker" may run |
 | O5 | Use of "broker" in regulated categories (energy, solar) | Descriptor wording by state |
-| O6 | The LiveFiberConnect name went live on 2026-11-17 (`50d7982`, deployed by a Render action). Keep it as the interim public name until TUCKER launches at G5, or revert to the earlier names | The move to TUCKER will be the second public rename either way |
 
 ## Approval gates
 
@@ -56,3 +56,4 @@ Central record for the TUCKER brand system (Master Brand Directive v3.0). Status
 ## Version history
 
 - 2026-11-17 — v0.1: Phases 0–2 delivered for review. Nothing generated, nothing deployed.
+- 2026-11-17 — v0.2: Founder decisions recorded (name, hybrid territory, credit cap). Site renamed to Tucker in code (awaiting deploy). Round 1 generated.

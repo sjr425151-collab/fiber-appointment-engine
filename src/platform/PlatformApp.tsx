@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { Link, Route, Routes } from 'react-router-dom';
 import { PLATFORM } from '../../shared/platform/brand';
 import { bootFlags } from '../lib/market';
+import { Wordmark } from '../components/ui';
 
 const Home = lazy(() => import('./pages/Home'));
 const Assess = lazy(() => import('./pages/Assess'));
@@ -28,7 +29,7 @@ function Shell({ children }: { children: ReactNode }) {
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-pf-ink text-sm text-white" aria-hidden>
               ¢
             </span>
-            {PLATFORM.name}
+            <Wordmark />
           </Link>
           <div className="flex shrink-0 items-center gap-1 text-sm sm:gap-4">
             <a href="/savings#how" className="hidden rounded-lg px-2 py-2 text-pf-muted hover:text-pf-ink sm:inline">

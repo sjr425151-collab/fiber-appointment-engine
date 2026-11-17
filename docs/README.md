@@ -1,6 +1,6 @@
 # Project documentation
 
-**LiveFiberConnect** (livefiberconnect.com): household bill optimization and service brokerage — internet, mobile, TV and electricity/solar. The per-location fiber pages are one acquisition channel into it.
+**Tucker** (livefiberconnect.com): a home-service savings broker — household bill optimization and service brokerage — internet, mobile, TV and electricity/solar. The per-location fiber pages are one acquisition channel into it.
 
 | Doc | Contents |
 |---|---|
@@ -26,7 +26,8 @@
 | Security fixes H1, H2, H3 (partial), M2, M3 (notice), lows | **Live** (deployed 2026-11-16) |
 | Ops: JSON error logs + request ids, DB-backed `/api/health` (shows the deployed commit), `npm run db:backup` | **Live**; backup schedule and off-site copy need approval |
 | Household platform: assessment, results, solar estimates, advisor booking, opportunities + admin pipeline | **Live** at `/savings` since 2026-11-16 (owner set `PLATFORM_ENABLED=true`; live commit `5c3a008`) |
-| Location-driven internet offers, free bill-review requests, bill insights, address capture, LiveFiberConnect name, price-freshness warning | **Live** as `50d7982` (found live on 2026-11-17; deployed by a Render action, not by a push — see `08-operations.md` on `[skip render]`). Smoke-checked read-only: home, `/savings`, assessment and admin login load with no errors |
+| Location-driven internet offers, free bill-review requests, bill insights, address capture, price-freshness warning | **Live** as `50d7982` (found live on 2026-11-17; deployed by a Render action, not by a push — see `08-operations.md` on `[skip render]`). Smoke-checked read-only: home, `/savings`, assessment and admin login load with no errors |
+| Site name **Tucker** everywhere (titles, wordmark with the nose period, emails, calendar files, share images) | **Built & tested, not deployed.** The live site still says LiveFiberConnect until the founder approves a deploy (or a Render setting is saved). No schema change |
 | Real solar program terms | **Missing**: without them, electricity results offer an advisor estimate, not a number |
 | Staging service, monitoring/alerting, off-site backups | Proposed — need approval |
 
