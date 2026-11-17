@@ -273,7 +273,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section aria-labelledby="cats" className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
+      <section id="services" aria-labelledby="cats" className="mx-auto max-w-6xl scroll-mt-4 px-4 py-14 sm:px-6">
         <h2 id="cats" className="font-display text-2xl font-bold text-pf-ink sm:text-3xl">
           Every household bill, one check
         </h2>

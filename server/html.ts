@@ -53,8 +53,10 @@ export function renderHtml(template: string, o: RenderOptions): string {
   const title = o.title ?? meta.title;
   const ogImage = `${o.siteUrl}${o.ogImage ?? (m.ogImage || '/og-image.jpg')}`;
   const assetPath = (p: string) => /^\/assets\/[A-Za-z0-9._-]+\.(js|css)$/.test(p);
+  // Page stylesheets go at the end of <head>, after the main stylesheet: both define the same utility
+  // classes, so the page's own responsive rules (e.g. "hidden md:flex") must come last to win.
+  const pageStyles = (o.preload?.styles ?? []).filter(assetPath).map((h) => `<link rel="stylesheet" crossorigin href="${escAttr(h)}" />`);
   const head = [
-    ...(o.preload?.styles ?? []).filter(assetPath).map((h) => `<link rel="stylesheet" crossorigin href="${escAttr(h)}" />`),
     ...(o.preload?.scripts ?? []).filter(assetPath).map((h) => `<link rel="modulepreload" crossorigin href="${escAttr(h)}" />`),
     o.structuredData
       ? `<script type="application/ld+json">${escJson(o.structuredData)}</script>`
@@ -80,5 +82,6 @@ export function renderHtml(template: string, o: RenderOptions): string {
     '<!--%%HEAD_DATA%%-->': head,
   };
   const shell = o.heroPreload ? template : template.replace(/\s*<!--hero-preload[\s\S]*?<!--\/hero-preload-->/, '');
-  return shell.replace(/%%[A-Z_]+%%|<!--%%HEAD_DATA%%-->/g, (token) => values[token] ?? token);
+  const filled = shell.replace(/%%[A-Z_]+%%|<!--%%HEAD_DATA%%-->/g, (token) => values[token] ?? token);
+  return pageStyles.length ? filled.replace('</head>', () => `  ${pageStyles.join('\n    ')}\n  </head>`) : filled;
 }

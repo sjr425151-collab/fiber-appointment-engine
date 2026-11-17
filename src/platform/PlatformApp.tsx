@@ -4,12 +4,17 @@ import { Link, Navigate, Route, Routes } from 'react-router-dom';
 import { PLATFORM, PRIMARY_CTA } from '../../shared/platform/brand';
 import { bootFlags } from '../lib/market';
 import { Mark, Wordmark } from '../components/ui';
+import { BRAND } from '../../shared/content';
 import { ChatLauncher } from './chat/ChatLauncher';
 
 const Home = lazy(() => import('./pages/Home'));
 const Assess = lazy(() => import('./pages/Assess'));
 const Results = lazy(() => import('./pages/Results'));
 const DesignSystem = lazy(() => import('./pages/DesignSystem'));
+
+/** Header button: the free savings review (the preview form on the home page). */
+const HEADER_CTA = 'Get my free review';
+const phoneText = BRAND.phone.length === 10 ? `(${BRAND.phone.slice(0, 3)}) ${BRAND.phone.slice(3, 6)}-${BRAND.phone.slice(6)}` : BRAND.phone;
 
 function Shell({ children }: { children: ReactNode }) {
   const flags = bootFlags();
@@ -25,20 +30,30 @@ function Shell({ children }: { children: ReactNode }) {
             {flags.sampleData && ' Offers marked “Sample data” are illustrative only.'}
           </div>
         )}
-        <nav aria-label="Main" className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:gap-4 sm:px-6">
-          <Link to="/" className="flex min-w-0 items-center gap-2 font-display text-base font-bold text-pf-ink sm:text-lg">
+        <nav aria-label="Main" className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:h-[4.5rem] sm:px-6">
+          <Link to="/" className="flex min-w-0 shrink-0 items-center gap-2 font-display text-base font-bold text-pf-ink sm:text-lg">
             <Mark />
             <Wordmark />
           </Link>
-          <div className="flex shrink-0 items-center gap-1 text-sm sm:gap-4">
-            <a href="/#how" className="hidden rounded-lg px-2 py-2 text-pf-muted hover:text-pf-ink sm:inline">
+          <div className="ml-6 hidden items-center gap-8 text-[15px] font-medium text-pf-muted lg:ml-10 md:flex">
+            <a href="/#services" className="py-2 transition-colors hover:text-pf-ink">
+              Home services
+            </a>
+            <a href="/#how" className="py-2 transition-colors hover:text-pf-ink">
               How it works
             </a>
-            <a href="/#data" className="hidden rounded-lg px-2 py-2 text-pf-muted hover:text-pf-ink md:inline">
-              Our data
-            </a>
-            <a href="/#preview" className="inline-flex min-h-11 items-center rounded-xl bg-pf-brand px-3 font-semibold sm:px-4 text-white hover:bg-pf-brand-strong">
-              {PRIMARY_CTA}
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-5">
+            {BRAND.phone && (
+              <a href={`tel:+1${BRAND.phone}`} className="flex min-h-11 items-center gap-2 rounded-xl px-2 text-[15px] font-semibold text-pf-ink hover:text-pf-brand" aria-label={`Call Tucker at ${phoneText}`}>
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z" />
+                </svg>
+                <span className="hidden sm:inline">{phoneText}</span>
+              </a>
+            )}
+            <a href="/#preview" className="inline-flex min-h-11 items-center rounded-xl bg-pf-brand px-4 text-[15px] font-semibold text-white shadow-sm transition-colors hover:bg-pf-brand-strong sm:px-5">
+              {HEADER_CTA}
             </a>
           </div>
         </nav>

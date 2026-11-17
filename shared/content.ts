@@ -12,6 +12,11 @@ export const BRAND = {
   name: 'Tucker',
   /** Legal operator of the site and the contacting party. */
   agency: 'Spotlight Marketing LLC',
+  /**
+   * Public phone number shown in the site header (tap to call), as 10 digits.
+   * Empty = no number is shown. Only use a number that is answered for Tucker.
+   */
+  phone: '',
 };
 
 export const CONSENT_VERSION = '2026-11-15';

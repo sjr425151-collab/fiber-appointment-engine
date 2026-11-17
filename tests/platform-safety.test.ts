@@ -10,8 +10,7 @@ import { marketSchema, MONROE } from '../shared/market';
 
 process.env.NODE_ENV = 'test';
 
-const TEMPLATE =
-  '<html><head><title>%%TITLE%%</title><meta name="robots" content="%%ROBOTS%%" /><link rel="canonical" href="%%CANONICAL%%" /><!--%%HEAD_DATA%%--></head><body></body></html>';
+const TEMPLATE = '<html><head><title>%%TITLE%%</title><meta name="robots" content="%%ROBOTS%%" /><link rel="canonical" href="%%CANONICAL%%" /><!--%%HEAD_DATA%%--></head><body></body></html>';
 
 const base = (flags: AppConfig['flags']): AppConfig => ({
   port: 0,
@@ -68,8 +67,7 @@ describe('production configuration', () => {
 });
 
 describe('platform code and styles stay out of the fiber site', () => {
-  const walk = (dir: string): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? walk(join(dir, d.name)) : [join(dir, d.name)]));
+  const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? walk(join(dir, d.name)) : [join(dir, d.name)]));
 
   it('keeps platform styles in their own lazily loaded stylesheet', () => {
     const main = readFileSync('src/index.css', 'utf8');
@@ -138,5 +136,16 @@ describe('platform resource hints', () => {
     expect(html).toContain('<link rel="stylesheet" crossorigin href="/assets/A-1.css" />');
     expect(html).not.toContain('evil.test');
     expect(html).not.toContain('<script>.js');
+  });
+
+  it('loads the page stylesheet after the main one, so responsive rules like "hidden md:flex" work', async () => {
+    const { renderHtml } = await import('../server/html');
+    const html = renderHtml('<head><!--%%HEAD_DATA%%-->\n<link rel="stylesheet" href="/assets/index-1.css"></head>', {
+      siteUrl: 'https://example.test',
+      canonicalPath: '/',
+      boot: { market: MONROE, markets: [], defaultSlug: MONROE.slug, flags: { env: 'production', platform: true, sampleData: false } },
+      preload: { scripts: [], styles: ['/assets/PlatformApp-1.css'] },
+    });
+    expect(html.indexOf('/assets/PlatformApp-1.css')).toBeGreaterThan(html.indexOf('/assets/index-1.css'));
   });
 });
