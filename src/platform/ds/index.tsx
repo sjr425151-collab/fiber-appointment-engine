@@ -76,8 +76,9 @@ export function Field({
   );
 }
 
-const inputCls =
-  'block w-full rounded-xl border border-pf-field bg-pf-surface px-3.5 py-3 text-base text-pf-ink placeholder:text-pf-subtle aria-[invalid=true]:border-pf-cost';
+/** Everything but horizontal padding, so a field with a "$" prefix never has two competing left paddings. */
+const inputBase = 'block w-full rounded-xl border border-pf-field bg-pf-surface py-3 text-base text-pf-ink placeholder:text-pf-subtle aria-[invalid=true]:border-pf-cost';
+const inputCls = `${inputBase} px-3.5`;
 
 export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cx(inputCls, props.className)} />;
@@ -147,7 +148,7 @@ export function CurrencyInput({
             /* keep what they typed so they can fix it */
           }
         }}
-        className={cx(inputCls, 'tnum pl-7')}
+        className={cx(inputBase, 'tnum pl-8 pr-3.5')}
       />
     </div>
   );
