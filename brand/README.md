@@ -34,7 +34,7 @@ Central record for the TUCKER brand system (Master Brand Directive v3.0). Status
 | O3 | Trademark clearance by counsel. "Tucker" is a common surname (surname marks can be refused registration without acquired distinctiveness) and a common word; "mother trucker" is a phrase other businesses use | Founder's assessment is project context, not legal clearance |
 | O4 | Slogan channel policy (ad platforms restrict profanity, including disguised forms) | Where "mother trucker" may run |
 | O5 | Use of "broker" in regulated categories (energy, solar) | Descriptor wording by state |
-| O6 | Whether the pending LiveFiberConnect rename (`50d7982`) should ever reach customers, or the site goes straight to TUCKER | Avoids two public renames |
+| O6 | The LiveFiberConnect name went live on 2026-11-17 (`50d7982`, deployed by a Render action). Keep it as the interim public name until TUCKER launches at G5, or revert to the earlier names | The move to TUCKER will be the second public rename either way |
 
 ## Approval gates
 

@@ -7,7 +7,7 @@ Nothing in the live product was changed for this audit.
 | Area | What exists (verified in the repo and on the live site) |
 |---|---|
 | Stack | React 19, TypeScript, Tailwind v4, Vite; Express 5; SQLite; no UI or animation libraries |
-| Hosting | Render (Docker, one service, persistent disk), Cloudflare DNS; live commit `5c3a008`; newest pushed commit `50d7982` is **not deployed** |
+| Hosting | Render (Docker, one service, persistent disk), Cloudflare DNS; live commit `50d7982` (found live on 2026-11-17 after a Render-side deploy) |
 | Customer journeys (live) | Fiber landing → ZIP check → lead → booking; household assessment → results → advisor request → booking |
 | Engine | Deterministic cost engine in integer cents; provenance-based data labels; commission-blind ranking |
 | Admin | Leads, Opportunities, Assessments, Appointments, Locations, Service areas; one shared login |
@@ -29,7 +29,7 @@ Nothing in the live product was changed for this audit.
 | Domain and search | Everything is indexed under livefiberconnect.com | Needs a redirect plan before any rename |
 | Legal copy | Consent, privacy and disclosures name the operator (Spotlight Marketing LLC), not the brand | Brand rename doesn't invalidate consent records; counsel should confirm wording |
 
-**Pending-commit risk.** `50d7982` renames the public site to "LiveFiberConnect". It would go live the next time a Render setting is saved. With TUCKER approved, that rename is now an interim name at best (decision O6 in the log).
+**Interim name.** `50d7982` is live, so the public site currently says "LiveFiberConnect". With TUCKER approved, that is an interim name (decision O6 in the log). Any pushed commit goes live the next time a Render setting is saved, so only production-safe work is pushed.
 
 ## 3. Higgsfield capabilities (checked, read-only)
 

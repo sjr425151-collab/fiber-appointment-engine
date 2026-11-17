@@ -26,7 +26,7 @@
 | Security fixes H1, H2, H3 (partial), M2, M3 (notice), lows | **Live** (deployed 2026-11-16) |
 | Ops: JSON error logs + request ids, DB-backed `/api/health` (shows the deployed commit), `npm run db:backup` | **Live**; backup schedule and off-site copy need approval |
 | Household platform: assessment, results, solar estimates, advisor booking, opportunities + admin pipeline | **Live** at `/savings` since 2026-11-16 (owner set `PLATFORM_ENABLED=true`; live commit `5c3a008`) |
-| Location-driven internet offers, free bill-review requests, bill insights, address capture, LiveFiberConnect brand, price-freshness warning | **Built & tested, not deployed** (see `13-transition.md`) |
+| Location-driven internet offers, free bill-review requests, bill insights, address capture, LiveFiberConnect name, price-freshness warning | **Live** as `50d7982` (found live on 2026-11-17; deployed by a Render action, not by a push — see `08-operations.md` on `[skip render]`). Smoke-checked read-only: home, `/savings`, assessment and admin login load with no errors |
 | Real solar program terms | **Missing**: without them, electricity results offer an advisor estimate, not a number |
 | Staging service, monitoring/alerting, off-site backups | Proposed — need approval |
 
