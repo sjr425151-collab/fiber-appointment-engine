@@ -9,6 +9,7 @@ const ADMIN_NAV: { to: string; label: string; end?: boolean }[] = [
   { to: '/admin/appointments', label: 'Appointments' },
   { to: '/admin/opportunities', label: 'Opportunities' },
   { to: '/admin/assessments', label: 'Assessments' },
+  { to: '/admin/chats', label: 'Chats' },
   { to: '/admin/reps', label: 'Representatives' },
   { to: '/admin/benchmarks', label: 'Benchmarks' },
   { to: '/admin/settings', label: 'Settings' },

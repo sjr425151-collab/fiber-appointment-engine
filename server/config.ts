@@ -30,6 +30,8 @@ export interface AppConfig {
    * redirect to the same path and query on the canonical origin.
    */
   domains?: { legacyHosts: string[]; legacyRedirects: boolean };
+  /** Website chat assistant. Without an API key the chat runs on rules only. */
+  chat?: { apiKey: string; model: string; timeoutMs: number };
   isProduction: boolean;
   email: {
     /** Resend API key. Without it, emails are logged instead of sent. */
@@ -106,6 +108,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         .filter((h) => /^[a-z0-9.-]+$/.test(h)),
       // Lenient on purpose: a typo here must never stop the site from starting. Anything but true/1 is off.
       legacyRedirects: ['true', '1'].includes((env.LEGACY_REDIRECTS ?? '').trim().toLowerCase()),
+    },
+    chat: {
+      apiKey: (env.ANTHROPIC_API_KEY ?? '').trim(),
+      model: (env.CHAT_MODEL ?? '').trim() || 'claude-opus-5-5',
+      timeoutMs: Math.min(Math.max(Number(env.CHAT_TIMEOUT_MS ?? 12000) || 12000, 3000), 30000),
     },
     email: {
       resendApiKey: env.RESEND_API_KEY ?? '',

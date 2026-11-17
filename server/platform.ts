@@ -20,8 +20,11 @@ import {
   marketingConsentText,
   previewFromBills,
   previewFromOpportunities,
+  type Handoff,
   type HandoffResult,
 } from '../shared/platform/handoff';
+import { chatRoutes } from './chat';
+import type { ChatTurner } from './ai/chatModel';
 import { opportunitiesFrom } from '../shared/platform/opportunity';
 import { ROUTING_REASON, routeLead } from '../shared/platform/routing';
 import type { AppConfig } from './config';
@@ -53,7 +56,7 @@ function parse<T extends z.ZodType>(schema: T, data: unknown): z.output<T> {
 /** Potential monthly savings with the selected options (steady state, flat scenario). */
 const potentialSavings = (a: PlatformAnalysis) => a.opportunities.reduce((s, o) => s + o.monthlySavings, 0);
 
-export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
+export function platformRouter(config: AppConfig, db: DB, notifier: Notifier, chatModel?: ChatTurner | null) {
   /**
    * Previews are national: every household is compared with the current
    * benchmark set, whatever its ZIP. No location or service-area record is
@@ -228,13 +231,11 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
    * full analysis and opportunities are then built from the same bills so the
    * representative sees what any other lead shows. Savings stay illustrative.
    */
-  r.post('/handoff', limiter(10), (req, res) => {
-    const h = parse(handoffSchema, req.body);
-    if (h.website) {
-      // Honeypot: pretend success.
-      res.status(201).json({ leadId: crypto.randomUUID(), bookingToken: newToken(), market: repo.getDefaultMarket(db).slug, repeat: false, routing: { outcome: 'queued', representative: null } } satisfies HandoffResult);
-      return;
-    }
+  /**
+   * Save a pricing-review request as a lead, route it and attach the analysis.
+   * Shared by the home-page request and the chat, so both create identical leads.
+   */
+  const handoffLead = (h: Handoff, req: express.Request, o: { source: 'platform_handoff' | 'platform_chat'; from: 'home' | 'chat'; note: string; onCreated?: (leadId: string) => void }): HandoffResult => {
     const market = home();
     const set = benchmarks();
     const benchmarkSet = { version: set.version, internetMonthly: set.internetMonthly, mobilePerLine: set.mobilePerLine, tvMonthly: set.tvMonthly, electricityWithSolarMonthly: set.electricityWithSolarMonthly, securityMonthly: set.securityMonthly };
@@ -253,7 +254,7 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
       preferredContact: h.preferredContact,
       currentProvider: '',
       areaStatus: 'unknown',
-      source: 'platform_handoff',
+      source: o.source,
       utmSource: h.utmSource,
       utmMedium: h.utmMedium,
       utmCampaign: h.utmCampaign,
@@ -275,11 +276,11 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
     });
     const results = (id: string | null) => (id ? { id, token: resultsToken } : undefined);
     if (retried) {
-      res.status(201).json({ leadId: lead.id, bookingToken, market: lead.marketId, repeat: true, routing: routingOf(lead.id), results: results(lead.assessmentId) } satisfies HandoffResult);
-      return;
+      return { leadId: lead.id, bookingToken, market: lead.marketId, repeat: true, routing: routingOf(lead.id), results: results(lead.assessmentId) } satisfies HandoffResult;
     }
-    repo.addNote(db, lead.id, 'Pricing review requested from the home page preview. Figures are a preliminary benchmark comparison, not verified pricing.', 'system');
-    repo.insertEvent(db, { name: 'handoff_submit', sessionId: h.sessionId, path, props: { from: 'home', categories: billCategories(h.bills, h.ownsHome && h.showExtras).length }, utmSource: h.utmSource, utmCampaign: h.utmCampaign, marketId: market.slug });
+    repo.addNote(db, lead.id, o.note, 'system');
+    o.onCreated?.(lead.id);
+    repo.insertEvent(db, { name: 'handoff_submit', sessionId: h.sessionId, path, props: { from: o.from, categories: billCategories(h.bills, h.ownsHome && h.showExtras).length }, utmSource: h.utmSource, utmCampaign: h.utmCampaign, marketId: market.slug });
     const routing = route(lead.id, { marketId: market.slug, categories: billCategories(h.bills, h.ownsHome && h.showExtras), phone: lead.phone, sessionId: h.sessionId, utmSource: h.utmSource, utmCampaign: h.utmCampaign, path });
     notifier.onLead(repo.getLead(db, lead.id)!, duplicate);
 
@@ -313,8 +314,21 @@ export function platformRouter(config: AppConfig, db: DB, notifier: Notifier) {
     } catch (err) {
       console.error(JSON.stringify({ level: 'error', msg: 'handoff analysis failed; lead saved', leadId: lead.id, error: err instanceof Error ? err.message : String(err) }));
     }
-    res.status(201).json({ leadId: lead.id, bookingToken, market: market.slug, repeat: false, routing, results: results(assessmentId) } satisfies HandoffResult);
+    return { leadId: lead.id, bookingToken, market: market.slug, repeat: false, routing, results: results(assessmentId) } satisfies HandoffResult;
+  };
+
+
+  r.post('/handoff', limiter(10), (req, res) => {
+    const h = parse(handoffSchema, req.body);
+    if (h.website) {
+      // Honeypot: pretend success.
+      res.status(201).json({ leadId: crypto.randomUUID(), bookingToken: newToken(), market: repo.getDefaultMarket(db).slug, repeat: false, routing: { outcome: 'queued', representative: null } } satisfies HandoffResult);
+      return;
+    }
+    res.status(201).json(handoffLead(h, req, { source: 'platform_handoff', from: 'home', note: 'Pricing review requested from the home page preview. Figures are a preliminary benchmark comparison, not verified pricing.' }));
   });
+
+  chatRoutes(r, { db, config, limiter, parse, handoffLead, model: chatModel, benchmarks: () => { const b = benchmarks(); return { version: b.version, internetMonthly: b.internetMonthly, mobilePerLine: b.mobilePerLine, tvMonthly: b.tvMonthly, electricityWithSolarMonthly: b.electricityWithSolarMonthly, securityMonthly: b.securityMonthly }; } });
 
   return r;
 }

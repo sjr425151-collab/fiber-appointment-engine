@@ -96,9 +96,15 @@ export const TRACKED_EVENTS = [
   'rep_assigned',
   'lead_qualified',
   'lead_converted',
+  // Website chat
+  'chat_open',
+  'chat_first_message',
+  'chat_preview',
+  'chat_handoff_click',
+  'chat_handoff_submit',
 ] as const;
 /** Recorded by the server when the thing actually happened; the same name from a browser is ignored. */
-export const SERVER_ONLY_EVENTS: readonly string[] = ['lead_submit', 'appointment_booked', 'handoff_submit', 'rep_assigned', 'lead_qualified', 'lead_converted'];
+export const SERVER_ONLY_EVENTS: readonly string[] = ['lead_submit', 'appointment_booked', 'handoff_submit', 'rep_assigned', 'lead_qualified', 'lead_converted', 'chat_open', 'chat_preview', 'chat_handoff_submit'];
 export type TrackedEvent = (typeof TRACKED_EVENTS)[number];
 
 export const eventInputSchema = z.object({

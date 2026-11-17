@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { ChatTranscript, type TranscriptMessage } from './ChatTranscript';
 import { Link, useParams } from 'react-router-dom';
 import { LEAD_STATUSES, type Appointment, type Lead, type LeadNote, type LeadStatus } from '../../../shared/schemas';
 import { api, fmtDateTime, fmtPhone, STATUS_LABELS } from '../../lib/api';
@@ -75,7 +76,7 @@ interface HistoryRow {
 
 const CATEGORY: Record<string, string> = { internet: 'Home internet', mobile: 'Mobile', tv: 'TV & streaming', electricity: 'Electricity / solar', security: 'Home security', household: 'Whole household' };
 const CONTACT: Record<string, string> = { phone: 'Phone call', text: 'Text message', email: 'Email' };
-const SOURCE: Record<string, string> = { platform_handoff: 'Home page preview', platform_assessment: 'Full savings preview', landing_page: 'Regional internet page' };
+const SOURCE: Record<string, string> = { platform_handoff: 'Home page preview', platform_assessment: 'Full savings preview', landing_page: 'Regional internet page', platform_chat: 'Website chat' };
 const mo = (c: number | null) => (c === null ? '—' : `${formatCents(c)}/mo`);
 
 /** What the customer saw before asking for help. Always shown with the "not verified" warning. */
@@ -135,6 +136,7 @@ interface Detail {
   assessment?: AssessmentSummary | null;
   opportunities?: OpportunityRow[];
   appointments: Appointment[];
+  chat?: { sessionId: string; messages: TranscriptMessage[] } | null;
 }
 
 export default function LeadDetail() {
@@ -248,6 +250,13 @@ export default function LeadDetail() {
             )}
           </div>
           <PreviewSummary lead={lead} />
+          {d.chat && (
+            <div className="glass p-5">
+              <h2 className="mb-1 font-semibold">Website chat</h2>
+              <p className="mb-3 text-xs text-slate-400">The customer talked with the AI assistant before asking for a person. Figures shown to them are illustrative and unverified.</p>
+              <ChatTranscript messages={d.chat.messages} />
+            </div>
+          )}
           <div className="glass p-5">
             <h2 className="mb-3 font-semibold">Pipeline stage</h2>
             <p className="mb-3 text-xs text-slate-400">Set a stage only after it has actually happened. Each change is recorded with your name and the time.</p>

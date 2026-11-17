@@ -16,6 +16,7 @@ const PlatformApp = lazy(() => import('./platform/PlatformApp'));
 const AdminAssessments = lazy(() => import('./pages/admin/Assessments'));
 const AdminOpportunities = lazy(() => import('./pages/admin/Opportunities'));
 const AdminReps = lazy(() => import('./pages/admin/Reps'));
+const AdminChats = lazy(() => import('./pages/admin/Chats'));
 
 function ScrollReset() {
   const { pathname } = useLocation();
@@ -50,6 +51,7 @@ export default function App() {
           <Route path="assessments" element={<AdminAssessments />} />
           <Route path="opportunities" element={<AdminOpportunities />} />
           <Route path="reps" element={<AdminReps />} />
+          <Route path="chats" element={<AdminChats />} />
         </Route>
         {/* Tucker: home at the root, the savings preview under /savings, and the not-found page. */}
         <Route path="/*" element={<PlatformApp />} />

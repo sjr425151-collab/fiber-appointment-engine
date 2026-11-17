@@ -4,6 +4,7 @@ import { loadConfig } from './config';
 import { openDatabase } from './db';
 import { createNotifier } from './notify';
 import { pruneEvents } from './repo';
+import { pruneChats } from './repo-chat';
 import { errorFields, log } from './lib/log';
 
 if (existsSync('.env')) process.loadEnvFile('.env');
@@ -22,6 +23,7 @@ console.log(
 // Daily housekeeping: keep the anonymous analytics table bounded.
 const housekeeping = () => {
   try {
+    pruneChats(db);
     const n = pruneEvents(db);
     if (n) console.log(`[housekeeping] pruned ${n} old analytics events`);
   } catch (err) {

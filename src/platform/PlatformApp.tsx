@@ -4,6 +4,7 @@ import { Link, Navigate, Route, Routes } from 'react-router-dom';
 import { PLATFORM, PRIMARY_CTA } from '../../shared/platform/brand';
 import { bootFlags } from '../lib/market';
 import { Mark, Wordmark } from '../components/ui';
+import { ChatLauncher } from './chat/ChatLauncher';
 
 const Home = lazy(() => import('./pages/Home'));
 const Assess = lazy(() => import('./pages/Assess'));
@@ -53,7 +54,9 @@ function Shell({ children }: { children: ReactNode }) {
           {children}
         </Suspense>
       </main>
-      <footer className="border-t border-pf-line bg-pf-surface px-4 py-8 text-sm text-pf-muted sm:px-6">
+      <ChatLauncher />
+      {/* Extra bottom space on phones so the chat button never covers the last line of the footer. */}
+      <footer className="border-t border-pf-line bg-pf-surface px-4 pb-24 pt-8 text-sm text-pf-muted sm:px-6 sm:pb-8">
         <div className="mx-auto max-w-6xl space-y-3">
           <p>
             <strong className="text-pf-ink">{PLATFORM.name}</strong> is operated by {PLATFORM.operator}. Tucker may receive compensation from providers. Every price shows where it came from and when it was checked.

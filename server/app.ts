@@ -34,6 +34,7 @@ import { PLATFORM_META, PLATFORM_OG_IMAGE, platformStructuredData } from '../sha
 import { OPPORTUNITY_STATUSES } from '../shared/platform/opportunity';
 import { createNotifier, listNotifications, type Notifier } from './notify';
 import { platformRouter, PlatformError } from './platform';
+import type { ChatTurner } from './ai/chatModel';
 import {
   createSessionToken,
   hashPassword,
@@ -49,6 +50,7 @@ import {
 } from './lib/auth';
 import * as repo from './repo';
 import * as team from './repo-team';
+import * as chats from './repo-chat';
 import { errorFields, log } from './lib/log';
 import { availableSlots, bookableDates, bookAppointment, BookingError } from './scheduling';
 
@@ -110,7 +112,7 @@ export function describeAvailability(zip: string, area: repo.ServiceArea | null,
   }
 }
 
-export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier; htmlTemplate?: string; crm?: CrmAdapter } = {}) {
+export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier; htmlTemplate?: string; crm?: CrmAdapter; chatModel?: ChatTurner | null } = {}) {
   const notifier = deps.notifier ?? createNotifier(db, config);
   const app = express();
   app.disable('x-powered-by');
@@ -529,6 +531,8 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
       assessment: lead.assessmentId ? repo.getAssessment(db, lead.assessmentId) : null,
       opportunities: repo.opportunitiesForLead(db, lead.id),
       history: repo.listLeadHistory(db, lead.id),
+      // The website chat this lead came from, if any (same access rules as the lead itself).
+      chat: chats.transcriptForLead(db, lead.id),
       representative: reps.find((r) => r.id === lead.assignedRepId)?.name ?? null,
       // Only an admin can reassign, so only an admin gets the list of people.
       representatives: req.rep ? undefined : reps.filter((r) => r.active).map((r) => ({ id: r.id, name: r.name, accepting: r.accepting, openLeads: r.openLeads })),
@@ -592,6 +596,28 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
   });
 
   admin.get('/handoff-funnel', (_req, res) => res.json(repo.handoffFunnel(db, 30)));
+
+  // Website chat: sessions and the chat funnel (admin only). AI cost is an estimate from token counts.
+  admin.get('/chats', (req, res) => {
+    const q = parse(z.object({ status: z.enum(['open', 'previewed', 'handoff']).optional(), limit: z.coerce.number().int().min(1).max(200).optional(), offset: z.coerce.number().int().min(0).optional() }), req.query);
+    const to = new Date().toISOString();
+    const from = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const stats = chats.chatStats(db, from, to);
+    // List prices per million tokens for the configured model (Claude Opus 5.5 by default). Change with CHAT_PRICE_IN / CHAT_PRICE_OUT.
+    const priceIn = Number(process.env.CHAT_PRICE_IN ?? 4);
+    const priceOut = Number(process.env.CHAT_PRICE_OUT ?? 20);
+    const costCents = Math.round(((stats.inputTokens * priceIn + stats.outputTokens * priceOut) / 1_000_000) * 100);
+    res.json({
+      ...chats.listSessions(db, q),
+      stats: { ...stats, days: 30, estCostCents: costCents, costPerChatCents: stats.engaged ? Math.round(costCents / stats.engaged) : null, costPerLeadCents: stats.handoffs ? Math.round(costCents / stats.handoffs) : null },
+      ai: { configured: !!config.chat?.apiKey, model: config.chat?.model ?? '' },
+    });
+  });
+  admin.get('/chats/:id', (req, res) => {
+    const s = chats.getSession(db, String(req.params.id));
+    if (!s) throw new HttpError(404, 'Chat not found.');
+    res.json({ session: { ...s, tokenHash: undefined }, messages: chats.listMessages(db, s.id) });
+  });
 
   // National benchmarks: one current set, every change a new version with its author.
   const benchmarkBody = z
@@ -665,7 +691,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
   });
 
   // Household savings API (assessments, results, contact).
-  api.use('/platform', platformRouter(config, db, notifier));
+  api.use('/platform', platformRouter(config, db, notifier, deps.chatModel));
 
   api.use('/admin', admin);
   api.use((_req, _res, next) => next(new HttpError(404, 'Not found.')));

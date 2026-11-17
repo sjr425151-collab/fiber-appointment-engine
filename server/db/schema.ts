@@ -646,6 +646,48 @@ export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
       ALTER TABLE benchmark_versions ADD COLUMN security_cents INTEGER NOT NULL DEFAULT 8000;
     `,
   },
+  {
+    id: 12,
+    name: 'chat_assistant',
+    sql: `
+      -- Website chat with Tucker's assistant. A visitor is anonymous until they
+      -- ask for a representative; the session is readable only with its token.
+      CREATE TABLE chat_sessions (
+        id                 TEXT PRIMARY KEY,
+        token_hash         TEXT NOT NULL,
+        state              TEXT NOT NULL,
+        status             TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','previewed','handoff')),
+        lead_id            TEXT REFERENCES leads(id) ON DELETE SET NULL,
+        user_messages      INTEGER NOT NULL DEFAULT 0,
+        ai_calls           INTEGER NOT NULL DEFAULT 0,
+        ai_failures        INTEGER NOT NULL DEFAULT 0,
+        ai_input_tokens    INTEGER NOT NULL DEFAULT 0,
+        ai_output_tokens   INTEGER NOT NULL DEFAULT 0,
+        ai_ms              INTEGER NOT NULL DEFAULT 0,
+        landing_page       TEXT NOT NULL DEFAULT '',
+        utm_source         TEXT NOT NULL DEFAULT '',
+        utm_campaign       TEXT NOT NULL DEFAULT '',
+        created_at         TEXT NOT NULL,
+        updated_at         TEXT NOT NULL
+      );
+      CREATE INDEX idx_chat_sessions_created ON chat_sessions(created_at);
+      CREATE INDEX idx_chat_sessions_lead ON chat_sessions(lead_id);
+
+      CREATE TABLE chat_messages (
+        id          TEXT PRIMARY KEY,
+        session_id  TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+        role        TEXT NOT NULL CHECK (role IN ('user','assistant')),
+        body        TEXT NOT NULL,
+        card        TEXT NOT NULL DEFAULT '',
+        client_id   TEXT,
+        source      TEXT NOT NULL DEFAULT '',
+        created_at  TEXT NOT NULL
+      );
+      CREATE INDEX idx_chat_messages_session ON chat_messages(session_id, created_at);
+      -- The same message sent twice (retry, double tap) is stored once.
+      CREATE UNIQUE INDEX idx_chat_messages_client ON chat_messages(session_id, client_id) WHERE client_id IS NOT NULL;
+    `,
+  },
 ];
 
 /**
