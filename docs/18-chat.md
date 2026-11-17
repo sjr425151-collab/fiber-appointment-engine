@@ -1,6 +1,6 @@
 # 18 · Website chat ("Chat with an Agent")
 
-Status: **Deployed 2026-11-17** (owner said "deploy"). AI wording stays off until `ANTHROPIC_API_KEY` is set in Render; until then the rule-based assistant answers.
+Status: **Live** as `c91d2b3` (deployed 2026-11-17). AI wording stays off until `ANTHROPIC_API_KEY` is set in Render; until then the rule-based assistant answers.
 
 ## What the customer sees
 - A "Chat with an Agent" button at the bottom right of every public page (phone and desktop, safe-area aware). The chat code loads only when it is opened (about 4.7 kB gzipped); the button itself adds almost nothing to the page.
