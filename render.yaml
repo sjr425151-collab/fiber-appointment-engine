@@ -4,6 +4,10 @@
 # Schema: https://render.com/schema/render.yaml.json
 services:
   - type: web
+    # The live service is still called "fiber-connect" in Render (an internal name customers never see).
+    # Do NOT change this line on its own: Render matches services by name, so a new name here can make
+    # a Blueprint sync create a second, empty service. Rename in the dashboard first, then change this
+    # line to match in the same hour. Steps: docs/08-operations.md -> "Names in Render".
     name: fiber-connect
     runtime: docker
     plan: starter            # always-on (free instances sleep and can't keep a disk)
@@ -12,7 +16,7 @@ services:
     healthCheckPath: /api/health
     autoDeployTrigger: commit
     disk:
-      name: fiber-data
+      name: fiber-data       # internal disk label; rename in the dashboard first (same rule as the service name)
       mountPath: /data       # SQLite database lives here and survives deploys
       sizeGB: 1
     domains:
@@ -22,7 +26,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_PATH
-        value: /data/fiber.db
+        value: /data/fiber.db  # the live database file. Never change this path: a new path starts an empty database
       - key: SITE_URL
         value: https://trytucker.com   # canonical origin: canonical links, sitemap, share data, email links
       - key: LEGACY_HOSTS

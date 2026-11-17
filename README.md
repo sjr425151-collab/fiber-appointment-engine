@@ -1,6 +1,8 @@
-# Fiber Appointment Engine
+# Tucker
 
-**Fiber Connect** — an organic lead-generation, appointment-setting and AI marketing platform operated by **Spotlight Marketing LLC**. Multi-location by design: launching with **Omni Fiber in Monroe, Michigan**, with new cities added from the admin panel.
+**Tucker** (https://trytucker.com) is a home-service savings broker operated by **Spotlight Marketing LLC**: a household previews what it pays for internet, mobile, TV and electricity against illustrative benchmarks, then asks a representative for exact pricing. Regional internet pages (starting with Omni Fiber in Monroe, MI) are optional local campaigns at `/internet/<location>`.
+
+Start with [`docs/README.md`](docs/README.md): it shows what is live, built or proposed, and links the structure ([`docs/15-consolidation.md`](docs/15-consolidation.md)), the representative handoff ([`docs/16-handoff.md`](docs/16-handoff.md)) and operations ([`docs/08-operations.md`](docs/08-operations.md)). The repository and the Render service still carry their first names (`fiber-appointment-engine`, `fiber-connect`); both are internal. The sections below describe the original internet-lead engine, which still powers the regional pages, booking and the team area.
 
 ## Status
 
@@ -118,8 +120,8 @@ The repo includes `render.yaml`, so Render sets everything up from the dashboard
 1. Create an account at render.com and connect GitHub (allow access to this repository).
 2. **New → Blueprint** → choose this repo and branch → Render reads `render.yaml`.
 3. When prompted, enter **ADMIN_EMAIL** and **ADMIN_PASSWORD** (12+ characters) — your team login for `/admin`. The session secret is generated automatically.
-4. Click **Apply**. The first build takes a few minutes; the site is then live at `https://fiber-connect.onrender.com` (or similar).
-5. **Connect the domain:** in the service's *Settings → Custom Domains*, Render shows the DNS records for `livefiberconnect.com` (pre-listed by the blueprint). Add them at your registrar (e.g. Cloudflare → DNS). Render issues the SSL certificate automatically once DNS resolves.
+4. Click **Apply**. The first build takes a few minutes; the site is then live at the service's `onrender.com` address (the live service is named `fiber-connect`).
+5. **Connect the domain:** in the service's *Settings → Custom Domains*, Render shows the DNS records for `trytucker.com` and `livefiberconnect.com` (pre-listed by the blueprint). Add them at your registrar (e.g. Cloudflare → DNS). Render issues the SSL certificate automatically once DNS resolves.
 6. Every push to the branch redeploys automatically; the database on the disk is preserved.
 
 What the blueprint configures: Docker build, Ohio region, `/api/health` health checks (zero-downtime deploys), persistent disk at `/data`, and env vars (`SITE_URL`, `DATABASE_PATH`, `TRUST_PROXY`, `NODE_ENV`).
@@ -127,11 +129,11 @@ What the blueprint configures: Docker build, Ohio region, `/api/health` health c
 Other hosts: any Docker host with a persistent volume works —
 
 ```bash
-docker build -t fiber-engine .
-docker run -d -p 3001:3001 -v fiber-data:/data \
-  -e SITE_URL=https://livefiberconnect.com -e SESSION_SECRET=$(openssl rand -hex 32) \
+docker build -t tucker .
+docker run -d -p 3001:3001 -v tucker-data:/data \
+  -e SITE_URL=https://trytucker.com -e SESSION_SECRET=$(openssl rand -hex 32) \
   -e ADMIN_EMAIL=you@yourdomain.com -e ADMIN_PASSWORD='a-long-password' -e TRUST_PROXY=1 \
-  fiber-engine
+  tucker
 ```
 
 ## Security

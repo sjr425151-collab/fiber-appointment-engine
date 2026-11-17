@@ -1,9 +1,9 @@
 {
-  "name": "fiber-appointment-engine",
+  "name": "tucker",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Organic lead generation, appointment setting and AI marketing platform for Omni Fiber (Monroe, MI) \u2014 Spotlight Marketing LLC",
+  "description": "Tucker: home-service savings broker. Household bill preview, representative handoff, regional internet pages and team area. Spotlight Marketing LLC",
   "engines": {
     "node": ">=22.5"
   },

@@ -14,7 +14,7 @@
 # Schema: https://render.com/schema/render.yaml.json
 services:
   - type: web
-    name: fiber-connect-staging
+    name: tucker-staging
     runtime: docker
     plan: starter
     region: ohio
@@ -22,7 +22,7 @@ services:
     healthCheckPath: /api/health
     autoDeployTrigger: "off"
     disk:
-      name: fiber-staging-data
+      name: tucker-staging-data
       mountPath: /data
       sizeGB: 1
     envVars:
@@ -35,7 +35,7 @@ services:
       - key: DATABASE_PATH
         value: /data/staging.db
       - key: SITE_URL
-        sync: false          # e.g. https://fiber-connect-staging.onrender.com
+        sync: false          # e.g. https://tucker-staging.onrender.com
       - key: TRUST_PROXY
         value: "1"
       - key: SESSION_SECRET

@@ -78,6 +78,32 @@ It never auto-deploys. Use *Manual Deploy* for any commit, including `[skip rend
 | `npm run check` | Typecheck, lint, and unit, API, DB and infrastructure tests (Vitest, in-memory and temp-file SQLite) | Nothing external |
 | `npm run test:e2e` | Production build, then a staging server (platform and samples on) and a production-mode server (flags off) on throwaway databases, then Chromium tests: the full customer journey, edge cases, responsive layouts (320/390/768/1280), axe-core WCAG 2.2 AA, keyboard and reduced motion, and the fiber site in production mode | Playwright Chromium (`npx playwright install chromium` outside this container); free ports 3290–3291 (`E2E_PORT_BASE` to change) |
 
+## Names in Render
+
+What is named what (2026-11-17):
+
+| Thing | Current name | Seen by customers? | Safe to rename? |
+|---|---|---|---|
+| Render web service | `fiber-connect` | No | Yes, in the dashboard, with the steps below |
+| Render disk | `fiber-data` | No | Yes, in the dashboard (label only). Leave the mount path `/data` alone |
+| Database file | `/data/fiber.db` | No | **No.** Changing `DATABASE_PATH` starts an empty database; the leads would still be in the old file but the site would not show them |
+| `onrender.com` address | set when the service was created | No (Cloudflare points the domains at it) | Do not try to change it |
+| GitHub repository | `fiber-appointment-engine` | No | Yes, in GitHub (old links redirect) |
+| Package name, staging blueprint, README | `tucker`, `tucker-staging` | No | Done in the repository |
+| Session cookie, calendar event ids | `fae_session`, `…@fiber-connect` | No | Left as they are: changing them signs the team out and breaks updates to calendar invites already sent |
+
+**Renaming the Render service (owner, about five minutes):**
+
+1. Render → *Blueprints*. If a Blueprint lists this service, open it and switch **auto sync off** first. (If there is no Blueprint, skip this.)
+2. Render → the service → *Settings* → *Name* → `tucker` → Save. Note the `onrender.com` address shown on the service page before and after. Render's documentation does not say whether it changes; if it does, update the two Cloudflare DNS records that point at it before doing anything else, and check `https://trytucker.com/api/health`.
+3. Optional: *Disks* → rename `fiber-data` to `tucker-data`. Do not change the mount path.
+4. Tell the developer (or change `name:` and the disk `name:` in `render.yaml` to exactly the same values) and commit with `[skip render]`. Only then switch Blueprint auto sync back on.
+5. Check `https://trytucker.com/api/health` answers and the admin shows existing leads.
+
+Why the order matters: Render matches Blueprint services by name. A name in `render.yaml` that matches no existing service can create a second service with an empty disk.
+
+Also note: a Blueprint sync overwrites dashboard values for variables that have a `value:` in `render.yaml` (for example `LEGACY_REDIRECTS`). When a value is changed in the dashboard, change it in `render.yaml` too.
+
 ## Rollback
 
 1. **Code:** Render dashboard → service → *Deploys* → *Rollback* to the previous deploy (or revert the commit and push). Migrations are additive, so the previous code runs against the newer schema.
