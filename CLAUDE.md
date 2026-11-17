@@ -2,6 +2,8 @@
 
 **LiveFiberConnect** is a household bill optimization and service brokerage platform (internet, mobile, TV, electricity/solar), operated by Spotlight Marketing LLC. It grew out of a fiber appointment engine; home internet is now one category, and the per-location fiber landing pages are one acquisition channel. Don't add provider- or city-specific logic to shared code: providers, plans and prices come from admin-managed data (`shared/platform/market-offers.ts`).
 
+The approved consumer brand is **TUCKER** ("tucker.", a home-service savings broker with a Working Bear mascot). The brand system and its approval gates live in `brand/README.md`; nothing customer-facing is renamed until the founder approves it there.
+
 Read `docs/README.md` first — it links the audit, architecture, roadmap, risk register and operations guide, and shows what is Live vs Built vs Proposed. `docs/13-transition.md` is the short map of what is reusable, adapted and next.
 
 ## Production safety (most important)

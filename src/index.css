@@ -5,6 +5,7 @@
 /* Docs and tests mention class names; don't let them add CSS to the site. */
 @source not '../docs';
 @source not '../tests';
+@source not '../brand';
 
 /* Headline font: preloaded, and `optional` so a late arrival never swaps (and
    never shifts layout) — slow connections keep the metric-matched fallback. */
