@@ -24,7 +24,8 @@ Central record for the TUCKER brand system (Master Brand Directive v3.0). Status
 
 ## In progress (awaiting Gate G2)
 
-- Round 1 mascot stills are generated: 12 images, 24 credits. See [production/round-1.md](production/round-1.md). The founder picks one candidate to refine.
+- Round 1: 12 concept stills, 24 credits ([production/round-1.md](production/round-1.md)).
+- **Gate G2 passed (founder, 2026-11-17): round-1 still #9 is the base**, with refinements. Round 2: 8 stills, 16 credits ([production/round-2.md](production/round-2.md)). Next: the founder confirms the refined face and body so the canonical sheet can be produced.
 - Until G3, the site shows only the name and an interim wordmark (lowercase "tucker" with the nose period, in the site's existing typeface and colors). The patch, palette and typeface arrive at G3.
 
 ## Open decisions
@@ -56,4 +57,5 @@ Central record for the TUCKER brand system (Master Brand Directive v3.0). Status
 ## Version history
 
 - 2026-11-17 — v0.1: Phases 0–2 delivered for review. Nothing generated, nothing deployed.
+- 2026-11-17 — v0.3: Founder chose still #9 as the mascot base; round 2 refinement generated.
 - 2026-11-17 — v0.2: Founder decisions recorded (name, hybrid territory, credit cap). Site renamed to Tucker in code (awaiting deploy). Round 1 generated.
