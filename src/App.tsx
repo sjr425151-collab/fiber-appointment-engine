@@ -28,11 +28,16 @@ function ScrollReset() {
   return null;
 }
 
-const fallback = (
-  <div className="grid min-h-screen place-items-center text-slate-500">
-    <Spinner className="h-8 w-8" />
-  </div>
-);
+/** Loading screen: white on the public site, dark only in the team area. */
+function Fallback() {
+  const admin = useLocation().pathname.startsWith('/admin');
+  return (
+    <div className={`grid min-h-screen place-items-center ${admin ? 'text-slate-500' : 'bg-white text-[#1d3fd8]'}`}>
+      <Spinner className="h-8 w-8" />
+    </div>
+  );
+}
+const fallback = <Fallback />;
 
 export default function App() {
   return (

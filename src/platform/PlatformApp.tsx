@@ -95,6 +95,18 @@ function NotFound() {
 
 /** Tucker: the home page, the savings preview and results, and the not-found page. */
 export default function PlatformApp() {
+  // The public site is white: page background (seen while loading and when scrolling past the edge on phones) and the phone's browser bar.
+  useEffect(() => {
+    const body = document.body.style.background;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const color = meta?.getAttribute('content') ?? '';
+    document.body.style.background = '#ffffff';
+    meta?.setAttribute('content', '#ffffff');
+    return () => {
+      document.body.style.background = body;
+      meta?.setAttribute('content', color);
+    };
+  }, []);
   return (
     <Shell>
       <Routes>

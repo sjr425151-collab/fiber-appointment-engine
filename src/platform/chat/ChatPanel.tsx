@@ -98,7 +98,7 @@ function SavingsCard({ preview, disclosure, onEdit, busy }: { preview: QuickPrev
                   $
                 </span>
                 <input id={`edit-${r.category}`} inputMode="decimal" autoFocus className="w-24 rounded-lg border border-pf-field px-2 py-1 text-pf-ink" value={value} onChange={(e) => setValue(e.target.value)} />
-                <button className="rounded-lg bg-pf-ink px-3 py-1 text-white" disabled={busy}>
+                <button className="rounded-lg bg-pf-brand px-3 py-1 text-white" disabled={busy}>
                   Update
                 </button>
               </form>
@@ -347,7 +347,7 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
       aria-modal="false"
       aria-labelledby="chat-title"
       hidden={!open}
-      className="fixed inset-0 z-50 flex flex-col bg-pf-bg sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(640px,calc(100dvh-3rem))] sm:w-[400px] sm:overflow-hidden sm:rounded-2xl sm:border sm:border-pf-line sm:shadow-pf-raised"
+      className="fixed inset-0 z-50 flex flex-col bg-pf-surface sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(640px,calc(100dvh-3rem))] sm:w-[400px] sm:overflow-hidden sm:rounded-2xl sm:border sm:border-pf-line sm:shadow-pf-raised"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <div className="flex items-center gap-3 border-b border-pf-line bg-pf-surface px-4 py-3">
@@ -371,9 +371,9 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
         {!chat && !error && <p className="text-sm text-pf-muted">Starting the chat…</p>}
         {chat?.messages.map((m) => (
           <div key={m.id} className={m.role === 'user' ? 'flex justify-end' : ''}>
-            <div className={m.role === 'user' ? 'max-w-[85%] rounded-2xl rounded-br-md bg-pf-ink px-4 py-2.5 text-sm text-white' : 'max-w-[92%]'}>
+            <div className={m.role === 'user' ? 'max-w-[85%] rounded-2xl rounded-br-md bg-pf-brand px-4 py-2.5 text-sm text-white' : 'max-w-[92%]'}>
               {m.role === 'assistant' && <p className="sr-only">Tucker AI says:</p>}
-              <p className={m.role === 'assistant' ? 'whitespace-pre-line rounded-2xl rounded-bl-md bg-pf-surface px-4 py-2.5 text-sm text-pf-ink shadow-pf-card' : 'whitespace-pre-line'}>{m.body}</p>
+              <p className={m.role === 'assistant' ? 'whitespace-pre-line rounded-2xl rounded-bl-md bg-pf-brand-soft px-4 py-2.5 text-sm text-pf-ink' : 'whitespace-pre-line'}>{m.body}</p>
               {m.card?.preview && m.card.preview.rows.length > 0 && <SavingsCard preview={m.card.preview} disclosure={m.card.disclosure} busy={busy} onEdit={editAmount} />}
             </div>
           </div>
@@ -437,7 +437,7 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
               onChange={(e) => setText(e.target.value)}
               autoComplete="off"
             />
-            <button className="min-h-11 rounded-xl bg-pf-ink px-4 font-semibold text-white disabled:opacity-60" disabled={busy || !text.trim()}>
+            <button className="min-h-11 rounded-xl bg-pf-brand px-4 font-semibold text-white disabled:opacity-60" disabled={busy || !text.trim()}>
               Send
             </button>
           </form>

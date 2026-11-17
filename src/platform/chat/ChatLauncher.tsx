@@ -38,7 +38,7 @@ export function ChatLauncher() {
           }}
           onPointerEnter={() => setLoaded(true)}
           onFocus={() => setLoaded(true)}
-          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-40 inline-flex min-h-12 items-center gap-2 rounded-full bg-pf-ink px-5 font-semibold text-white shadow-pf-raised transition-transform duration-200 hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:right-6"
+          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-40 inline-flex min-h-12 items-center gap-2 rounded-full bg-pf-brand px-5 font-semibold text-white shadow-pf-raised transition-transform duration-200 hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:right-6"
           aria-haspopup="dialog"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
