@@ -1,6 +1,8 @@
 # 17 — V2: national benchmarks, no locations, new homepage
 
-**Status (2026-11-17): built and tested, not deployed.** Restore point: commit `9c5b590` (and the live `13882f8`). Adds migration 10 (additive), rehearsed with migrations 8–9 on a database created by the live commit.
+**Status (2026-11-17): built and tested, not deployed.** The live site runs `9c5b590` (deployed from the Render side; it includes the representative handoff and migrations 8–9). Restore point: `9c5b590`. This adds only migration 10 (additive), rehearsed on a database created by `9c5b590`.
+
+Migration 9 already ran in production as written in `9c5b590`, so it is kept exactly as shipped. Its commission, earnings and payout tables therefore exist in the database but are empty and unused: no code reads or writes them, and nothing shows them.
 
 ## What changed
 
