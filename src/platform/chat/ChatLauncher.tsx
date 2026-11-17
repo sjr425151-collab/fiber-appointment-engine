@@ -5,6 +5,9 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 
 const ChatPanel = lazy(() => import('./ChatPanel'));
+/** Any button on the page can open the chat by sending this event. */
+export const OPEN_CHAT_EVENT = 'tucker:open-chat';
+export const openChat = () => window.dispatchEvent(new Event(OPEN_CHAT_EVENT));
 const OPEN_KEY = 'tucker-chat-open';
 
 const readOpen = () => {
@@ -19,6 +22,14 @@ export function ChatLauncher() {
   // A chat left open stays open when the visitor moves to another page.
   const [open, setOpen] = useState(readOpen);
   const [loaded, setLoaded] = useState(open);
+  useEffect(() => {
+    const show = () => {
+      setLoaded(true);
+      setOpen(true);
+    };
+    window.addEventListener(OPEN_CHAT_EVENT, show);
+    return () => window.removeEventListener(OPEN_CHAT_EVENT, show);
+  }, []);
   useEffect(() => {
     try {
       sessionStorage.setItem(OPEN_KEY, open ? '1' : '0');

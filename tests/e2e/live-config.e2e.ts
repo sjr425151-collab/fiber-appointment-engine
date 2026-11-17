@@ -55,6 +55,15 @@ describe('national home', () => {
     expect(await preview.innerText()).toMatch(/\$200\/mo less[\s\S]*About \$2,400 a year[\s\S]*Benchmark/);
     expect(await p.locator('main').innerText()).toMatch(/comparison assumptions, not offers or guarantees/);
     expect(posted).toEqual([]); // nothing was sent anywhere to see the preview
+    // The hero's chat button opens the AI chat (labelled as an AI, never as a person).
+    await p.locator('main').getByRole('button', { name: 'Chat with an Agent' }).click();
+    await p
+      .getByRole('dialog', { name: /Tucker AI/ })
+      .getByText(/AI assistant/)
+      .first()
+      .waitFor();
+    await p.getByRole('button', { name: 'Minimize chat' }).click();
+    await p.evaluate(() => sessionStorage.clear());
     expect(await axe(p)).toEqual([]);
 
     // The numbers carry into the full preview.

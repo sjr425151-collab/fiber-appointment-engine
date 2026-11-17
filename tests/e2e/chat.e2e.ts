@@ -24,7 +24,8 @@ describe.each([
     const { ctx, errors } = await context(b, device);
     const p = await ctx.newPage();
     await p.goto(`${BASE}/`);
-    const launcher = p.getByRole('button', { name: 'Chat with an Agent' });
+    // The floating button (the hero has a second "Chat with an Agent" button on the home page).
+    const launcher = p.locator('button[aria-haspopup=dialog]', { hasText: 'Chat with an Agent' });
     await launcher.click();
     const dialog = p.getByRole('dialog', { name: /Tucker AI/ });
     await expect(dialog.getByText('AI assistant', { exact: true })).toBeTruthy();
@@ -65,7 +66,10 @@ describe.each([
     const a = await adminLogin(admin.ctx, BASE);
     await a.goto(`${BASE}/admin/chats`);
     await a.getByRole('heading', { name: 'Website chat' }).waitFor();
-    await a.getByRole('link', { name: new RegExp(`Chat${name}`) }).first().click();
+    await a
+      .getByRole('link', { name: new RegExp(`Chat${name}`) })
+      .first()
+      .click();
     await a.getByRole('heading', { name: 'Website chat' }).waitFor();
     await a.getByText('internet $110, phone $180 for 3 lines', { exact: true }).first().waitFor();
     await admin.ctx.close();

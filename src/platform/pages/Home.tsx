@@ -11,6 +11,7 @@ import { bootBenchmarks } from '../../lib/market';
 import { Button, Card, CurrencyInput, Field, Money, Select, StatusChip } from '../ds';
 import { HandoffForm } from '../HandoffForm';
 import { editHandoff } from '../lib';
+import { openChat } from '../chat/ChatLauncher';
 
 const whole = (c: Cents) => formatCents(c, { cents: false });
 
@@ -241,6 +242,12 @@ function QuickPreview() {
   );
 }
 
+const Arrow = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5 12h14M13 6l6 6-6 6" />
+  </svg>
+);
+
 export default function Home() {
   const set = useMemo(() => bootBenchmarks(), []);
   useEffect(() => {
@@ -253,18 +260,45 @@ export default function Home() {
           <div className="lg:pt-6">
             <p className="font-display text-sm font-bold uppercase tracking-wide text-pf-brand">{PLATFORM.promise}</p>
             <h1 className="mt-3 font-display text-4xl font-bold leading-tight tracking-tight text-pf-ink sm:text-5xl">See if your household could save 50% or more on monthly bills.</h1>
-            <p className="mt-5 max-w-xl text-lg text-pf-muted">Tucker is your home service savings broker. Internet, mobile, TV, electricity and home security in one quick check. We compare, we help, you choose, with no account and no pressure.</p>
+            <p className="mt-5 max-w-xl text-lg text-pf-muted">
+              Tucker is your home service savings broker. Internet, mobile, TV, electricity and home security in one quick check. We compare, we help, you choose, with no account and no pressure.
+            </p>
             <p className="mt-3 max-w-xl text-sm text-pf-subtle">Results vary and many households will save less. Figures are illustrative comparisons, not offers or guarantees.</p>
-            <ul className="mt-6 space-y-2 text-pf-ink">
-              {['Free, and takes about a minute', 'No contact details to see your preview', 'Every number labelled by where it came from'].map((t) => (
-                <li key={t} className="flex gap-3">
-                  <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-pf-save" aria-hidden />
+            <div className="mt-8 flex flex-wrap gap-3">
+              <a
+                href="#preview"
+                onClick={() => track('cta_click', { location: 'pf_hero_review' })}
+                className="inline-flex min-h-12 items-center gap-2.5 rounded-xl bg-pf-brand px-6 text-base font-semibold text-white shadow-sm transition-colors hover:bg-pf-brand-strong"
+              >
+                Get my free review
+                <Arrow />
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  track('cta_click', { location: 'pf_hero_chat' });
+                  openChat();
+                }}
+                className="inline-flex min-h-12 items-center gap-2.5 rounded-xl border border-pf-line bg-pf-surface px-6 text-base font-semibold text-pf-ink transition-colors hover:border-pf-ink/30"
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" />
+                </svg>
+                Chat with an Agent
+              </button>
+            </div>
+            <ul className="mt-6 flex flex-wrap gap-x-7 gap-y-2 text-[15px] text-pf-muted">
+              {['No cost to compare', 'One rep, start to finish', 'Real prices confirmed for your address'].map((t) => (
+                <li key={t} className="flex items-center gap-2">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-pf-save" aria-hidden fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                  </svg>
                   {t}
                 </li>
               ))}
             </ul>
-            <p className="mt-6">
-              <Link to="/savings/assess" onClick={() => track('cta_click', { location: 'pf_hero_full' })} className="font-semibold text-pf-brand underline underline-offset-4">
+            <p className="mt-5 text-sm">
+              <Link to="/savings/assess" onClick={() => track('cta_click', { location: 'pf_hero_full' })} className="text-pf-muted underline underline-offset-4 hover:text-pf-ink">
                 Skip to the full preview
               </Link>
             </p>
