@@ -353,6 +353,267 @@ export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
       CREATE INDEX idx_lead_history_kind ON lead_history(kind, to_value, created_at);
     `,
   },
+  {
+    id: 9,
+    name: 'team_portal',
+    sql: `
+      -- Team members. The representatives table becomes the directory of everyone
+      -- who signs in to the team area (one table, no second user store).
+      ALTER TABLE representatives ADD COLUMN role              TEXT NOT NULL DEFAULT 'rep';
+      ALTER TABLE representatives ADD COLUMN status            TEXT NOT NULL DEFAULT 'active';
+      ALTER TABLE representatives ADD COLUMN team_id           TEXT;
+      ALTER TABLE representatives ADD COLUMN rep_code          TEXT;
+      ALTER TABLE representatives ADD COLUMN mfa_secret        TEXT NOT NULL DEFAULT '';
+      ALTER TABLE representatives ADD COLUMN mfa_pending       TEXT NOT NULL DEFAULT '';
+      ALTER TABLE representatives ADD COLUMN mfa_enabled       INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE representatives ADD COLUMN last_login_at     TEXT;
+      ALTER TABLE representatives ADD COLUMN session_epoch     INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE representatives ADD COLUMN failed_logins     INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE representatives ADD COLUMN locked_until      TEXT;
+      ALTER TABLE representatives ADD COLUMN email_verified_at TEXT;
+      UPDATE representatives SET status = CASE WHEN active = 1 THEN 'active' ELSE 'deactivated' END;
+      UPDATE representatives SET rep_code = 'R-' || (1000 + rowid);
+      CREATE UNIQUE INDEX idx_reps_code ON representatives(rep_code) WHERE rep_code IS NOT NULL;
+      CREATE INDEX idx_reps_team ON representatives(team_id);
+
+      CREATE TABLE teams (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL UNIQUE,
+        manager_id  TEXT REFERENCES representatives(id),
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+      );
+
+      -- One-time links to activate an account or set a new password. Only the hash is stored.
+      CREATE TABLE invitations (
+        id          TEXT PRIMARY KEY,
+        user_id     TEXT NOT NULL REFERENCES representatives(id) ON DELETE CASCADE,
+        purpose     TEXT NOT NULL CHECK (purpose IN ('activate','reset')),
+        token_hash  TEXT NOT NULL UNIQUE,
+        expires_at  TEXT NOT NULL,
+        used_at     TEXT,
+        revoked_at  TEXT,
+        created_by  TEXT NOT NULL,
+        created_at  TEXT NOT NULL
+      );
+      CREATE INDEX idx_invitations_user ON invitations(user_id, created_at);
+
+      -- Who did what. Rows can be added and never changed or removed.
+      CREATE TABLE audit_events (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        actor          TEXT NOT NULL,
+        actor_role     TEXT NOT NULL,
+        action         TEXT NOT NULL,
+        resource_type  TEXT NOT NULL DEFAULT '',
+        resource_id    TEXT NOT NULL DEFAULT '',
+        detail         TEXT NOT NULL DEFAULT '{}',
+        ip             TEXT NOT NULL DEFAULT '',
+        created_at     TEXT NOT NULL
+      );
+      CREATE INDEX idx_audit_time ON audit_events(created_at);
+      CREATE INDEX idx_audit_resource ON audit_events(resource_type, resource_id);
+      CREATE TRIGGER audit_no_update BEFORE UPDATE ON audit_events BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END;
+      CREATE TRIGGER audit_no_delete BEFORE DELETE ON audit_events BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END;
+
+      -- Things a person recorded as having happened with a customer (never generated).
+      CREATE TABLE lead_activities (
+        id           TEXT PRIMARY KEY,
+        lead_id      TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        kind         TEXT NOT NULL CHECK (kind IN ('call','email','text','meeting','offer','other')),
+        outcome      TEXT NOT NULL DEFAULT '',
+        body         TEXT NOT NULL DEFAULT '',
+        actor        TEXT NOT NULL,
+        occurred_at  TEXT NOT NULL,
+        created_at   TEXT NOT NULL
+      );
+      CREATE INDEX idx_activities_lead ON lead_activities(lead_id, occurred_at);
+
+      -- Follow-ups.
+      CREATE TABLE tasks (
+        id           TEXT PRIMARY KEY,
+        lead_id      TEXT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        assignee_id  TEXT NOT NULL DEFAULT '',
+        title        TEXT NOT NULL,
+        due_at       TEXT NOT NULL,
+        done_at      TEXT,
+        done_by      TEXT NOT NULL DEFAULT '',
+        created_by   TEXT NOT NULL,
+        created_at   TEXT NOT NULL
+      );
+      CREATE INDEX idx_tasks_assignee ON tasks(assignee_id, done_at, due_at);
+      CREATE INDEX idx_tasks_lead ON tasks(lead_id);
+
+      -- In-app notifications. dedupe_key stops the same event alerting twice.
+      CREATE TABLE user_notifications (
+        id          TEXT PRIMARY KEY,
+        user_id     TEXT NOT NULL,
+        kind        TEXT NOT NULL,
+        title       TEXT NOT NULL,
+        lead_id     TEXT,
+        dedupe_key  TEXT NOT NULL UNIQUE,
+        read_at     TEXT,
+        created_at  TEXT NOT NULL
+      );
+      CREATE INDEX idx_user_notifications ON user_notifications(user_id, read_at, created_at);
+
+      -- Internal catalog of providers and what they sell. Nothing here is shown
+      -- to customers; public offers still come from Locations.
+      CREATE TABLE providers (
+        id                  TEXT PRIMARY KEY,
+        name                TEXT NOT NULL UNIQUE,
+        categories          TEXT NOT NULL DEFAULT '[]',
+        partnership_status  TEXT NOT NULL DEFAULT 'researching'
+                            CHECK (partnership_status IN ('researching','contacted','negotiating','contracted','active','paused','terminated')),
+        order_method        TEXT NOT NULL DEFAULT '',
+        coverage            TEXT NOT NULL DEFAULT '',
+        notes               TEXT NOT NULL DEFAULT '',
+        created_at          TEXT NOT NULL,
+        updated_at          TEXT NOT NULL
+      );
+      CREATE TABLE products (
+        id                 TEXT PRIMARY KEY,
+        provider_id        TEXT NOT NULL REFERENCES providers(id),
+        category           TEXT NOT NULL,
+        name               TEXT NOT NULL,
+        price_cents        INTEGER NOT NULL,
+        promo_price_cents  INTEGER,
+        promo_months       INTEGER NOT NULL DEFAULT 0,
+        fees_note          TEXT NOT NULL DEFAULT '',
+        eligibility        TEXT NOT NULL DEFAULT '',
+        effective_from     TEXT NOT NULL,
+        effective_to       TEXT,
+        active             INTEGER NOT NULL DEFAULT 1,
+        created_at         TEXT NOT NULL,
+        updated_at         TEXT NOT NULL
+      );
+      CREATE INDEX idx_products_provider ON products(provider_id, active);
+
+      -- Opportunity pipeline. The older coarse status stays for existing screens.
+      ALTER TABLE opportunities ADD COLUMN stage                   TEXT NOT NULL DEFAULT 'identified';
+      ALTER TABLE opportunities ADD COLUMN provider_id             TEXT;
+      ALTER TABLE opportunities ADD COLUMN product_id              TEXT;
+      ALTER TABLE opportunities ADD COLUMN qualification           TEXT NOT NULL DEFAULT 'unverified';
+      ALTER TABLE opportunities ADD COLUMN offer_source            TEXT NOT NULL DEFAULT '';
+      ALTER TABLE opportunities ADD COLUMN offer_expires_on        TEXT;
+      ALTER TABLE opportunities ADD COLUMN expected_activation_on  TEXT;
+      ALTER TABLE opportunities ADD COLUMN notes                   TEXT NOT NULL DEFAULT '';
+      ALTER TABLE opportunities ADD COLUMN created_by              TEXT NOT NULL DEFAULT 'customer';
+      UPDATE opportunities SET stage = CASE status
+        WHEN 'won' THEN 'activated' WHEN 'lost' THEN 'declined' WHEN 'not_eligible' THEN 'not_qualified'
+        WHEN 'quoted' THEN 'offer_presented' WHEN 'contacted' THEN 'qualification_pending' ELSE 'identified' END;
+      CREATE INDEX idx_opportunities_stage ON opportunities(stage, created_at);
+
+      -- Commission rules gain effective dates, targets and the payout split.
+      -- (The table existed unused since the first release; rows are never edited once used.)
+      ALTER TABLE commission_rules ADD COLUMN category                TEXT NOT NULL DEFAULT '';
+      ALTER TABLE commission_rules ADD COLUMN provider_id             TEXT;
+      ALTER TABLE commission_rules ADD COLUMN product_id              TEXT;
+      ALTER TABLE commission_rules ADD COLUMN rep_amount_cents        INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE commission_rules ADD COLUMN rep_share_bps           INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE commission_rules ADD COLUMN manager_override_cents  INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE commission_rules ADD COLUMN effective_from          TEXT NOT NULL DEFAULT '2000-01-01';
+      ALTER TABLE commission_rules ADD COLUMN effective_to            TEXT;
+      ALTER TABLE commission_rules ADD COLUMN created_by              TEXT NOT NULL DEFAULT '';
+
+      CREATE TABLE orders (
+        id                       TEXT PRIMARY KEY,
+        order_no                 TEXT NOT NULL UNIQUE,
+        lead_id                  TEXT NOT NULL REFERENCES leads(id),
+        opportunity_id           TEXT NOT NULL REFERENCES opportunities(id),
+        rep_id                   TEXT,
+        category                 TEXT NOT NULL,
+        provider_id              TEXT NOT NULL REFERENCES providers(id),
+        product_id               TEXT REFERENCES products(id),
+        product_name             TEXT NOT NULL,
+        monthly_price_cents      INTEGER,
+        submission_channel       TEXT NOT NULL DEFAULT '',
+        external_ref             TEXT NOT NULL DEFAULT '',
+        status                   TEXT NOT NULL DEFAULT 'draft',
+        submitted_at             TEXT,
+        activated_at             TEXT,
+        completed_at             TEXT,
+        cancellation_reason      TEXT NOT NULL DEFAULT '',
+        provider_confirmed       INTEGER NOT NULL DEFAULT 0,
+        rule_id                  TEXT,
+        expected_provider_cents  INTEGER,
+        received_provider_cents  INTEGER,
+        received_at              TEXT,
+        received_ref             TEXT NOT NULL DEFAULT '',
+        idempotency_key          TEXT,
+        version                  INTEGER NOT NULL DEFAULT 0,
+        created_by               TEXT NOT NULL,
+        created_at               TEXT NOT NULL,
+        updated_at               TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_orders_idem ON orders(idempotency_key) WHERE idempotency_key IS NOT NULL;
+      -- The same provider reference can never be recorded on two orders.
+      CREATE UNIQUE INDEX idx_orders_extref ON orders(provider_id, external_ref) WHERE external_ref <> '';
+      CREATE INDEX idx_orders_lead ON orders(lead_id);
+      CREATE INDEX idx_orders_rep ON orders(rep_id, status);
+      CREATE INDEX idx_orders_status ON orders(status, created_at);
+      CREATE INDEX idx_orders_opportunity ON orders(opportunity_id);
+
+      CREATE TABLE order_events (
+        id           TEXT PRIMARY KEY,
+        order_id     TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        from_status  TEXT NOT NULL DEFAULT '',
+        to_status    TEXT NOT NULL,
+        note         TEXT NOT NULL DEFAULT '',
+        evidence     TEXT NOT NULL DEFAULT '',
+        actor        TEXT NOT NULL,
+        created_at   TEXT NOT NULL
+      );
+      CREATE INDEX idx_order_events ON order_events(order_id, created_at);
+
+      -- Payout batches. A batch is approved and then recorded as paid by a person;
+      -- the system never moves money.
+      CREATE TABLE payout_batches (
+        id                 TEXT PRIMARY KEY,
+        batch_no           TEXT NOT NULL UNIQUE,
+        period_from        TEXT NOT NULL,
+        period_to          TEXT NOT NULL,
+        status             TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','approved','paid','void')),
+        total_cents        INTEGER NOT NULL DEFAULT 0,
+        approved_by        TEXT NOT NULL DEFAULT '',
+        approved_at        TEXT,
+        paid_at            TEXT,
+        payment_reference  TEXT NOT NULL DEFAULT '',
+        created_by         TEXT NOT NULL,
+        created_at         TEXT NOT NULL,
+        updated_at         TEXT NOT NULL
+      );
+
+      -- Earnings ledger: one row per amount owed to (or taken back from) a person.
+      -- Amounts are never edited; corrections are new rows.
+      CREATE TABLE earnings (
+        id              TEXT PRIMARY KEY,
+        order_id        TEXT REFERENCES orders(id),
+        beneficiary_id  TEXT NOT NULL,
+        kind            TEXT NOT NULL CHECK (kind IN ('rep_commission','manager_override','bonus','adjustment','chargeback')),
+        rule_id         TEXT,
+        amount_cents    INTEGER NOT NULL,
+        state           TEXT NOT NULL CHECK (state IN ('projected','pending','earned','approved','payable','paid','reversed')),
+        reverses_id     TEXT,
+        payout_id       TEXT REFERENCES payout_batches(id),
+        note            TEXT NOT NULL DEFAULT '',
+        created_by      TEXT NOT NULL,
+        created_at      TEXT NOT NULL,
+        updated_at      TEXT NOT NULL
+      );
+      CREATE INDEX idx_earnings_beneficiary ON earnings(beneficiary_id, state);
+      CREATE INDEX idx_earnings_order ON earnings(order_id);
+      CREATE INDEX idx_earnings_payout ON earnings(payout_id);
+      -- One commission and one override per order per person: reprocessing can never double an earning.
+      CREATE UNIQUE INDEX idx_earnings_once ON earnings(order_id, beneficiary_id, kind) WHERE kind IN ('rep_commission','manager_override');
+      -- A paid commission can be charged back once.
+      CREATE UNIQUE INDEX idx_earnings_chargeback ON earnings(reverses_id) WHERE reverses_id IS NOT NULL;
+      -- An estimate ("projected") may follow the order's price; once it is pending or later the amount is fixed.
+      CREATE TRIGGER earnings_amount_immutable BEFORE UPDATE OF amount_cents, order_id, beneficiary_id, kind ON earnings
+        WHEN OLD.state <> 'projected' OR NEW.order_id IS NOT OLD.order_id OR NEW.beneficiary_id <> OLD.beneficiary_id OR NEW.kind <> OLD.kind
+        BEGIN SELECT RAISE(ABORT, 'earning amounts are immutable; add an adjustment instead'); END;
+      CREATE TRIGGER earnings_no_delete BEFORE DELETE ON earnings BEGIN SELECT RAISE(ABORT, 'earnings are never deleted'); END;
+    `,
+  },
 ];
 
 /**

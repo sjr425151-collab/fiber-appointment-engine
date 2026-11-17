@@ -4,6 +4,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { OPPORTUNITY_STATUSES, OPPORTUNITY_STATUS_LABEL, type OpportunityDraft, type OpportunityKind, type OpportunityStatus } from '../shared/platform/opportunity';
+import { OPPORTUNITY_STAGE_LABEL, STAGE_TO_STATUS, type OpportunityStage } from '../shared/team/pipeline';
 import { CLOSED_LEAD_STATUSES, OPEN_LEAD_STATUSES, type Appointment, type AreaStatus, type Lead, type LeadNote, type LeadStatus, type Representative } from '../shared/schemas';
 import { marketSchema, type Market, type MarketSummary } from '../shared/market';
 import { transaction, type DB } from './db';
@@ -314,6 +315,11 @@ export interface LeadFilter {
   rep?: string;
   /** Only open leads nobody is assigned to (the follow-up queue). */
   unassigned?: boolean;
+  /** Team scope: leads assigned to any of these people, plus the unassigned queue. */
+  scopeReps?: string[];
+  source?: string;
+  /** Leads with nothing recorded since this instant (stale). */
+  untouchedSince?: string;
 }
 
 export function listLeads(db: DB, f: LeadFilter = {}): { leads: Lead[]; total: number } {
@@ -330,6 +336,18 @@ export function listLeads(db: DB, f: LeadFilter = {}): { leads: Lead[]; total: n
   if (f.rep) {
     where.push('assigned_rep_id = ?');
     params.push(f.rep);
+  }
+  if (f.scopeReps) {
+    where.push(`(assigned_rep_id IS NULL OR assigned_rep_id IN (${marks(f.scopeReps.length) || "''"}))`);
+    params.push(...f.scopeReps);
+  }
+  if (f.source) {
+    where.push('source = ?');
+    params.push(f.source);
+  }
+  if (f.untouchedSince) {
+    where.push(`updated_at < ? AND status IN (${marks(OPEN_LEAD_STATUSES.length)})`);
+    params.push(f.untouchedSince, ...OPEN_LEAD_STATUSES);
   }
   if (f.unassigned) {
     where.push(`assigned_rep_id IS NULL AND status IN (${marks(OPEN_LEAD_STATUSES.length)})`);
@@ -404,6 +422,12 @@ const toRep = (r: Row): Representative => ({
   categories: (parseJson(r.categories) as Representative['categories'] | null) ?? [],
   maxOpenLeads: r.max_open_leads as number,
   canSignIn: (r.password_hash as string) !== '',
+  role: ((r.role as string) ?? 'rep') as Representative['role'],
+  status: ((r.status as string) ?? 'active') as Representative['status'],
+  teamId: (r.team_id as string) ?? null,
+  repCode: (r.rep_code as string) ?? '',
+  mfaEnabled: !!r.mfa_enabled,
+  lastLoginAt: (r.last_login_at as string) ?? null,
   openLeads: (r.open_leads as number) ?? 0,
   lastAssignedAt: (r.last_assigned_at as string) ?? null,
   createdAt: r.created_at as string,
@@ -441,10 +465,11 @@ export interface RepInput {
 export function createRep(db: DB, i: RepInput): Representative {
   const id = randomUUID();
   const ts = now();
+  const { n } = db.prepare('SELECT COALESCE(MAX(CAST(SUBSTR(rep_code, 3) AS INTEGER)), 1000) AS n FROM representatives').get() as { n: number };
   db.prepare(
-    `INSERT INTO representatives (id, name, email, phone, password_hash, active, accepting, markets, categories, max_open_leads, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, i.name, i.email, i.phone, i.passwordHash ?? '', i.active ? 1 : 0, i.accepting ? 1 : 0, JSON.stringify(i.markets), JSON.stringify(i.categories), i.maxOpenLeads, ts, ts);
+    `INSERT INTO representatives (id, name, email, phone, password_hash, active, accepting, markets, categories, max_open_leads, created_at, updated_at, status, rep_code)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, i.name, i.email, i.phone, i.passwordHash ?? '', i.active ? 1 : 0, i.accepting ? 1 : 0, JSON.stringify(i.markets), JSON.stringify(i.categories), i.maxOpenLeads, ts, ts, i.active ? 'active' : 'deactivated', `R-${n + 1}`);
   return getRep(db, id)!;
 }
 
@@ -453,6 +478,8 @@ export function updateRep(db: DB, id: string, i: RepInput): Representative | nul
   db.prepare(
     `UPDATE representatives SET name = ?, email = ?, phone = ?, active = ?, accepting = ?, markets = ?, categories = ?, max_open_leads = ?, updated_at = ? WHERE id = ?`,
   ).run(i.name, i.email, i.phone, i.active ? 1 : 0, i.accepting ? 1 : 0, JSON.stringify(i.markets), JSON.stringify(i.categories), i.maxOpenLeads, now(), id);
+  // Keep the newer status column in step, and end sessions when someone is switched off.
+  db.prepare("UPDATE representatives SET status = CASE WHEN ? = 1 THEN (CASE WHEN status = 'invited' THEN 'invited' ELSE 'active' END) ELSE 'deactivated' END, session_epoch = session_epoch + CASE WHEN ? = 1 THEN 0 ELSE 1 END WHERE id = ?").run(i.active ? 1 : 0, i.active ? 1 : 0, id);
   if (i.passwordHash !== undefined) db.prepare('UPDATE representatives SET password_hash = ? WHERE id = ?').run(i.passwordHash, id);
   return getRep(db, id);
 }
@@ -813,6 +840,18 @@ export interface OpportunityRow {
   monthlySavingsCents: number | null;
   fiveYearSavingsCents: number | null;
   status: OpportunityStatus;
+  /** Pipeline stage (shared/team/pipeline.ts). The coarse `status` above is derived from it. */
+  stage: OpportunityStage;
+  providerId: string | null;
+  productId: string | null;
+  /** unverified | address_qualified | provider_verified | not_qualified */
+  qualification: string;
+  offerSource: string;
+  offerExpiresOn: string | null;
+  expectedActivationOn: string | null;
+  notes: string;
+  /** 'customer' when it came from the customer's own selections, otherwise the team member who added it. */
+  createdBy: string;
   createdAt: string;
   updatedAt: string;
   /** Joined for list views. */
@@ -834,6 +873,15 @@ const toOpportunity = (r: Row): OpportunityRow => ({
   monthlySavingsCents: r.monthly_savings_cents === null ? null : Number(r.monthly_savings_cents),
   fiveYearSavingsCents: r.five_year_savings_cents === null ? null : Number(r.five_year_savings_cents),
   status: r.status as OpportunityStatus,
+  stage: ((r.stage as string) ?? 'identified') as OpportunityStage,
+  providerId: (r.provider_id as string) ?? null,
+  productId: (r.product_id as string) ?? null,
+  qualification: (r.qualification as string) ?? 'unverified',
+  offerSource: (r.offer_source as string) ?? '',
+  offerExpiresOn: (r.offer_expires_on as string) ?? null,
+  expectedActivationOn: (r.expected_activation_on as string) ?? null,
+  notes: (r.notes as string) ?? '',
+  createdBy: (r.created_by as string) ?? 'customer',
   createdAt: String(r.created_at),
   updatedAt: String(r.updated_at),
   ...(r.lead_name !== undefined ? { leadName: String(r.lead_name) } : {}),
@@ -918,4 +966,49 @@ export function updateOpportunityStatus(db: DB, id: string, status: OpportunityS
   db.prepare('UPDATE opportunities SET status = ?, updated_at = ? WHERE id = ?').run(status, now(), id);
   addNote(db, before.leadId, `Opportunity "${before.planName}" (${before.category}): ${OPPORTUNITY_STATUS_LABEL[before.status]} → ${OPPORTUNITY_STATUS_LABEL[status]}`, author);
   return getOpportunity(db, id);
+}
+
+/** Move an opportunity to a pipeline stage (the caller has already checked the move is allowed). Keeps the coarse status in step. */
+export function setOpportunityStage(db: DB, id: string, stage: OpportunityStage, author: string): OpportunityRow | null {
+  const before = getOpportunity(db, id);
+  if (!before) return null;
+  if (before.stage === stage) return before;
+  db.prepare('UPDATE opportunities SET stage = ?, status = ?, updated_at = ? WHERE id = ?').run(stage, STAGE_TO_STATUS[stage], now(), id);
+  addNote(db, before.leadId, `Opportunity "${before.planName}" (${before.category}): ${OPPORTUNITY_STAGE_LABEL[before.stage]} → ${OPPORTUNITY_STAGE_LABEL[stage]}`, author);
+  return getOpportunity(db, id);
+}
+
+export interface OpportunityDetails {
+  planName: string;
+  providerId: string | null;
+  productId: string | null;
+  proposedMonthlyCents: number | null;
+  qualification: string;
+  offerSource: string;
+  offerExpiresOn: string | null;
+  expectedActivationOn: string | null;
+  notes: string;
+}
+
+/** What the representative is proposing. Savings are recomputed from the stated bill; nothing here is a verified price unless `qualification` says so. */
+export function updateOpportunityDetails(db: DB, id: string, d: OpportunityDetails): OpportunityRow | null {
+  const before = getOpportunity(db, id);
+  if (!before) return null;
+  const savings = before.currentMonthlyCents !== null && d.proposedMonthlyCents !== null ? before.currentMonthlyCents - d.proposedMonthlyCents : null;
+  db.prepare(
+    `UPDATE opportunities SET plan_name = ?, provider_id = ?, product_id = ?, proposed_monthly_cents = ?, monthly_savings_cents = ?, five_year_savings_cents = ?,
+       qualification = ?, offer_source = ?, offer_expires_on = ?, expected_activation_on = ?, notes = ?, updated_at = ? WHERE id = ?`,
+  ).run(d.planName, d.providerId, d.productId, d.proposedMonthlyCents, savings, savings === null ? null : savings * 60, d.qualification, d.offerSource, d.offerExpiresOn, d.expectedActivationOn, d.notes, now(), id);
+  return getOpportunity(db, id);
+}
+
+/** An opportunity a team member adds by hand to a household that already has an analysis. */
+export function createOpportunity(db: DB, o: { leadId: string; assessmentId: string; marketId: string; category: string; planName: string; currentMonthlyCents: number | null; createdBy: string }): OpportunityRow {
+  const id = randomUUID();
+  const ts = now();
+  db.prepare(
+    `INSERT INTO opportunities (id, lead_id, assessment_id, market_id, category, offer_id, plan_name, kind, is_estimate, current_monthly_cents, status, stage, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, '', ?, 'advisor', 1, ?, 'new', 'identified', ?, ?, ?)`,
+  ).run(id, o.leadId, o.assessmentId, o.marketId, o.category, o.planName, o.currentMonthlyCents, o.createdBy, ts, ts);
+  return getOpportunity(db, id)!;
 }

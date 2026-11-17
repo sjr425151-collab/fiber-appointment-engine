@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { BRAND } from '../../shared/content';
 import type { Cents } from '../../shared/finance/money';
 import type { PlatformCategory } from '../../shared/platform/assessment';
 import { BEST_TIME_LABEL, BEST_TIMES, HANDOFF_COPY, handoffConsentText, handoffSchema, marketingConsentText, type HandoffResult } from '../../shared/platform/handoff';
@@ -30,7 +31,7 @@ export function HandoffDone({ result, contact, phone }: { result: HandoffResult;
       <dl className="mt-3 space-y-1 text-sm text-pf-ink">
         <div className="flex gap-2">
           <dt className="font-semibold">With:</dt>
-          <dd>{representative ? `${representative}, on the Tucker team` : 'The Tucker team'}</dd>
+          <dd>{representative ? `${representative}, on the Tucker Team (${BRAND.agency})` : `The Tucker Team (${BRAND.agency})`}</dd>
         </div>
         <div className="flex gap-2">
           <dt className="font-semibold">Contact by:</dt>

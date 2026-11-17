@@ -156,6 +156,14 @@ export interface Representative {
   categories: ('internet' | 'mobile' | 'tv' | 'electricity')[];
   maxOpenLeads: number;
   canSignIn: boolean;
+  /** admin | manager | rep | analyst (see shared/team/permissions.ts). */
+  role: 'admin' | 'manager' | 'rep' | 'analyst';
+  status: 'invited' | 'active' | 'suspended' | 'deactivated';
+  teamId: string | null;
+  /** Short human id, e.g. R-1001. */
+  repCode: string;
+  mfaEnabled: boolean;
+  lastLoginAt: string | null;
   openLeads: number;
   lastAssignedAt: string | null;
   createdAt: string;

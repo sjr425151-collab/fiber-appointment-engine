@@ -158,7 +158,7 @@ describe('representative handoff', () => {
     await done.waitFor();
     expect(await p.evaluate(() => document.activeElement?.getAttribute('role'))).toBe('status');
     const text = await done.innerText();
-    expect(text).toMatch(/With:\s*The Tucker team/); // nobody is assigned yet, so no name is invented
+    expect(text).toMatch(/With:\s*The Tucker Team \(Spotlight Marketing LLC\)/); // nobody is assigned yet, so no name is invented
     expect(text).toMatch(/Contact by:\s*Phone call, \(734\) 555-0166/);
     expect(text).not.toMatch(/within|minutes|hours|today|shortly|guarantee/i);
     expect(posted.filter((u) => u === '/api/platform/handoff')).toHaveLength(2); // the failed try and the retry
