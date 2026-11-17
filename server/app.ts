@@ -710,7 +710,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
       const tucker = { title: PLATFORM_META.title, description: PLATFORM_META.description, ogImage: PLATFORM_OG_IMAGE, ogImageAlt: `${BRAND.name}. Your home service savings broker.`, omitStructuredData: true };
       // Tucker's national home.
       if (path === '/') {
-        return send(200, renderHtml(template, { ...base, ...tucker, canonicalPath: '/', heroPreload: true, structuredData: platformStructuredData(config.siteUrl), preload: platformPreloads(path), boot: boot(def) }));
+        return send(200, renderHtml(template, { ...base, ...tucker, canonicalPath: '/', structuredData: platformStructuredData(config.siteUrl), preload: platformPreloads(path), boot: boot(def) }));
       }
       if (path === '/privacy') {
         return send(200, renderHtml(template, { ...base, ...tucker, canonicalPath: '/privacy', title: `Privacy Notice — ${BRAND.name}`, preload: platformPreloads(path), boot: boot(def) }));

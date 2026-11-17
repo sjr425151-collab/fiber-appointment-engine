@@ -25,17 +25,15 @@ describe('national home', () => {
     await p.goto(LIVE);
     await p.getByRole('heading', { level: 1, name: /See if your household could save 50% or more on monthly bills/ }).waitFor();
     expect(await p.locator('main').innerText()).toMatch(/Results vary and many households will save less/);
-    expect(await p.getByText('Type what you pay. We’ll find a smarter option.').count()).toBe(1);
+    expect(await p.getByRole('heading', { name: 'Type what you pay. We’ll find a smarter option.' }).count()).toBe(1);
     expect(await p.title()).toBe('Tucker | Preview Potential Savings on Your Household Bills');
     expect(await p.locator('link[rel=canonical]').getAttribute('href')).toBe(`${LIVE}/`);
     expect(await p.locator('meta[property="og:image"]').getAttribute('content')).toBe(`${LIVE}/og-tucker.jpg`);
     const text = (await p.locator('body').innerText()) ?? '';
     expect(text).not.toMatch(/Monroe|Omni|Michigan|LiveFiberConnect|Fiber Connect|Sample|Staging preview|fiber|commission|paid by provider/i);
     expect(text).toMatch(/Tucker may receive compensation from providers\./);
-    // The hero video plays muted, inline and looping, behind a still that paints first.
-    await p.locator('video').waitFor({ state: 'attached' });
-    const video = await p.evaluate(() => { const v = document.querySelector('video'); return v && { muted: v.muted, loop: v.loop, inline: v.playsInline, controls: v.controls }; });
-    expect(video).toEqual({ muted: true, loop: true, inline: true, controls: false });
+    // The clean white layout: no background video or hero image.
+    expect(await p.locator('video').count()).toBe(0);
     for (const name of ['Home Internet / Wi-Fi', 'Mobile', 'TV / Streaming', 'Electricity / Solar']) expect(await p.getByRole('heading', { level: 3, name, exact: true }).count()).toBe(1);
     expect(await overflow(p)).toBe(0);
 

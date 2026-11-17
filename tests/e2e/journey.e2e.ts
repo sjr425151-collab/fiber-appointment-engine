@@ -54,7 +54,7 @@ describe('household journey (staging, phone)', () => {
     expect(await p.title()).toMatch(/Tucker/);
 
     // 2. Start the assessment.
-    await p.getByRole('link', { name: 'Prefer the step-by-step version?' }).click();
+    await p.getByRole('link', { name: 'Skip to the full preview' }).click();
     await p.getByRole('heading', { level: 1, name: 'Where is your home?' }).waitFor();
     await p.getByLabel('ZIP code').fill('48161');
     await continueTo(p, /What do you pay for/);

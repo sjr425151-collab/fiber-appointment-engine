@@ -22,7 +22,7 @@ describe('retired and unknown addresses', () => {
     const p = await ctx.newPage();
     for (const old of ['/monroe?utm_source=old-ad', '/internet/monroe?utm_source=old-ad']) {
       await p.goto(PROD + old);
-      await p.locator('#hero-t').waitFor();
+      await p.locator('#qp-internet').waitFor();
       expect(new URL(p.url()).pathname + new URL(p.url()).search).toBe('/?utm_source=old-ad');
     }
     expect(errors).toEqual([]);
@@ -52,7 +52,7 @@ describe('retired and unknown addresses', () => {
     expect(r?.status()).toBe(404);
     await p.getByRole('heading', { level: 1, name: 'We can’t find that page' }).waitFor();
     await p.locator('main').getByRole('link', { name: 'Explore my savings' }).click();
-    await p.locator('#preview-t').waitFor();
+    await p.locator('#qp-internet').waitFor();
     expect(errors).toEqual([]);
     await ctx.close();
   });

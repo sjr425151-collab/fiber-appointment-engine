@@ -41,3 +41,7 @@ Migration 9 already ran in production as written in `9c5b590`, so it is kept exa
 - **The “50% or more” headline is a savings claim.** It needs evidence (for example, a share of real households that saved that much) or legal sign-off before ads run.
 - Legal review of consent and the compensation line is still outstanding.
 - Email alerts do not send until the email service key is added in the hosting settings.
+
+## Update (2026-11-17): back to the simple white homepage
+
+At the owner's request the homepage returned to the earlier clean white layout (hero text beside the preview card, then categories, how it works, labels, footer). Kept from V2: national benchmarks from the server, signed differences, the owner's headings, the compensation line and no representative names. Removed: the background video, parallax and hero image (the files are archived outside the repository; the Higgsfield job ids above can recreate them).
