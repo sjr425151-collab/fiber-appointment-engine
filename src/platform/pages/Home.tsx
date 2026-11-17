@@ -44,8 +44,8 @@ const STEPS = [
     body: 'Monthly and yearly differences, with 1-, 5- and 10-year projections and every assumption shown.',
   },
   {
-    title: 'Get help if you want it',
-    body: 'An advisor can find real prices for your address and handle the switch. You choose.',
+    title: 'Get help saving',
+    body: 'An advisor can find real prices for your address and handle the switch.',
   },
 ];
 
