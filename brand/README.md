@@ -21,6 +21,7 @@ Central record for the TUCKER brand system (Master Brand Directive v3.0). Status
 - **Tucker is the only public name** (founder, 2026-11-17). The site, emails and calendar files are renamed in code (built and tested); the change reaches the live site at the next approved deploy. "LiveFiberConnect" and "Fiber Connect" are retired. The legal operator (Spotlight Marketing LLC) still appears in consent and disclosure text.
 - **Territory: C · Name Patch, with A's nose-shaped period**, keeping C's typeface (founder, 2026-11-17). A's typeface is not used.
 - **Gate G1 passed** with a 300-credit cap for round 1.
+- **Domain: trytucker.com** (founder, 2026-11-17). Migration runbook: `docs/14-domain-migration.md`.
 
 ## In progress (awaiting Gate G2)
 
@@ -32,7 +33,6 @@ Central record for the TUCKER brand system (Master Brand Directive v3.0). Status
 
 | # | Decision | Why it matters |
 |---|---|---|
-| O2 | Domain. `tucker.com`, `gettucker.com`, `heytucker.com`, `asktucker.com`, `hellotucker.com`, `tuckerhome.com` are registered; `tuckersaves.com` and `tucker.co` returned no registration record on 2026-11-17 (not a guarantee of availability) | Launch name, email sender, redirects from livefiberconnect.com |
 | O3 | Trademark clearance by counsel. "Tucker" is a common surname (surname marks can be refused registration without acquired distinctiveness) and a common word; "mother trucker" is a phrase other businesses use | Founder's assessment is project context, not legal clearance |
 | O4 | Slogan channel policy (ad platforms restrict profanity, including disguised forms) | Where "mother trucker" may run |
 | O5 | Use of "broker" in regulated categories (energy, solar) | Descriptor wording by state |

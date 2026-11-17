@@ -1,6 +1,6 @@
 # Project documentation
 
-**Tucker** (livefiberconnect.com): a home-service savings broker — household bill optimization and service brokerage — internet, mobile, TV and electricity/solar. The per-location fiber pages are one acquisition channel into it.
+**Tucker** (trytucker.com; previously livefiberconnect.com): a home-service savings broker — household bill optimization and service brokerage — internet, mobile, TV and electricity/solar. The per-location fiber pages are one acquisition channel into it.
 
 | Doc | Contents |
 |---|---|
@@ -14,6 +14,7 @@
 | [10-milestone-m1.md](10-milestone-m1.md) | Milestone M1 stages, acceptance criteria and validation results |
 | [11-creative-production.md](11-creative-production.md) | Higgsfield production package: art direction, storyboard, prompts, delivery, performance and accessibility limits, budget gates (proposed) |
 | [../brand/README.md](../brand/README.md) | **TUCKER brand system**: decision log, Phase 0 audit, brand strategy, three creative territories, mascot production plan (proposed; awaiting founder approval) |
+| [14-domain-migration.md](14-domain-migration.md) | Move to trytucker.com: what the code does, dependency audit, owner's manual steps, verification checklists, rollback |
 | [13-transition.md](13-transition.md) | Short map of the move from fiber appointment engine to the LiveFiberConnect platform: reusable, adapted, still fiber-specific, next |
 | [12-phase3-readiness.md](12-phase3-readiness.md) | Phase 3: verified customer journey, solar alternative, fixes, test inventory, risks, costs, pilot readiness, approvals |
 
@@ -28,6 +29,7 @@
 | Household platform: assessment, results, solar estimates, advisor booking, opportunities + admin pipeline | **Live** at `/savings` since 2026-11-16 (owner set `PLATFORM_ENABLED=true`; live commit `5c3a008`) |
 | Location-driven internet offers, free bill-review requests, bill insights, address capture, price-freshness warning | **Live** as `50d7982` (found live on 2026-11-17; deployed by a Render action, not by a push — see `08-operations.md` on `[skip render]`). Smoke-checked read-only: home, `/savings`, assessment and admin login load with no errors |
 | Site name **Tucker** everywhere (titles, wordmark with the nose period, emails, calendar files, share images) | **Built & tested, not deployed.** The live site still says LiveFiberConnect until the founder approves a deploy (or a Render setting is saved). No schema change |
+| Domain migration to **trytucker.com** (canonical URLs, sitemap, `www` handling, switchable 301s from the old domain) | **Built & tested, not deployed.** Needs the owner's Render settings (`14-domain-migration.md`) |
 | Real solar program terms | **Missing**: without them, electricity results offer an advisor estimate, not a number |
 | Staging service, monitoring/alerting, off-site backups | Proposed — need approval |
 

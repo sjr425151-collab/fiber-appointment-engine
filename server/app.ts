@@ -115,6 +115,28 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
   });
   if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || 1);
 
+  // Host canonicalisation for the move to the canonical domain (config.siteUrl):
+  //  - "www." + canonical host always redirects to the canonical host;
+  //  - legacy domains redirect only once LEGACY_REDIRECTS is switched on.
+  // Only page requests (GET/HEAD outside /api) are redirected, so a form already
+  // open on the old domain can still submit, and health checks are never touched.
+  // The target is always the fixed canonical origin, so this cannot loop or be
+  // steered to another site.
+  const canonicalHost = new URL(config.siteUrl).hostname.toLowerCase();
+  const legacyHosts = new Set((config.domains?.legacyHosts ?? []).filter((h) => h !== canonicalHost));
+  const legacyRedirects = config.domains?.legacyRedirects === true;
+  app.use((req, res, next) => {
+    const host = (req.hostname ?? '').toLowerCase();
+    if (!host || host === canonicalHost) return next();
+    const isWww = host === `www.${canonicalHost}`;
+    const isLegacy = legacyHosts.has(host);
+    if (!isWww && !(isLegacy && legacyRedirects)) return next();
+    if ((req.method !== 'GET' && req.method !== 'HEAD') || req.path === '/api' || req.path.startsWith('/api/')) return next();
+    // One hour of caching at first, so the switch can be undone quickly if needed.
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.redirect(301, `${config.siteUrl}${req.originalUrl}`);
+  });
+
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -486,7 +508,13 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
   });
   app.get('/sitemap.xml', (_req, res) => {
     const def = repo.getDefaultMarket(db);
-    const paths = ['/', ...repo.marketSummaries(db).filter((m) => m.slug !== def.slug).map((m) => `/${m.slug}`), '/privacy'];
+    const paths = [
+      '/',
+      // The household savings pages are listed only where they are switched on.
+      ...(config.flags.platform ? ['/savings', '/savings/assess'] : []),
+      ...repo.marketSummaries(db).filter((m) => m.slug !== def.slug).map((m) => `/${m.slug}`),
+      '/privacy',
+    ];
     const urls = paths.map((p) => `  <url><loc>${config.siteUrl}${p}</loc></url>`).join('\n');
     res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`);
   });

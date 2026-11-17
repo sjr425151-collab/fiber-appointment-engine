@@ -16,14 +16,19 @@ services:
       mountPath: /data       # SQLite database lives here and survives deploys
       sizeGB: 1
     domains:
-      - livefiberconnect.com # Render also adds www.livefiberconnect.com → redirect
+      - trytucker.com        # canonical domain; Render also adds www.trytucker.com → redirect
+      - livefiberconnect.com # previous domain, kept attached so its links can redirect (see docs/14-domain-migration.md)
     envVars:
       - key: NODE_ENV
         value: production
       - key: DATABASE_PATH
         value: /data/fiber.db
       - key: SITE_URL
-        value: https://livefiberconnect.com
+        value: https://trytucker.com   # canonical origin: canonical links, sitemap, share data, email links
+      - key: LEGACY_HOSTS
+        value: livefiberconnect.com,www.livefiberconnect.com
+      - key: LEGACY_REDIRECTS
+        value: "false"       # set to "true" only after trytucker.com is verified (docs/14-domain-migration.md)
       - key: TRUST_PROXY
         value: "1"
       - key: APP_TIMEZONE
@@ -37,6 +42,6 @@ services:
       - key: RESEND_API_KEY
         sync: false          # from resend.com → API Keys (leave blank to log emails instead of sending)
       - key: EMAIL_FROM
-        value: Tucker <hello@mail.livefiberconnect.com>  # domain must be verified in Resend
+        value: Tucker <hello@mail.trytucker.com>  # domain must be verified in Resend before a key is added
       - key: TEAM_NOTIFY_EMAIL
         sync: false          # where lead/booking alerts go if a location has no team email set

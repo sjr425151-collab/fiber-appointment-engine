@@ -21,12 +21,20 @@ export interface AppConfig {
   adminPasswordHash: string;
   timezone: string;
   /** Public origin used for canonical URLs, OG tags and the sitemap. */
+  /** Canonical public origin, e.g. https://trytucker.com (no trailing slash). */
   siteUrl: string;
+  /**
+   * Domain migration. `legacyHosts` are older domains that still reach this
+   * app (e.g. livefiberconnect.com). They are served normally until
+   * `legacyRedirects` is switched on; then page requests get a permanent
+   * redirect to the same path and query on the canonical origin.
+   */
+  domains?: { legacyHosts: string[]; legacyRedirects: boolean };
   isProduction: boolean;
   email: {
     /** Resend API key. Without it, emails are logged instead of sent. */
     resendApiKey: string;
-    /** Sender, e.g. "Tucker <hello@mail.livefiberconnect.com>" — must be on a domain verified in Resend. */
+    /** Sender, e.g. "Tucker <hello@mail.trytucker.com>" — must be on a domain verified in Resend. */
     from: string;
     /** Fallback team inboxes when a location has none configured. */
     teamEmails: string[];
@@ -89,6 +97,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     adminPasswordHash,
     timezone: env.APP_TIMEZONE ?? 'America/Detroit',
     siteUrl: (env.SITE_URL ?? 'http://localhost:' + (env.PORT ?? 3001)).replace(/\/+$/, ''),
+    domains: {
+      legacyHosts: (env.LEGACY_HOSTS ?? '')
+        .split(',')
+        .map((h) => h.trim().toLowerCase())
+        .filter((h) => /^[a-z0-9.-]+$/.test(h)),
+      // Lenient on purpose: a typo here must never stop the site from starting. Anything but true/1 is off.
+      legacyRedirects: ['true', '1'].includes((env.LEGACY_REDIRECTS ?? '').trim().toLowerCase()),
+    },
     email: {
       resendApiKey: env.RESEND_API_KEY ?? '',
       from: env.EMAIL_FROM || `Tucker <notifications@${new URL(env.SITE_URL || 'http://localhost').hostname}>`,
