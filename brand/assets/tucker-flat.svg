@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" role="img" aria-labelledby="t d">
+  <title id="t">Tucker the Working Bear</title>
+  <desc id="d">Flat illustration of a friendly brown bear in a two-tone cap and a blue work shirt with a blank name patch.</desc>
+  <!-- Hand-drawn from round-2 still R7. Palette sampled from it. Not an approved brand asset until gate G3. -->
+  <rect width="900" height="900" fill="#F8F3ED"/>
+
+  <!-- shirt -->
+  <path d="M70 900 C80 760 150 640 300 560 L470 600 L650 480 C790 560 880 720 900 900 Z" fill="#7E94AC"/>
+  <path d="M170 900 C165 840 170 800 185 760 M690 640 C740 720 760 800 760 900" fill="none" stroke="#5D7691" stroke-width="10" stroke-linecap="round"/>
+  <!-- neck fur -->
+  <path d="M285 520 L330 700 L360 730 L420 640 L640 500 L560 380 Z" fill="#C56E41"/>
+  <path d="M290 560 C300 610 318 640 345 665 L335 610 L372 628 L380 585 L430 600 C500 590 580 540 640 480 L560 420 Z" fill="#9F4F2E"/>
+  <!-- collar -->
+  <path d="M238 668 L300 575 L360 728 L318 760 Z" fill="#8FA5BC"/>
+  <path d="M360 728 L430 632 L660 478 L700 560 C620 600 520 660 470 720 Z" fill="#8FA5BC"/>
+  <path d="M360 730 L350 900" fill="none" stroke="#A15032" stroke-width="4" stroke-dasharray="10 9" stroke-linecap="round"/>
+  <!-- name patch (blank: lettering is added as vector type, never generated) -->
+  <rect x="428" y="770" width="150" height="82" rx="14" fill="#EDE6DC" transform="rotate(3 503 811)"/>
+  <rect x="439" y="781" width="128" height="60" rx="8" fill="none" stroke="#A15032" stroke-width="4" stroke-dasharray="9 7" stroke-linecap="round" transform="rotate(3 503 811)"/>
+
+  <!-- ear (his left), with the notch -->
+  <path d="M572 196 C590 150 650 138 678 178 L662 196 L684 204 C692 250 660 290 610 290 Z" fill="#C56E41"/>
+  <path d="M590 212 C604 184 640 180 654 204 C660 236 640 262 606 262 Z" fill="#9F4F2E"/>
+
+  <!-- head -->
+  <path d="M268 250 C300 170 420 130 520 160 C610 190 650 280 652 360 C668 410 640 440 650 470 C610 520 560 560 470 580 C400 600 330 590 290 540 C250 520 228 480 224 430 C214 400 232 370 240 340 C240 300 250 270 268 250 Z" fill="#C56E41"/>
+  <!-- cheek shading -->
+  <path d="M560 300 C600 360 610 440 560 520 C600 500 640 470 650 470 C640 440 668 410 652 360 C640 330 600 300 560 300 Z" fill="#9F4F2E" opacity=".55"/>
+  <path d="M224 430 C240 470 250 500 290 540 C262 470 262 420 262 380 C244 392 228 410 224 430 Z" fill="#9F4F2E" opacity=".55"/>
+
+  <!-- muzzle -->
+  <path d="M352 288 C372 282 392 290 404 312 C470 330 500 400 472 462 C440 520 370 540 310 512 C256 486 244 420 266 372 C286 330 330 318 340 306 C344 298 346 292 352 288 Z" fill="#F3DBB7"/>
+
+  <!-- brows -->
+  <path d="M286 268 C300 236 336 226 358 244 C344 258 318 264 296 278 Z" fill="#7E442E"/>
+  <path d="M394 244 C424 222 468 232 486 264 C460 264 428 258 402 264 Z" fill="#7E442E"/>
+  <!-- eyes: relaxed, slightly hooded -->
+  <ellipse cx="322" cy="303" rx="20" ry="15" fill="#FBF6EE"/>
+  <ellipse cx="438" cy="303" rx="23" ry="16" fill="#FBF6EE"/>
+  <circle cx="327" cy="304" r="12" fill="#774427"/>
+  <circle cx="444" cy="304" r="13" fill="#774427"/>
+  <circle cx="328" cy="305" r="6" fill="#2E1A16"/>
+  <circle cx="445" cy="305" r="6.5" fill="#2E1A16"/>
+  <circle cx="323" cy="300" r="3" fill="#fff"/>
+  <circle cx="440" cy="300" r="3.2" fill="#fff"/>
+  <path d="M298 300 C306 280 338 280 346 298 C330 290 314 290 298 300 Z" fill="#C56E41" stroke="#5A2F20" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M411 298 C422 278 456 280 465 300 C448 290 428 290 411 298 Z" fill="#C56E41" stroke="#5A2F20" stroke-width="5" stroke-linejoin="round"/>
+
+  <!-- nose: the rounded triangle that is also the wordmark's period -->
+  <path d="M262 362 C262 336 290 326 318 328 C350 330 368 346 362 372 C356 400 332 422 306 420 C280 418 262 392 262 362 Z" fill="#5A403F"/>
+  <ellipse cx="300" cy="350" rx="26" ry="10" fill="#977B78" opacity=".8"/>
+  <!-- mouth -->
+  <path d="M306 420 L310 450 M282 452 C330 470 420 470 458 410 M450 398 C458 402 464 408 466 416" fill="none" stroke="#6B4636" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- shadow the cap throws on the forehead -->
+  <path d="M276 232 C340 214 470 206 592 214 L590 196 C470 180 350 188 272 214 Z" fill="#9F4F2E"/>
+  <!-- cap -->
+  <path d="M336 206 C322 124 392 60 472 60 C548 60 592 112 596 200 C520 182 420 184 336 206 Z" fill="#ECE2D6"/>
+  <path d="M520 70 C570 88 596 132 596 200 C576 195 556 192 536 190 C544 146 540 104 520 70 Z" fill="#8094AC"/>
+  <path d="M240 190 C262 136 330 112 364 124 C356 152 352 180 356 204 C420 198 480 202 540 216 C440 222 320 232 258 222 C238 218 232 204 240 190 Z" fill="#8094AC"/>
+  <path d="M258 222 C320 232 440 222 540 216 C450 240 330 250 268 236 C258 232 256 226 258 222 Z" fill="#54697E"/>
+  <ellipse cx="472" cy="62" rx="15" ry="7" fill="#8094AC"/>
+</svg>
