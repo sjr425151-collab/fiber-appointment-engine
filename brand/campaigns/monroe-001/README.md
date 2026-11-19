@@ -22,7 +22,7 @@ Status: **creative produced; not launched.** Nothing has been uploaded to Meta, 
 | Scene | Tucker waving, studio backdrop (`scenes/r1-1.jpg`) | Tucker at a kitchen table reading a blank bill (`scenes/r2-7.jpg`) | Tucker presenting, four service tiles (`scenes/r1-5.jpg`) |
 | Files | `exports/` (4:5, 9:16, 1:1) | `exports/` (4:5, 9:16, 1:1) | `previews/` (4:5) |
 
-Every headline that ends in a full stop uses the orange nose period. The bottom band carries the wordmark and "See your savings preview → trytucker.com". It is a caption band, not a fake button. The site name appears in plain text, and Meta's own CTA button does the clicking.
+Tucker wears the "t." mark on his cap and "tucker." on his name patch: real vector lettering added after generation, not generated text (founder request, 2026-11-19). Every headline that ends in a full stop uses the orange nose period. The bottom band carries the wordmark and "See your savings preview → trytucker.com". It is a caption band, not a fake button. The site name appears in plain text, and Meta's own CTA button does the clicking.
 
 ## 3. Scorecard (1–10; clarity, trust, brand consistency and conversion intent weighted ×1.5)
 
@@ -120,6 +120,7 @@ Every headline that ends in a full stop uses the orange nose period. The bottom 
 | `previews/…C-four-bills…` | Concept preview (4:5), held in reserve |
 | `source/compose.cjs` | Editable layouts: every word, position and size; re-render with `node brand/campaigns/monroe-001/source/compose.cjs <outDir>` |
 | `source/logo.py` | Builds the vector logo files in `brand/assets/` |
+| `source/brand-scene.cjs` | Adds the "t." cap mark and "tucker." patch lettering to a scene from the vector logo, blended into the fabric (`scenes/*-branded.jpg`). Placements are recorded in the commit that made them |
 | `source/scenes/*.jpg` | Generated scenes (high-quality JPEG copies). The originals can be re-downloaded from Higgsfield by job ID |
 
 **Generation log:** 8 images, **16 credits** of the 60 approved.

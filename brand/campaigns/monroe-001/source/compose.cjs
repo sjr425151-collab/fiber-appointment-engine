@@ -71,7 +71,7 @@ function introA(o) {
     ? band(bandH, 72, 50, 26, 64)
     : band(bandH, 72, w < 1080 ? 44 : 50, 26);
   return { w, h, html: base(w, h, '#dbccc7', '#e6dcda', `
-      <div class="scene" style="left:${L}px;top:${T}px;width:${W}px;height:${H}px;background-image:url(${scene('r1-1.jpg')});-webkit-mask-image:linear-gradient(to left,transparent 0,#000 16%),linear-gradient(to bottom,transparent 0,#000 12%);-webkit-mask-composite:source-in;mask-composite:intersect"></div>
+      <div class="scene" style="left:${L}px;top:${T}px;width:${W}px;height:${H}px;background-image:url(${scene('r1-1-branded.jpg')});-webkit-mask-image:linear-gradient(to left,transparent 0,#000 16%),linear-gradient(to bottom,transparent 0,#000 12%);-webkit-mask-composite:source-in;mask-composite:intersect"></div>
       <div style="position:absolute;left:72px;top:${top}px;right:72px">
         <div class="eyebrow">Now introducing &nbsp;•&nbsp; Monroe, MI</div>
         <div class="h" style="font-size:${headline}px;margin-top:${o.eyebrowGap ?? 26}px">Monroe,<br>meet Tucker${NOSE(0.24)}</div>
@@ -90,8 +90,8 @@ function compareB(o) {
   const fadeLeft = left > 0 ? 'linear-gradient(to right,transparent 0,#000 9%),' : '';
   // The approved 4:5 framing (founder's pick, 2026-11-19): the scene starts 60px down and its top edge fades into the wall.
   const sceneHtml = o.approved45
-    ? `<div class="scene" style="left:0;top:60px;width:${w}px;height:${h - bandH - 60}px;background-image:url(${scene('r2-7.jpg')});background-position:50% 74%;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 8%);mask-image:linear-gradient(to bottom,transparent 0,#000 8%)"></div>`
-    : `<div class="scene" style="left:${left}px;top:${imgTop}px;width:${imgW}px;height:${imgH}px;background-image:url(${scene('r2-7.jpg')});-webkit-mask-image:${fadeLeft}linear-gradient(to bottom,transparent 0,#000 ${imgTop > 0 ? 9 : 0}%);${fadeLeft ? '-webkit-mask-composite:source-in;mask-composite:intersect;' : ''}"></div>`;
+    ? `<div class="scene" style="left:0;top:60px;width:${w}px;height:${h - bandH - 60}px;background-image:url(${scene('r2-7-branded.jpg')});background-position:50% 74%;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 8%);mask-image:linear-gradient(to bottom,transparent 0,#000 8%)"></div>`
+    : `<div class="scene" style="left:${left}px;top:${imgTop}px;width:${imgW}px;height:${imgH}px;background-image:url(${scene('r2-7-branded.jpg')});-webkit-mask-image:${fadeLeft}linear-gradient(to bottom,transparent 0,#000 ${imgTop > 0 ? 9 : 0}%);${fadeLeft ? '-webkit-mask-composite:source-in;mask-composite:intersect;' : ''}"></div>`;
   return { w, h, html: base(w, h, '#efe9e3', '#efe9e3', `
       ${sceneHtml}
       <div style="position:absolute;left:72px;top:${top}px;right:72px">
