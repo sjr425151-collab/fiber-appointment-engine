@@ -38,15 +38,15 @@ const categories = (b: BenchmarkSet): { name: string; body: string; benchmark: s
 const STEPS = [
   {
     title: 'Tell us what you pay',
-    body: 'A few numbers per service. Not sure of one? Skip it. We never guess for you.',
+    body: 'Enter the numbers for each service.',
   },
   {
     title: 'See your savings preview',
-    body: 'Monthly and yearly differences, with 1-, 5- and 10-year projections and every assumption shown.',
+    body: 'Monthly and yearly differences, with 1, 5 and 10-year projections.',
   },
   {
     title: 'Get help saving',
-    body: 'An advisor can find real prices for your address and handle the switch.',
+    body: 'An advisor will find real prices for your address and handle the switch.',
   },
 ];
 
