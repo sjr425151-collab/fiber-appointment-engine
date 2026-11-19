@@ -15,12 +15,12 @@ Status: **creative produced; not launched.** Nothing has been uploaded to Meta, 
 
 ## 2. Concepts
 
-| | A · Brand introduction (**winner**) | B · Bill awareness | C · Convenience |
+| | A · Brand introduction (second test ad) | B · Bill awareness (**lead ad, founder's pick**) | C · Convenience |
 |---|---|---|---|
 | Headline | MONROE, MEET TUCKER. | WHEN DID YOU LAST COMPARE YOUR BILLS? | FOUR BILLS. ONE PLACE TO COMPARE. |
 | Support | Your bills might be higher than they need to be. Internet / Mobile / TV & streaming / Electricity | Internet, mobile, TV and electricity. Explore your options with Tucker. | See a preliminary savings preview with Tucker. (+ four service tiles) |
 | Scene | Tucker waving, studio backdrop (`scenes/r1-1.jpg`) | Tucker at a kitchen table reading a blank bill (`scenes/r2-7.jpg`) | Tucker presenting, four service tiles (`scenes/r1-5.jpg`) |
-| Files | `exports/` (4:5, 9:16, 1:1) | `previews/` (4:5) | `previews/` (4:5) |
+| Files | `exports/` (4:5, 9:16, 1:1) | `exports/` (4:5, 9:16, 1:1) | `previews/` (4:5) |
 
 Every headline that ends in a full stop uses the orange nose period. The bottom band carries the wordmark and "See your savings preview → trytucker.com". It is a caption band, not a fake button. The site name appears in plain text, and Meta's own CTA button does the clicking.
 
@@ -40,8 +40,9 @@ Every headline that ends in a full stop uses the orange nose period. The bottom 
 | Meta suitability | 9 | 8 | 7 |
 | **Weighted score** | **8.5** | **7.8** | **6.9** |
 
-- **A wins.** It does the campaign's first job, introducing a recognizable character to Monroe, with one message and lots of space. Weakness: the action is softer, because the band and Meta's button carry it. The service list is secondary text and too small to read at 25% size.
-- **B** is the most relatable and most "premium photo" of the three, and the best second ad to test. Weaknesses: the local cue is only the small eyebrow, and Tucker is a smaller part of the frame.
+- **Founder's decision (2026-11-19): B is the lead ad** ("This is the best one so far"). A runs alongside it as the second test ad. My weighted score had A slightly ahead for a pure introduction. B's warmth and relatability are its strengths; the live test will show which brings better leads.
+- **A** does the campaign's first job, introducing a recognizable character to Monroe, with one message and lots of space. Weakness: the action is softer, because the band and Meta's button carry it. The service list is secondary text and too small to read at 25% size.
+- **B** is the most relatable and most "premium photo" of the three. Weaknesses: the local cue is only the small eyebrow, and Tucker is a smaller part of the frame.
 - **C** explains the product best, but the tiles make it look like an app screenshot and weaken the character. Keep it in reserve for retargeting people who already know Tucker.
 
 **Fixed during QA:**
@@ -75,7 +76,7 @@ Every headline that ends in a full stop uses the orange nose period. The bottom 
 - **Geography:** Monroe County, Michigan (people living in the location), excluding Ohio, so Toledo-area audiences aren't bought for Michigan-specific providers.
 - **Audience:** broad (Advantage+ audience), adults 25+. The area is small, so don't split it into interest audiences; one ad set lets Meta learn.
 - **Placements:** Advantage+ placements, with the 4:5 asset for feeds, 9:16 for Stories and Reels, and 1:1 where square is preferred.
-- **Creative test:** one campaign, one ad set, two ads (A and B) with their matching copy. Add C later for retargeting.
+- **Creative test:** one campaign, one ad set, two ads: **B (lead)** and A, each with its matching copy. Add C later for retargeting.
 - **Budget (hypothesis):** about $25–35 a day for 14 days. Judge creatives by cost per lead and the representative-qualified rate, not by clicks alone. No cost per lead can be promised before data exists.
 - **KPIs, along the funnel:**
   - impression → landing page view (CTR, click-to-landing rate)
@@ -112,10 +113,11 @@ Every headline that ends in a full stop uses the orange nose period. The bottom 
 
 | Path | What |
 |---|---|
-| `exports/tucker_monroe-001_A-meet-tucker_feed-4x5_1080x1350.png/.jpg` | Final feed asset |
+| `exports/tucker_monroe-001_B-compare-your-bills_{feed-4x5,story-9x16,square-1x1}.png/.jpg` | **Lead ad**, all three sizes (story keeps key content inside the Reels safe area) |
+| `exports/tucker_monroe-001_A-meet-tucker_feed-4x5_1080x1350.png/.jpg` | Second ad, feed |
 | `exports/tucker_monroe-001_A-meet-tucker_story-9x16_1080x1920.png/.jpg` | Final Stories/Reels asset (key content inside the Reels safe area) |
 | `exports/tucker_monroe-001_A-meet-tucker_square-1x1_1080x1080.png/.jpg` | Final square asset |
-| `previews/…B-compare-your-bills…`, `previews/…C-four-bills…` | Concept previews (4:5) |
+| `previews/…C-four-bills…` | Concept preview (4:5), held in reserve |
 | `source/compose.cjs` | Editable layouts: every word, position and size; re-render with `node brand/campaigns/monroe-001/source/compose.cjs <outDir>` |
 | `source/logo.py` | Builds the vector logo files in `brand/assets/` |
 | `source/scenes/*.jpg` | Generated scenes (high-quality JPEG copies). The originals can be re-downloaded from Higgsfield by job ID |
@@ -130,5 +132,5 @@ Every headline that ends in a full stop uses the orange nose period. The bottom 
 | r1-4 | `a58162cb-05d6-4c72-a0e2-67dd337209d9` | — |
 | r1-5 | `4e3486b8-3112-47a9-9997-990fd3277b0b` | C |
 | r1-6 | `953e193a-1760-427d-b67b-ab5fb4863630` | — |
-| r2-7 | `888e0858-8a2d-4a40-b8e7-c905e13fec98` | B |
+| r2-7 | `888e0858-8a2d-4a40-b8e7-c905e13fec98` | B, all sizes |
 | r2-8 | `2d2ef9fe-9842-4605-b1b3-213623202a29` | — |

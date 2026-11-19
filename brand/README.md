@@ -57,7 +57,7 @@ Central record for the TUCKER brand system (Master Brand Directive v3.0). Status
 
 ## Campaigns
 
-- **Meta campaign 001, Monroe, MI** ([campaigns/monroe-001/README.md](campaigns/monroe-001/README.md)): creative produced 2026-11-19, not launched. The founder approved the round-3 master for paid ads and a 60-credit cap (16 used). The vector logo with the orange nose period (`assets/tucker-wordmark*.svg`, `tucker-t-mark*.svg`) is **proposed** and awaits sign-off before it replaces the site mark.
+- **Meta campaign 001, Monroe, MI** ([campaigns/monroe-001/README.md](campaigns/monroe-001/README.md)): creative produced 2026-11-19, not launched. Lead ad: B, "When did you last compare your bills?" (founder's pick); A, "Monroe, meet Tucker.", is the second test ad. The founder approved the round-3 master for paid ads and a 60-credit cap (16 used). The vector logo with the orange nose period (`assets/tucker-wordmark*.svg`, `tucker-t-mark*.svg`) is **proposed** and awaits sign-off before it replaces the site mark.
 
 ## Version history
 

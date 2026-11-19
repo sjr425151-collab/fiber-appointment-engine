@@ -83,6 +83,25 @@ function introA(o) {
       ${bandHtml}`) };
 }
 
+/** Concept B in any size: the kitchen scene, with the headline on the plain wall above Tucker. */
+function compareB(o) {
+  const { w, h, bandH, imgW, imgTop, top, headline, sub } = o;
+  const imgH = Math.round(imgW * 2304 / 1856), left = o.imgLeft ?? 0;
+  const fadeLeft = left > 0 ? 'linear-gradient(to right,transparent 0,#000 9%),' : '';
+  // The approved 4:5 framing (founder's pick, 2026-11-19): the scene starts 60px down and its top edge fades into the wall.
+  const sceneHtml = o.approved45
+    ? `<div class="scene" style="left:0;top:60px;width:${w}px;height:${h - bandH - 60}px;background-image:url(${scene('r2-7.jpg')});background-position:50% 74%;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 8%);mask-image:linear-gradient(to bottom,transparent 0,#000 8%)"></div>`
+    : `<div class="scene" style="left:${left}px;top:${imgTop}px;width:${imgW}px;height:${imgH}px;background-image:url(${scene('r2-7.jpg')});-webkit-mask-image:${fadeLeft}linear-gradient(to bottom,transparent 0,#000 ${imgTop > 0 ? 9 : 0}%);${fadeLeft ? '-webkit-mask-composite:source-in;mask-composite:intersect;' : ''}"></div>`;
+  return { w, h, html: base(w, h, '#efe9e3', '#efe9e3', `
+      ${sceneHtml}
+      <div style="position:absolute;left:72px;top:${top}px;right:72px">
+        <div class="eyebrow">Monroe, MI</div>
+        <div class="h" style="font-size:${headline}px;margin-top:${o.eyebrowGap ?? 22}px">When did you last<br>compare your bills?</div>
+        <div class="sub" style="font-size:${sub}px;margin-top:20px;max-width:900px;color:${C.muted}">Internet, mobile, TV and electricity.<br>Explore your options with Tucker.</div>
+      </div>
+      ${band(bandH, 72, 50, 26, o.bandTop ?? 0)}`) };
+}
+
 /** Every layout: name → { w, h, html }. Positions are in pixels of the final export. */
 const LAYOUTS = {
   // ---------------------------------------------------------------- A · Brand introduction
@@ -90,17 +109,9 @@ const LAYOUTS = {
   'A-intro-9x16': () => introA({ w: 1080, h: 1920, bandH: 480, bandPad: 'top', H: 1100, L: -70, top: 270, headline: 112, copyTop: 820, copyLeft: 700 }),
   'A-intro-1x1': () => introA({ w: 1080, h: 1080, bandH: 128, H: 900, L: -20, top: 64, headline: 86, copyTop: 390, copyLeft: 670, eyebrowGap: 20, sub: 34 }),
   // ---------------------------------------------------------------- B · Bill awareness
-  'B-compare-4x5': () => {
-    const [w, h, bandH] = [1080, 1350, 150];
-    return { w, h, html: base(w, h, '#efe9e3', '#efe9e3', `
-      <div class="scene" style="left:0;top:60px;width:${w}px;height:${h - bandH - 60}px;background-image:url(${scene('r2-7.jpg')});background-position:50% 74%;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 8%);mask-image:linear-gradient(to bottom,transparent 0,#000 8%)"></div>
-      <div style="position:absolute;left:72px;top:78px;right:72px">
-        <div class="eyebrow">Monroe, MI</div>
-        <div class="h" style="font-size:78px;margin-top:22px">When did you last<br>compare your bills?</div>
-        <div class="sub" style="font-size:28px;margin-top:20px;max-width:900px;color:${C.muted}">Internet, mobile, TV and electricity.<br>Explore your options with Tucker.</div>
-      </div>
-      ${band(bandH, 72, 50, 26)}`) };
-  },
+  'B-compare-4x5': () => compareB({ w: 1080, h: 1350, bandH: 150, imgW: 1080, imgTop: -88, top: 78, headline: 78, sub: 28, approved45: true }),
+  'B-compare-9x16': () => compareB({ w: 1080, h: 1920, bandH: 480, bandTop: 64, imgW: 1080, imgTop: 196, top: 270, headline: 76, sub: 30 }),
+  'B-compare-1x1': () => compareB({ w: 1080, h: 1080, bandH: 128, imgW: 860, imgLeft: 220, imgTop: -33, top: 56, headline: 64, sub: 26, eyebrowGap: 16 }),
   // ---------------------------------------------------------------- C · Convenience
   'C-fourbills-4x5': () => {
     const [w, h, bandH] = [1080, 1350, 150];
