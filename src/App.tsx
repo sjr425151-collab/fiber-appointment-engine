@@ -3,7 +3,6 @@ import { Route, Routes, useLocation } from 'react-router-dom';
 import { Spinner } from './components/ui';
 
 // Every page is its own chunk, so a visitor only downloads the one they open.
-const Privacy = lazy(() => import('./pages/Privacy'));
 const AdminLogin = lazy(() => import('./pages/admin/Login'));
 const AdminLayout = lazy(() => import('./pages/admin/Layout'));
 const Dashboard = lazy(() => import('./pages/admin/Dashboard'));
@@ -46,7 +45,6 @@ export default function App() {
     <Suspense fallback={fallback}>
       <ScrollReset />
       <Routes>
-        <Route path="/privacy" element={<Privacy />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Dashboard />} />

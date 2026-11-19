@@ -755,7 +755,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
         return send(200, renderHtml(template, { ...base, ...tucker, canonicalPath: '/', structuredData: platformStructuredData(config.siteUrl), preload: platformPreloads(path), boot: boot(def) }));
       }
       if (path === '/privacy') {
-        return send(200, renderHtml(template, { ...base, ...tucker, canonicalPath: '/privacy', title: `Privacy Notice — ${BRAND.name}`, preload: platformPreloads(path), boot: boot(def) }));
+        return send(200, renderHtml(template, { ...base, ...tucker, canonicalPath: '/privacy', title: `Privacy Notice – ${BRAND.name}`, description: `How ${BRAND.name} collects, uses and protects your information, and the choices you have.`, preload: platformPreloads(path), boot: boot(def) }));
       }
       if (path.startsWith('/savings/')) {
         const known = /^\/savings\/(assess|design|results\/[^/]+)$/.test(path);

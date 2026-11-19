@@ -1,7 +1,7 @@
 {
   "name": "Tucker",
   "short_name": "Tucker",
-  "description": "Preview potential savings on your household bills: internet, mobile, TV and electricity.",
+  "description": "See if you’re overspending on internet, mobile, TV, electricity and home security.",
   "start_url": "/",
   "scope": "/",
   "display": "browser",

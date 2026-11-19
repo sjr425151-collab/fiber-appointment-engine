@@ -11,6 +11,7 @@ const Home = lazy(() => import('./pages/Home'));
 const Assess = lazy(() => import('./pages/Assess'));
 const Results = lazy(() => import('./pages/Results'));
 const DesignSystem = lazy(() => import('./pages/DesignSystem'));
+const Privacy = lazy(() => import('./pages/Privacy'));
 
 /** Header button: the free savings review (the preview form on the home page). */
 const HEADER_CTA = 'Get my free review';
@@ -136,6 +137,7 @@ export default function PlatformApp() {
         <Route path="savings/assess" element={<Assess />} />
         <Route path="savings/results/:id" element={<Results />} />
         <Route path="savings/design" element={<DesignSystem />} />
+        <Route path="privacy" element={<Privacy />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Shell>

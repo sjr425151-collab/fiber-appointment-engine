@@ -33,14 +33,13 @@ function collect(manifest: Manifest, key: string, out: Preloads, seen: Set<strin
 
 const SHELL = 'src/platform/PlatformApp.tsx';
 /** Pages that render outside the savings app shell: only their own chunk is hinted. */
-const STANDALONE_PAGES: [RegExp, string][] = [
-  [/^\/privacy$/, 'src/pages/Privacy.tsx'],
-];
+const STANDALONE_PAGES: [RegExp, string][] = [];
 const PLATFORM_PAGES: [RegExp, string][] = [
   [/^\/$/, 'src/platform/pages/Home.tsx'],
   [/^\/savings\/assess$/, 'src/platform/pages/Assess.tsx'],
   [/^\/savings\/results\/[^/]+$/, 'src/platform/pages/Results.tsx'],
   [/^\/savings\/design$/, 'src/platform/pages/DesignSystem.tsx'],
+  [/^\/privacy$/, 'src/platform/pages/Privacy.tsx'],
 ];
 
 /** Returns a function giving the preloads for a page path (empty if no manifest, e.g. in tests). */
