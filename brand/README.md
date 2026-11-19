@@ -55,6 +55,10 @@ Central record for the TUCKER brand system (Master Brand Directive v3.0). Status
 - Campaign hat, shovel, shirtless-with-jeans look (too close to a government-owned bear character).
 - Script lettering in an oval patch (reads as an automotive marque).
 
+## Campaigns
+
+- **Meta campaign 001, Monroe, MI** ([campaigns/monroe-001/README.md](campaigns/monroe-001/README.md)): creative produced 2026-11-19, not launched. The founder approved the round-3 master for paid ads and a 60-credit cap (16 used). The vector logo with the orange nose period (`assets/tucker-wordmark*.svg`, `tucker-t-mark*.svg`) is **proposed** and awaits sign-off before it replaces the site mark.
+
 ## Version history
 
 - 2026-11-17 — v0.1: Phases 0–2 delivered for review. Nothing generated, nothing deployed.
