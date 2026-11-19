@@ -10,6 +10,7 @@ import type { QuickPreview } from '../../../shared/platform/benchmarks';
 import { BEST_TIME_LABEL, BEST_TIMES, handoffConsentText, marketingConsentText } from '../../../shared/platform/handoff';
 import { attribution, sessionId, track } from '../../lib/analytics';
 import { api, ApiError } from '../../lib/api';
+import { TuckerFace } from './ChatLauncher';
 
 interface Card {
   preview?: QuickPreview | null;
@@ -234,6 +235,7 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const firstSent = useRef(false);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   async function start() {
     const a = attribution();
@@ -268,8 +270,36 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [chat?.messages.length, asking]);
+  // Opening moves focus into the chat once it is ready: the message box with a mouse or keyboard;
+  // the window itself on touch screens, so the on-screen keyboard doesn't pop up uninvited.
+  const ready = !!chat;
   useEffect(() => {
-    if (open) requestAnimationFrame(() => inputRef.current?.focus());
+    if (!open || !ready) return;
+    requestAnimationFrame(() => (window.matchMedia('(pointer: fine)').matches ? inputRef.current : panelRef.current)?.focus());
+  }, [open, ready]);
+  // Phones: keep the window inside the visible area when the on-screen keyboard opens, so the message box stays in view.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const el = panelRef.current;
+    if (!open || !vv || !el) return;
+    const fit = () => {
+      if (window.matchMedia('(min-width: 640px)').matches) {
+        el.style.height = '';
+        el.style.top = '';
+        return;
+      }
+      el.style.height = `${vv.height}px`;
+      el.style.top = `${vv.offsetTop}px`;
+    };
+    fit();
+    vv.addEventListener('resize', fit);
+    vv.addEventListener('scroll', fit);
+    return () => {
+      vv.removeEventListener('resize', fit);
+      vv.removeEventListener('scroll', fit);
+      el.style.height = '';
+      el.style.top = '';
+    };
   }, [open]);
   useEffect(() => {
     if (!open) return;
@@ -343,19 +373,24 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
 
   return (
     <div
+      ref={panelRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="false"
       aria-labelledby="chat-title"
       hidden={!open}
-      className="fixed inset-0 z-50 flex flex-col bg-pf-surface sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(640px,calc(100dvh-3rem))] sm:w-[400px] sm:overflow-hidden sm:rounded-2xl sm:border sm:border-pf-line sm:shadow-pf-raised"
+      className="tucker-panel fixed inset-0 z-50 flex flex-col bg-pf-surface sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(640px,calc(100dvh-3rem))] sm:w-[400px] sm:overflow-hidden sm:rounded-2xl sm:border sm:border-pf-line sm:shadow-pf-raised"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <div className="flex items-center gap-3 border-b border-pf-line bg-pf-surface px-4 py-3">
+        <span className="shrink-0 rounded-full p-[2px] ring-2 ring-pf-brand">
+          <TuckerFace size={40} className="h-10 w-10" />
+        </span>
         <div className="min-w-0 flex-1">
-          <h2 id="chat-title" className="flex items-center gap-2 font-display font-bold text-pf-ink">
-            Tucker AI <span className="rounded-full bg-pf-brand-soft px-2 py-0.5 text-xs font-semibold text-pf-brand">AI assistant</span>
+          <h2 id="chat-title" className="flex items-center gap-2 font-display text-[17px] font-bold text-pf-ink">
+            Tucker <span className="rounded-full bg-pf-brand-soft px-2 py-0.5 text-xs font-semibold text-pf-brand">AI assistant</span>
           </h2>
-          <p className="truncate text-xs text-pf-subtle">An AI, not a person. A representative follows up when you ask.</p>
+          <p className="truncate text-xs text-pf-subtle">Your home savings assistant · an AI, not a person</p>
         </div>
         <button type="button" onClick={restart} className="min-h-11 rounded-lg px-2 text-xs font-semibold text-pf-muted hover:text-pf-ink">
           Start over
@@ -372,7 +407,7 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
         {chat?.messages.map((m) => (
           <div key={m.id} className={m.role === 'user' ? 'flex justify-end' : ''}>
             <div className={m.role === 'user' ? 'max-w-[85%] rounded-2xl rounded-br-md bg-pf-brand px-4 py-2.5 text-sm text-white' : 'max-w-[92%]'}>
-              {m.role === 'assistant' && <p className="sr-only">Tucker AI says:</p>}
+              {m.role === 'assistant' && <p className="sr-only">Tucker (AI assistant) says:</p>}
               <p className={m.role === 'assistant' ? 'whitespace-pre-line rounded-2xl rounded-bl-md bg-pf-brand-soft px-4 py-2.5 text-sm text-pf-ink' : 'whitespace-pre-line'}>{m.body}</p>
               {m.card?.preview && m.card.preview.rows.length > 0 && <SavingsCard preview={m.card.preview} disclosure={m.card.disclosure} busy={busy} onEdit={editAmount} />}
             </div>
@@ -380,7 +415,7 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
         ))}
         {busy && !asking && (
           <p className="text-sm text-pf-subtle" role="status">
-            Tucker AI is typing…
+            Tucker is typing…
           </p>
         )}
         {asking && <HandoffForm onSubmit={handoff} busy={busy} error={handoffError} />}
@@ -425,7 +460,7 @@ export default function ChatPanel({ open, onClose }: { open: boolean; onClose: (
             }}
           >
             <label htmlFor="chat-input" className="sr-only">
-              Message Tucker AI
+              Message Tucker
             </label>
             <input
               id="chat-input"

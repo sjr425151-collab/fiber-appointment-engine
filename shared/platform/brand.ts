@@ -16,15 +16,17 @@ export const PLATFORM = {
 
 export const PLATFORM_META = {
   title: `${PLATFORM.name} | See If You’re Overspending on Household Bills`,
-  description:
-    'See if you’re overspending on internet, mobile, TV, electricity and home security. A free one-minute savings preview, no contact details needed. Results vary.',
+  description: 'See if you’re overspending on internet, mobile, TV, electricity and home security. A free one-minute savings preview, no contact details needed. Results vary.',
 };
 
 /** Share image for Tucker's own pages (regional internet pages keep theirs). */
 /** The one primary call to action, used in the header, the home page and the not-found page. */
 export const PRIMARY_CTA = 'Explore my savings';
 
-export const PLATFORM_OG_IMAGE = '/og-tucker.jpg';
+/** Mascot-led share image (2026-11-19). The previous text-only card stays at /og-tucker.jpg. */
+export const PLATFORM_OG_IMAGE = '/og-tucker-bear.jpg';
+export const PLATFORM_OG_ALT = 'Tucker the bear, in his blue cap and work shirt, waving beside the tucker. wordmark: your home service savings broker.';
+export const PLATFORM_OG_DESCRIPTION = 'Meet Tucker, your home service savings broker. Explore potential savings on internet, mobile, TV and electricity.';
 
 /** Shown on the home page and published as FAQ structured data, so both always say the same thing. */
 export const HOME_FAQ: { q: string; a: string }[] = [

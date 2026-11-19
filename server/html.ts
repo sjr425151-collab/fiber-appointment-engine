@@ -35,6 +35,8 @@ export interface RenderOptions {
   ogImage?: string;
   /** Text alternative for the share image. */
   ogImageAlt?: string;
+  /** Social-card description (Facebook, X); defaults to the page description. */
+  ogDescription?: string;
   /** Keep the hero image preload (the home page, the only page that shows it). */
   heroPreload?: boolean;
   /** Same-origin build assets to fetch early (lazy chunks of this page). */
@@ -74,6 +76,7 @@ export function renderHtml(template: string, o: RenderOptions): string {
   const values: Record<string, string> = {
     '%%TITLE%%': escAttr(title),
     '%%DESCRIPTION%%': escAttr(o.description ?? meta.description),
+    '%%OG_DESCRIPTION%%': escAttr(o.ogDescription ?? o.description ?? meta.description),
     '%%SITE_NAME%%': escAttr(BRAND.name),
     '%%CANONICAL%%': escAttr(pageUrl),
     '%%OG_IMAGE%%': escAttr(ogImage),

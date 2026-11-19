@@ -28,7 +28,7 @@ describe('national home', () => {
     expect(await p.getByRole('heading', { name: 'Type what you pay. We’ll find a smarter option.' }).count()).toBe(1);
     expect(await p.title()).toBe('Tucker | See If You’re Overspending on Household Bills');
     expect(await p.locator('link[rel=canonical]').getAttribute('href')).toBe(`${LIVE}/`);
-    expect(await p.locator('meta[property="og:image"]').getAttribute('content')).toBe(`${LIVE}/og-tucker.jpg`);
+    expect(await p.locator('meta[property="og:image"]').getAttribute('content')).toBe(`${LIVE}/og-tucker-bear.jpg`);
     const text = (await p.locator('body').innerText()) ?? '';
     expect(text).not.toMatch(/Monroe|Omni|Michigan|LiveFiberConnect|Fiber Connect|Sample|Staging preview|fiber|commission|paid by provider/i);
     expect(text).toMatch(/Tucker may receive compensation from providers\./);
@@ -232,7 +232,7 @@ describe('representative handoff', () => {
     expect(await a.getByRole('navigation', { name: 'Admin' }).innerText()).toMatch(/^Overview\s+My leads\s+Follow-ups$/);
     await a.getByRole('navigation', { name: 'Admin' }).getByRole('link', { name: 'My leads' }).click();
     await a.getByRole('heading', { name: /^My leads/ }).waitFor();
-    await a.getByRole('link', { name: 'Jordan' }).waitFor();
+    await a.locator('tbody tr', { hasText: 'Jordan' }).waitFor(); // the table, not a link elsewhere on the page
     expect(await a.locator('tbody tr').count()).toBe(1);
     await a.getByRole('link', { name: 'Jordan' }).click();
     await a.getByRole('button', { name: 'Update status' }).first().click();

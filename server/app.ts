@@ -30,7 +30,7 @@ import type { AppConfig } from './config';
 import type { DB } from './db';
 import { renderHtml, type BootData } from './html';
 import { platformPreloader } from './preload';
-import { PLATFORM_META, PLATFORM_OG_IMAGE, platformStructuredData } from '../shared/platform/brand';
+import { PLATFORM_META, PLATFORM_OG_ALT, PLATFORM_OG_DESCRIPTION, PLATFORM_OG_IMAGE, platformStructuredData } from '../shared/platform/brand';
 import { OPPORTUNITY_STATUSES } from '../shared/platform/opportunity';
 import { createNotifier, listNotifications, type Notifier } from './notify';
 import { platformRouter, PlatformError } from './platform';
@@ -749,7 +749,7 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
       const path = req.path.replace(/\/+$/, '') || '/';
       const base = { siteUrl: config.siteUrl };
 
-      const tucker = { title: PLATFORM_META.title, description: PLATFORM_META.description, ogImage: PLATFORM_OG_IMAGE, ogImageAlt: `${BRAND.name}. Your home service savings broker.`, omitStructuredData: true };
+      const tucker = { title: PLATFORM_META.title, description: PLATFORM_META.description, ogImage: PLATFORM_OG_IMAGE, ogImageAlt: PLATFORM_OG_ALT, ogDescription: PLATFORM_OG_DESCRIPTION, omitStructuredData: true };
       // Tucker's national home.
       if (path === '/') {
         return send(200, renderHtml(template, { ...base, ...tucker, canonicalPath: '/', structuredData: platformStructuredData(config.siteUrl), preload: platformPreloads(path), boot: boot(def) }));

@@ -54,3 +54,42 @@
 .tnum {
   font-variant-numeric: tabular-nums;
 }
+
+/* Tucker chat: launcher entrance, greeting bubble and window opening (transform/opacity only). */
+@keyframes tucker-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes tucker-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.tucker-launch {
+  animation: tucker-pop 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.tucker-greet {
+  animation: tucker-pop 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: bottom right;
+}
+.tucker-panel:not([hidden]) {
+  animation: tucker-rise 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tucker-launch,
+  .tucker-greet,
+  .tucker-panel:not([hidden]) {
+    animation: none;
+  }
+}

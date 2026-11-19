@@ -54,7 +54,7 @@ describe('canonical domain', () => {
     }
     const home = await get(app, 'trytucker.com', '/');
     expect(home.text).toContain('"url":"https://trytucker.com/"');
-    expect(home.text).toContain('content="https://trytucker.com/og-tucker.jpg"'); // Tucker's own share image, not the fiber one
+    expect(home.text).toContain('content="https://trytucker.com/og-tucker-bear.jpg"'); // Tucker's own share image, not the fiber one
     expect((await get(app, 'trytucker.com', '/robots.txt')).text).toContain('Sitemap: https://trytucker.com/sitemap.xml');
     const sitemap = (await get(app, 'trytucker.com', '/sitemap.xml')).text;
     expect(sitemap.match(/<loc>[^<]+<\/loc>/g)).toEqual(['<loc>https://trytucker.com/</loc>', '<loc>https://trytucker.com/savings/assess</loc>', '<loc>https://trytucker.com/privacy</loc>']);

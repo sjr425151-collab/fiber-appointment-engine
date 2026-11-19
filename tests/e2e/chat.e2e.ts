@@ -24,8 +24,8 @@ describe.each([
     const { ctx, errors } = await context(b, device);
     const p = await ctx.newPage();
     await p.goto(`${BASE}/`);
-    // The floating button (the hero has a second "Chat with an Agent" button on the home page).
-    const launcher = p.locator('button[aria-haspopup=dialog]', { hasText: 'Chat with an Agent' });
+    // Tucker's face launcher (the hero also has a "Chat with an Agent" button on the home page).
+    const launcher = p.getByRole('button', { name: 'Chat with Tucker' });
     await launcher.click();
     const dialog = p.getByRole('dialog', { name: /Tucker AI/ });
     await expect(dialog.getByText('AI assistant', { exact: true })).toBeTruthy();
@@ -33,7 +33,7 @@ describe.each([
     expect(await overflow(p)).toBeLessThanOrEqual(0);
     expect(await axe(p)).toEqual([]);
 
-    await dialog.getByLabel('Message Tucker AI').fill('internet $110, phone $180 for 3 lines');
+    await dialog.getByLabel('Message Tucker').fill('internet $110, phone $180 for 3 lines');
     await dialog.getByRole('button', { name: 'Send' }).click();
     await dialog.getByText('Your household savings preview').waitFor();
     await dialog.getByText('$100/month').waitFor();
