@@ -5,6 +5,7 @@ import { api, fmtDateTime, fmtPhone, STATUS_LABELS } from '../../lib/api';
 import { Spinner, StatusBadge } from '../../components/ui';
 import { useTeam } from './Layout';
 import { MarketFilter, useAdminMarkets } from './useMarkets';
+import { RefreshButton, useRefresh } from './useRefresh';
 
 interface Conversions {
   days: number;
@@ -21,11 +22,13 @@ const FUNNEL: [string, string][] = [
   ['call_click', 'Call clicks'],
 ];
 
-function ConversionPanel({ market }: { market: string }) {
+function ConversionPanel({ market, tick }: { market: string; tick: number }) {
   const [c, setC] = useState<Conversions | null>(null);
   useEffect(() => {
-    api<Conversions>(`/admin/conversions${market ? `?market=${market}` : ''}`).then(setC);
-  }, [market]);
+    api<Conversions>(`/admin/conversions${market ? `?market=${market}` : ''}`)
+      .then(setC)
+      .catch(() => {});
+  }, [market, tick]);
   if (!c) return null;
   // Visit-based steps count unique sessions; server-recorded conversions count events.
   const value = (k: string) => (k === 'lead_submit' || k === 'appointment_booked' ? c.funnel[k]?.events : c.funnel[k]?.sessions) ?? 0;
@@ -79,11 +82,13 @@ interface HandoffFunnel {
 const pct = (part: number, whole: number) => (whole > 0 ? `${((part / whole) * 100).toFixed(0)}%` : '—');
 
 /** Pricing-review requests: from seeing a preview to a confirmed outcome. Counts come from this site only. */
-function HandoffPanel() {
+function HandoffPanel({ tick }: { tick: number }) {
   const [f, setF] = useState<HandoffFunnel | null>(null);
   useEffect(() => {
-    api<HandoffFunnel>('/admin/handoff-funnel').then(setF);
-  }, []);
+    api<HandoffFunnel>('/admin/handoff-funnel')
+      .then(setF)
+      .catch(() => {});
+  }, [tick]);
   if (!f) return null;
   const previews = f.events.preview_view?.sessions ?? 0;
   const clicks = f.events.handoff_cta_click?.sessions ?? 0;
@@ -142,13 +147,19 @@ function Dashboard({ view }: { view: 'overview' | 'leads' }) {
   const { data: md, bySlug } = useAdminMarkets(!isRep);
   const markets = md?.markets ?? [];
   const multi = markets.length > 1;
+  const { tick, updatedAt, refresh } = useRefresh();
   const repName = (id: string | null) => (id ? ((isRep ? team.rep?.name : reps.find((r) => r.id === id)?.name) ?? 'Former representative') : null);
 
   useEffect(() => {
     if (isRep) return;
-    api<Stats>('/admin/stats').then(setStats);
-    api<{ representatives: Representative[] }>('/admin/reps').then((r) => setReps(r.representatives));
-  }, [isRep]);
+    // A failed background refresh keeps the last numbers on screen.
+    api<Stats>('/admin/stats')
+      .then(setStats)
+      .catch(() => {});
+    api<{ representatives: Representative[] }>('/admin/reps')
+      .then((r) => setReps(r.representatives))
+      .catch(() => {});
+  }, [isRep, tick]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -157,13 +168,15 @@ function Dashboard({ view }: { view: 'overview' | 'leads' }) {
       if (q.trim()) params.set('q', q.trim());
       if (market) params.set('market', market);
       if (assigned) params.set('assigned', assigned);
-      api<{ leads: Lead[]; total: number }>(`/admin/leads?${params}`).then((r) => {
-        setLeads(r.leads);
-        setTotal(r.total);
-      });
+      api<{ leads: Lead[]; total: number }>(`/admin/leads?${params}`)
+        .then((r) => {
+          setLeads(r.leads);
+          setTotal(r.total);
+        })
+        .catch(() => {});
     }, 200);
     return () => clearTimeout(t);
-  }, [status, q, market, assigned]);
+  }, [status, q, market, assigned, tick]);
 
   const totalLeads = stats ? Object.values(stats.byStatus).reduce((a, b) => a + b, 0) : 0;
   const tiles = stats
@@ -177,7 +190,12 @@ function Dashboard({ view }: { view: 'overview' | 'leads' }) {
 
   return (
     <div className="space-y-8">
-      {overview && <h1 className="font-display text-2xl font-bold">Overview</h1>}
+      {overview && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="font-display text-2xl font-bold">Overview</h1>
+          <RefreshButton updatedAt={updatedAt} onRefresh={refresh} />
+        </div>
+      )}
       <div className={overview ? 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4' : 'hidden'}>
         {tiles.map((t) => (
           <div key={t.label} className="glass p-5">
@@ -193,8 +211,8 @@ function Dashboard({ view }: { view: 'overview' | 'leads' }) {
           <MarketFilter markets={markets} value={market} onChange={setMarket} />
         </div>
       )}
-      {overview && <HandoffPanel />}
-      {overview && <ConversionPanel market={market} />}
+      {overview && <HandoffPanel tick={tick} />}
+      {overview && <ConversionPanel market={market} tick={tick} />}
 
       <div className={overview ? 'hidden' : 'glass overflow-hidden'}>
         <div className="flex flex-wrap items-center gap-3 border-b border-white/10 p-4">
@@ -221,6 +239,9 @@ function Dashboard({ view }: { view: 'overview' | 'leads' }) {
               ))}
             </select>
           )}
+          <button type="button" onClick={refresh} className="btn-ghost py-2 text-sm" title={`Updated ${updatedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}>
+            Refresh
+          </button>
           {!isRep && (
             <a href={`/api/admin/leads.csv${market ? `?market=${market}` : ''}`} className="btn-ghost py-2 text-sm">
               Export CSV

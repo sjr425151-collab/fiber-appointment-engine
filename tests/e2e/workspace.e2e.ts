@@ -59,6 +59,12 @@ describe('agent workspace', () => {
       });
     }
 
+    // The admin overview is open while the inquiry arrives; Refresh brings the new numbers in.
+    await a.goto(`${BASE}/admin`);
+    const totalTile = a.locator('.glass', { hasText: 'Total leads' }).locator('p').nth(1);
+    await a.getByText(/^Updated .* refreshes every minute$/).waitFor();
+    const totalBefore = Number(await totalTile.innerText());
+
     // 1–2. A website savings inquiry (internet and mobile).
     const inquiry = await a.request.post(`${BASE}/api/platform/handoff`, {
       headers: H,
@@ -78,6 +84,8 @@ describe('agent workspace', () => {
     });
     expect(inquiry.status()).toBe(201);
     const leadId = ((await inquiry.json()) as { leadId: string }).leadId;
+    await a.getByRole('button', { name: 'Refresh' }).click();
+    await expect.poll(async () => Number(await totalTile.innerText())).toBe(totalBefore + 1);
     // Give the lead a unique last name so the manager can find it.
     const before = (await (await a.request.get(`${BASE}/api/admin/leads/${leadId}`)).json()) as { lead: { version: number } };
     await a.request.patch(`${BASE}/api/admin/leads/${leadId}/contact`, { headers: H, data: { version: before.lead.version, lastName } });

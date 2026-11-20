@@ -1,9 +1,10 @@
 /** The representative's start page: what to do next, follow-ups due, and numbers that come from stored data. */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { NEXT_ACTION_LABEL, type NextActionRule } from '../../../shared/team/workspace';
 import { api } from '../../lib/api';
 import { useTeam } from './Layout';
+import { RefreshButton, useRefresh } from './useRefresh';
 import { ago, errorText, isPast, myTz, Pill, recentLeads, when } from './work/common';
 import type { WorkTask } from './work/types';
 
@@ -38,14 +39,20 @@ export default function WorkOverview() {
   const [d, setD] = useState<Overview | null>(null);
   const [days, setDays] = useState(30);
   const [error, setError] = useState('');
+  const { tick, updatedAt, refresh } = useRefresh();
+  const loaded = useRef(false);
   useEffect(() => {
     api<Overview>(`/admin/work/overview?tz=${encodeURIComponent(myTz())}&days=${days}`)
       .then((r) => {
+        loaded.current = true;
         setD(r);
         setError('');
       })
-      .catch((err) => setError(errorText(err, 'The overview didn’t load. Check your connection and try again.')));
-  }, [days]);
+      // Only the first load shows an error; a failed background refresh keeps the numbers on screen.
+      .catch((err) => {
+        if (!loaded.current) setError(errorText(err, 'The overview didn’t load. Check your connection and try again.'));
+      });
+  }, [days, tick]);
   const recent = recentLeads();
   const scope = team.workRole === 'rep' ? 'your' : 'all';
 
@@ -74,7 +81,8 @@ export default function WorkOverview() {
             Showing {scope} leads. Times in {myTz()}.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <RefreshButton updatedAt={updatedAt} onRefresh={refresh} />
           {first && (
             <Link to={`/admin/leads/${first.leadId}`} className="btn-primary py-2 text-sm">
               Open next lead
