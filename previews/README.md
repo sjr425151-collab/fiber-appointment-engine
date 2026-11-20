@@ -1,12 +1,13 @@
-# Client website previews
+# Dynamic Construction MI website preview
 
-Static site exports served at `/preview/<name>/` by `server/previews.ts`.
-They are isolated from Tucker: their own security headers, always `noindex`,
-and no access to Tucker's API, cookies or data.
+`previews/dynamicconstruction/` is a static export of the Dynamic Construction MI
+website preview (source: `sjr425151-collab/chris-pribyl`, `npm run build` → `out/`).
 
-| Path | Source |
-| --- | --- |
-| `/preview/dynamicconstruction/` | `sjr425151-collab/chris-pribyl` (Next.js static export, `npm run build` → `out/`) |
+`server/previews.ts` serves it **only** at `/preview/dynamicconstruction/` and
+**only** on `livefiberconnect.com` / `www.livefiberconnect.com` (override with
+`PREVIEW_HOSTS`). Every other host — including trytucker.com — and every other
+path falls through to Tucker unchanged. Pages are sent with `X-Robots-Tag: noindex`
+and have no access to Tucker's API, cookies or data. Covered by `tests/previews.test.ts`.
 
-To update a preview, rebuild it in its source repo and replace the folder.
-To remove one, delete its folder.
+To update: rebuild in the source repo and replace the folder. To remove: delete the
+folder (the route switches itself off when `index.html` is missing).

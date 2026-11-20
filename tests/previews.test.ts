@@ -26,26 +26,51 @@ const app = () => {
   return createApp(cfg, db, { notifier: createNotifier(db, cfg) });
 };
 
-describe('client previews', () => {
-  it('serves the Dynamic Construction preview with noindex and its own CSP', async () => {
-    const r = await request(app()).get('/preview/dynamicconstruction/').expect(200);
+const LIVE = 'livefiberconnect.com';
+const P = '/preview/dynamicconstruction';
+
+describe('Dynamic Construction preview', () => {
+  it('serves the preview on livefiberconnect.com with noindex and its own CSP', async () => {
+    const r = await request(app()).get(`${P}/`).set('Host', LIVE).expect(200);
     expect(r.text).toContain('Dynamic Construction');
     expect(r.headers['x-robots-tag']).toBe('noindex, nofollow');
     expect(r.headers['content-security-policy']).toContain("script-src 'self' 'unsafe-inline'");
   });
 
-  it('adds the trailing slash to directory pages', async () => {
-    const r = await request(app()).get('/preview/dynamicconstruction/services').expect(301);
-    expect(r.headers.location).toBe('/preview/dynamicconstruction/services/');
+  it('serves nested pages and adds the trailing slash', async () => {
+    await request(app()).get(`${P}/services/pole-barns/`).set('Host', LIVE).expect(200);
+    const r = await request(app()).get(`${P}/services`).set('Host', LIVE).expect(301);
+    expect(r.headers.location).toBe(`${P}/services/`);
   });
 
-  it("returns the preview's own 404 page for unknown paths", async () => {
-    const r = await request(app()).get('/preview/dynamicconstruction/nope/').expect(404);
+  it("returns the preview's own 404 for unknown paths inside the preview", async () => {
+    const r = await request(app()).get(`${P}/nope/`).set('Host', LIVE).expect(404);
     expect(r.text).toContain('on the plans');
   });
 
-  it('does not change Tucker headers outside /preview', async () => {
-    const r = await request(app()).get('/api/health');
+  it('is invisible on trytucker.com and any other host: Tucker answers exactly as for any unknown path', async () => {
+    for (const host of ['trytucker.com', 'www.trytucker.com', 'example.test']) {
+      const baseline = await request(app()).get('/some-unrelated-path/').set('Host', host);
+      const r = await request(app()).get(`${P}/`).set('Host', host);
+      expect(r.status).toBe(baseline.status);
+      expect(r.headers['content-security-policy']).toBe(baseline.headers['content-security-policy']);
+      expect(r.headers['x-robots-tag']).toBeUndefined();
+      expect(r.text).not.toContain('Built to');
+    }
+  });
+
+  it('does not answer on any other /preview path, even on livefiberconnect.com', async () => {
+    const baseline = await request(app()).get('/some-unrelated-path/').set('Host', LIVE);
+    for (const path of ['/preview', '/preview/', '/preview/other/', '/preview/dynamicconstruction-x/']) {
+      const r = await request(app()).get(path).set('Host', LIVE);
+      expect(r.status).toBe(baseline.status);
+      expect(r.text).not.toContain('Built to');
+      expect(r.headers['x-robots-tag']).toBeUndefined();
+    }
+  });
+
+  it('leaves Tucker routes and headers unchanged on livefiberconnect.com', async () => {
+    const r = await request(app()).get('/api/health').set('Host', LIVE).expect(200);
     expect(r.headers['x-robots-tag']).toBeUndefined();
     expect(r.headers['content-security-policy']).toContain("default-src 'self'");
   });

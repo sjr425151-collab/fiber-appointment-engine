@@ -1,17 +1,31 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import express, { type Router } from 'express';
+import express, { type NextFunction, type Request, type Response, type Router } from 'express';
 import compression from 'compression';
 
+/** The single client preview this app serves, and the only path it answers on. */
+export const PREVIEW_PATH = '/preview/dynamicconstruction';
+const DEFAULT_HOSTS = ['livefiberconnect.com', 'www.livefiberconnect.com'];
+
 /**
- * Client website previews: static exports in ./previews/<name>/, served at
- * /preview/<name>/. Mounted before Tucker's helmet/CSP so the exported sites'
- * inline bootstrap scripts can run; they get their own, path-scoped headers.
- * Previews are never indexed and never touch Tucker's API or data.
+ * Dynamic Construction MI website preview: a static export in
+ * ./previews/dynamicconstruction, served ONLY at PREVIEW_PATH and ONLY on the
+ * preview hosts (livefiberconnect.com by default; override with PREVIEW_HOSTS).
+ * On any other host (e.g. trytucker.com) or path, requests fall straight
+ * through to Tucker unchanged. Mounted before Tucker's helmet/CSP so the
+ * export's inline bootstrap scripts run; it sets its own path-scoped headers.
+ * Never indexed; no access to Tucker's API, cookies or data.
  */
-export function previewsRouter(root = resolve('previews')): Router | null {
-  if (!existsSync(root)) return null;
+export function previewRouter(dir = resolve('previews', 'dynamicconstruction'), hosts = previewHosts()): Router | null {
+  if (!existsSync(resolve(dir, 'index.html'))) return null;
+  const allowed = new Set(hosts);
   const router = express.Router();
+
+  // Wrong host → not ours: hand back to Tucker as if this router didn't exist.
+  router.use((req: Request, _res: Response, next: NextFunction) => {
+    if (!allowed.has((req.hostname ?? '').toLowerCase())) return next('router');
+    next();
+  });
   router.use(compression());
   router.use((_req, res, next) => {
     res.set({
@@ -25,7 +39,7 @@ export function previewsRouter(root = resolve('previews')): Router | null {
     next();
   });
   router.use(
-    express.static(root, {
+    express.static(dir, {
       index: 'index.html',
       redirect: true,
       dotfiles: 'ignore',
@@ -34,15 +48,15 @@ export function previewsRouter(root = resolve('previews')): Router | null {
       },
     }),
   );
-  // Unknown path inside a preview: that preview's own 404 page.
-  router.use((req, res) => {
-    const name = /^\/([a-z0-9-]+)(?:\/|$)/.exec(req.path)?.[1];
-    const page = name ? resolve(root, name, '404.html') : null;
-    if (page && page.startsWith(root) && existsSync(page)) {
-      res.status(404).type('html').send(readFileSync(page, 'utf8'));
-      return;
-    }
-    res.status(404).type('text/plain').send('Not found');
+  // Unknown path inside the preview: the preview's own 404 page.
+  const notFound = readFileSync(resolve(dir, '404.html'), 'utf8');
+  router.use((_req, res) => {
+    res.status(404).type('html').send(notFound);
   });
   return router;
+}
+
+function previewHosts(): string[] {
+  const env = process.env.PREVIEW_HOSTS?.split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
+  return env?.length ? env : DEFAULT_HOSTS;
 }

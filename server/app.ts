@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import helmet from 'helmet';
-import { previewsRouter } from './previews.ts';
+import { PREVIEW_PATH, previewRouter } from './previews.ts';
 import compression from 'compression';
 import { rateLimit } from 'express-rate-limit';
 import { existsSync, readFileSync } from 'node:fs';
@@ -167,9 +167,10 @@ export function createApp(config: AppConfig, db: DB, deps: { notifier?: Notifier
     res.redirect(301, moveHost ? `${config.siteUrl}${target}` : target);
   });
 
-  // Client website previews (static, isolated; see server/previews.ts and previews/README.md).
-  const previews = previewsRouter();
-  if (previews) app.use('/preview', previews);
+  // Dynamic Construction website preview: livefiberconnect.com/preview/dynamicconstruction only.
+  // Any other host or path falls through to Tucker unchanged (server/previews.ts).
+  const preview = previewRouter();
+  if (preview) app.use(PREVIEW_PATH, preview);
 
   app.use(
     helmet({
